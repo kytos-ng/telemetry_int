@@ -1,0 +1,11 @@
+{
+  "author": "amlight",
+  "username": "amlight",
+  "name": "int",
+  "description": "Napp to deploy In-band Network Telemetry",
+  "version": "1.0",
+  "napp_dependencies": [],
+  "license": "",
+  "tags": [],
+  "url": ""
+}
