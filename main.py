@@ -13,7 +13,7 @@ from napps.amlight.int import settings
 
 
 NAPP_NAME = "AmLight INT Provisioner"
-VERSION = "0.0.1"
+VERSION = "0.1"
 KYTOS_API = "http://0.0.0.0:8181/api/"
 REST_VERSION = "v1"
 
@@ -88,7 +88,18 @@ class Main(KytosNApp):
             return evcs[evc_id]
 
     @staticmethod
-    def push_flows(flows):
+    def print_flows(flows):
+        """ For debug purposes"""
+        log.info("===================================")
+        for flow in flows:
+            # log.info(flow)
+            log.info(flow["switch"])
+            log.info(flow["table_id"])
+            log.info(flow["match"])
+            log.info(flow["actions"])
+            log.info("===================================")
+
+    def push_flows(self, flows):
         """ Push INT flows to the Flow_Manager via REST.
         Args:
             flows: list of flows
@@ -96,7 +107,8 @@ class Main(KytosNApp):
             True if successful
             False otherwise
         """
-        log.info(flows)
+
+        self.print_flows(flows)
 
         response = True
 
@@ -178,6 +190,20 @@ class Main(KytosNApp):
             return True
         return False
 
+    @staticmethod
+    def get_translation_vlan(actions):
+        """ Get the VLAN translated by MEF E-Line
+        Args:
+            actions: list of actions
+        Returns:
+            vlan_vid if set_vlan is in the actions
+            0 if none
+            """
+        for action in actions:
+            if action["action_type"] == 'set_vlan':
+                return action["vlan_id"]
+        return 0
+
     def enable_int_source(self, source, evc, reverse=False):
         """ At the INT source, one flow becomes 3: one for UDP on table 0, one for TCP on table 0, and one on table 2
         On table 0, we remove set_queue and output and add push_int
@@ -206,7 +232,8 @@ class Main(KytosNApp):
         new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
         new_int_flow_tbl_0_tcp["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
         new_int_flow_tbl_0_tcp["actions"] = self.modify_actions(new_int_flow_tbl_0_tcp["actions"],
-                                                                ["set_queue", "output"],
+                                                                ["pop_vlan", "push_vlan", "set_vlan", "set_queue",
+                                                                 "output"],
                                                                 remove=True)
         new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "experimenter", "body": "push_int"})
         new_int_flow_tbl_0_tcp["actions"].append({"action_type": "goto", "table_id": 2})
@@ -217,8 +244,14 @@ class Main(KytosNApp):
 
         # Prepare Flows for Table 2
         new_int_flow_tbl_2["table_id"] = 2
+        # VLAN just for table 2
+        # vlan_translation = self.get_translation_vlan(new_int_flow_tbl_2["actions"])
+        # if vlan_translation:
+        #     new_int_flow_tbl_2["match"]["dl_vlan"] = vlan_translation
+
         new_int_flow_tbl_2["actions"] = self.modify_actions(new_int_flow_tbl_2["actions"],
-                                                            ["set_queue", "output"],
+                                                            ["pop_vlan", "push_vlan", "set_vlan", "set_queue",
+                                                             "output"],
                                                             remove=False)
 
         # if intra-switch EVC, then output port should be the proxy
@@ -239,8 +272,8 @@ class Main(KytosNApp):
         return new_flows
 
     def enable_int_hop(self, int_hops, evc):
-        """ At the INT hops, one flow becomes 2: one for UDP on table 0, one for TCP on table 0
-        On table 0, we add 'add_int_metadata' before set_queue and output and add push_int
+        """ At the INT hops, one flow adds two more: one for UDP on table 0, one for TCP on table 0
+        On table 0, we add 'add_int_metadata' before other actions
 
         Args:
             int_hops: list of switches
@@ -248,38 +281,29 @@ class Main(KytosNApp):
         Returns:
             list of new flows to install
         """
-        # TODO: temp
-        destination = dict()
 
         new_flows = list()
         for int_hop in int_hops:
-            new_flows[int_hop] = dict()
+            # TODO: currently does for both directions
+            # TODO: Fix it
+            for flow in self.get_evc_flows(int_hop, evc):
+                new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
+                for extraneous_key in ["stats", "id"]:
+                    new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
 
-            for flow in self.get_evc_flows(destination["switch"], evc):
-                if flow["match"]["in_port"] == destination["interface"]:
-                    new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
-                    for extraneous_key in ["stats", "id", "switch"]:
-                        new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
+                # Prepare TCP Flow
+                new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
+                new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
+                new_int_flow_tbl_0_tcp["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
 
-                    # Prepare TCP Flow
-                    new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
-                    new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
-                    new_int_flow_tbl_0_tcp["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
-                    new_int_flow_tbl_0_tcp["actions"] = self.modify_actions(new_int_flow_tbl_0_tcp["actions"],
-                                                                            ["output"],
-                                                                            remove=True)
-                    new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "experimenter", "body": "add_int_metadata"})
-                    output_port_no = self.proxy_ports[destination["switch"]][0]
-                    new_int_flow_tbl_0_tcp["actions"].append({"action_type": "output", "port": output_port_no})
+                new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "experimenter", "body": "add_int_metadata"})
 
-                    # Prepare UDP Flow
-                    new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
-                    new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
+                # Prepare UDP Flow
+                new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
+                new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
 
-                    new_flows.append(new_int_flow_tbl_0_tcp)
-                    new_flows.append(new_int_flow_tbl_0_udp)
-
-                    break
+                new_flows.append(new_int_flow_tbl_0_tcp)
+                new_flows.append(new_int_flow_tbl_0_udp)
 
         return new_flows
 
@@ -319,8 +343,10 @@ class Main(KytosNApp):
             new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
             new_int_flow_tbl_0_tcp["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
             new_int_flow_tbl_0_tcp["actions"] = self.modify_actions(new_int_flow_tbl_0_tcp["actions"],
-                                                                    ["output"],
+                                                                    ["pop_vlan", "push_vlan", "set_vlan", "set_queue",
+                                                                     "output"],
                                                                     remove=True)
+
             new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "experimenter", "body": "add_int_metadata"})
             if reverse:
                 output_port_no = self.proxy_ports[destination["switch"]][1]
@@ -343,8 +369,9 @@ class Main(KytosNApp):
 
         new_int_flow_tbl_0_pos["match"]["in_port"] = in_port_no
         new_int_flow_tbl_0_pos["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
-        new_int_flow_tbl_0_pos["actions"] = self.modify_actions(new_int_flow_tbl_0_tcp["actions"],
-                                                                ["output"],
+        new_int_flow_tbl_0_pos["actions"] = self.modify_actions(copy.deepcopy(new_int_flow_tbl_0_tcp["actions"]),
+                                                                ["pop_vlan", "push_vlan", "set_vlan", "set_queue",
+                                                                 "output", "experimenter"],
                                                                 remove=True)
         new_int_flow_tbl_0_pos["actions"].insert(0, {"action_type": "goto", "table_id": 2})
         new_int_flow_tbl_0_pos["actions"].insert(0, {"action_type": "experimenter", "body": "send_report"})
@@ -388,8 +415,8 @@ class Main(KytosNApp):
              boolean
         """
         try:
+
             # Create flows for the first switch (INT Source)
-            new_flows = list()
             new_flows = self.enable_int_source(source, evc, reverse)
 
             # Create flows the INT hops
@@ -398,8 +425,7 @@ class Main(KytosNApp):
             # Create flows the the last switch (INT Sink)
             new_flows += list(self.enable_int_sink(destination, evc, reverse))
 
-            self.push_flows(new_flows)
-            return True
+            return self.push_flows(new_flows)
 
         except Exception as err:
             log.info("Error: %s" % err)
@@ -470,11 +496,11 @@ class Main(KytosNApp):
                 return self.reply(msg="INT enabled for EVC ID %s on both directions" % evc_id)
             else:
                 return self.reply(msg="INT enabled for EVC ID %s on direction %s -> %s" %
-                                       (evc_id, evc["uni_z"], evc["uni_a"]))
+                                      (evc_id, evc["uni_z"]["interface_id"], evc["uni_a"]["interface_id"]))
 
         if has_int_z:
             return self.reply(msg="INT enabled for EVC ID %s on direction %s -> %s" %
-                                   (evc_id, evc["uni_a"], evc["uni_z"]))
+                                  (evc_id, evc["uni_a"]["interface_id"], evc["uni_z"]["interface_id"]))
 
         self.reply(fail=True, msg="no proxy ports available or error creating INT flows. Check Kytos logs!")
 
@@ -512,9 +538,10 @@ class Main(KytosNApp):
 
     @rest('v1/enable', methods=['POST'])
     def enable_int(self):
-        """ REST to enable/create INT flows for an EVC_ID
+        """ REST to enable/create INT flows for an EVC_ID. evcs are provided via POST as a list
         Args:
-            evc_ids (via POST): List of EVCs to be changed to INT EVCs
+            None.
+
         Returns:
             200 if successful
             400 if otherwise

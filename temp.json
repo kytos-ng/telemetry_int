@@ -1,0 +1,21 @@
+ [
+    {'actions': [{'action_type': 'experimenter', 'body': 'push_int'}, {'action_type': 'pop_vlan'}, {'action_type': 'push_vlan', 'tag_type': 's'}, {'action_type': 'set_vlan', 'vlan_id': 507}, {'action_type': 'goto', 'table_id': 2}], 'cookie': 12254780612203813960, 'hard_timeout': 0, 'idle_timeout': 0, 'match': {'dl_vlan': 409, 'in_port': 21, 'dl_type': 2048, 'nw_proto': 6}, 'priority': 33768, 'switch': '00:00:00:00:00:00:00:06', 'table_id': 0},
+   {'actions': [{'action_type': 'experimenter', 'body': 'push_int'}, {'action_type': 'pop_vlan'}, {'action_type': 'push_vlan', 'tag_type': 's'}, {'action_type': 'set_vlan', 'vlan_id': 507}, {'action_type': 'goto', 'table_id': 2}], 'cookie': 12254780612203813960, 'hard_timeout': 0, 'idle_timeout': 0, 'match': {'dl_vlan': 409, 'in_port': 21, 'dl_type': 2048, 'nw_proto': 17}, 'priority': 33768, 'switch': '00:00:00:00:00:00:00:06', 'table_id': 0},
+   {'actions': [{'action_type': 'experimenter', 'body': 'add_int_metadata'}, {'action_type': 'output', 'port': 11}], 'cookie': 12254780612203813960, 'hard_timeout': 0, 'idle_timeout': 0, 'match': {'dl_vlan': 409, 'in_port': 21}, 'priority': 32768, 'switch': '00:00:00:00:00:00:00:06', 'table_id': 2},
+
+
+
+
+   {'actions': [{'action_type': 'experimenter', 'body': 'send_report'}, {'action_type': 'goto', 'table_id': 2}, {'action_type': 'experimenter', 'body': 'add_int_metadata'}, {'action_type': 'pop_vlan'}, {'action_type': 'push_vlan', 'tag_type': 'c'}, {'action_type': 'set_vlan', 'vlan_id': 409}],
+         'match': {'dl_vlan': 507, 'in_port': 11, 'dl_type': 2048, 'nw_proto': 6}, 'table_id': 0},
+
+   {'actions': [{'action_type': 'experimenter', 'body': 'add_int_metadata'}, {'action_type': 'pop_vlan'}, {'action_type': 'push_vlan', 'tag_type': 'c'}, {'action_type': 'set_vlan', 'vlan_id': 409}, {'action_type': 'output', 'port': 19}],
+         'match': {'dl_vlan': 507, 'in_port': 11, 'dl_type': 2048, 'nw_proto': 17}, 'table_id': 0},
+
+
+   {'actions': [{'action_type': 'experimenter', 'body': 'send_report'}, {'action_type': 'goto', 'table_id': 2}, {'action_type': 'experimenter', 'body': 'add_int_metadata'}, {'action_type': 'pop_vlan'}, {'action_type': 'push_vlan', 'tag_type': 'c'}, {'action_type': 'set_vlan', 'vlan_id': 409}],
+         'match': {'dl_vlan': 507, 'in_port': 20}, 'table_id': 0},
+
+
+   {'actions': [{'action_type': 'experimenter', 'body': 'pop_int'}, {'action_type': 'pop_vlan'}, {'action_type': 'push_vlan', 'tag_type': 'c'}, {'action_type': 'set_vlan', 'vlan_id': 409}, {'action_type': 'output', 'port': 16}],
+         'match': {'dl_vlan': 507, 'in_port': 20}, 'table_id': 2}]
