@@ -34,7 +34,6 @@ class Main(KytosNApp):
         """
         log.info("Running Napp %s Version %s" % (NAPP_NAME, VERSION))
         self.proxy_ports = {}
-        self.set_proxy_ports()
         self.evcs_with_int = []
 
     def execute(self):
@@ -284,26 +283,27 @@ class Main(KytosNApp):
 
         new_flows = list()
         for int_hop in int_hops:
-            # TODO: currently does for both directions
-            # TODO: Fix it
-            for flow in self.get_evc_flows(int_hop, evc):
-                new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
-                for extraneous_key in ["stats", "id"]:
-                    new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
+            switch = int_hop[0]
+            port_number = int_hop[1]
+            for flow in self.get_evc_flows(switch, evc):
+                if flow["match"]["in_port"] == port_number:
+                    new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
+                    for extraneous_key in ["stats", "id"]:
+                        new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
 
-                # Prepare TCP Flow
-                new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
-                new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
-                new_int_flow_tbl_0_tcp["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+                    # Prepare TCP Flow
+                    new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
+                    new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
+                    new_int_flow_tbl_0_tcp["priority"] = self.set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
 
-                new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "experimenter", "body": "add_int_metadata"})
+                    new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "experimenter", "body": "add_int_metadata"})
 
-                # Prepare UDP Flow
-                new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
-                new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
+                    # Prepare UDP Flow
+                    new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
+                    new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
 
-                new_flows.append(new_int_flow_tbl_0_tcp)
-                new_flows.append(new_int_flow_tbl_0_udp)
+                    new_flows.append(new_int_flow_tbl_0_tcp)
+                    new_flows.append(new_int_flow_tbl_0_udp)
 
         return new_flows
 
@@ -386,22 +386,38 @@ class Main(KytosNApp):
 
         return new_flows
 
-    @staticmethod
-    def get_int_hops(evc, source):
+    def get_path_pathfinder(self, source, destination):
+        """ Get the path from source to destination """
+        log.info(source)
+        response = requests.post(url='%s/kytos/pathfinder/v2/' % KYTOS_API,
+                                 headers={'Content-Type': 'application/json'},
+                                 data=json.dumps({"source": source, "destination": destination})).json()
+        return response["paths"][0]["hops"] if "paths" in response else False
+
+    def get_int_hops(self, evc, source, destination):
         """ Get the list of INT switches between the INT Source and INT Destination/Sink
         Args:
             evc: EVC.__dict__
             source: source UNI
+            destination: destination UNI
+            reverse: flow direction - Z->A or A->Z
         Returns:
             list of INT hops
         """
+
         int_hops = []
+
         if not evc["current_path"]:
             return int_hops
-        for hop in evc["current_path"]:
-            if hop["endpoint_a"]["switch"] != source["switch"] and hop["endpoint_b"]["switch"] != source["switch"]:
-                int_hops.append(source["switch"])
 
+        by_three = 1
+        for hop in self.get_path_pathfinder(source["switch"], destination["switch"]):
+            if by_three % 3 == 0:
+                interface = int(hop.split(":")[8])
+                switch = ":".join(hop.split(":")[0:8])
+                if switch != destination["switch"]:
+                    int_hops.append((switch, interface))
+            by_three += 1
         return int_hops
 
     def provision_int_unidirectional(self, evc, source, destination, reverse=False, disable=False):
@@ -410,6 +426,7 @@ class Main(KytosNApp):
              evc:
              source:
              destination:
+             reverse: flow direction Z->A or A->Z
              disable: in case we need to disable instead of enabling
         Returns:
              boolean
@@ -420,7 +437,7 @@ class Main(KytosNApp):
             new_flows = self.enable_int_source(source, evc, reverse)
 
             # Create flows the INT hops
-            # new_flows += list(self.enable_int_hop(self.get_int_hops(evc, source), evc))
+            new_flows += list(self.enable_int_hop(self.get_int_hops(evc, source, destination), evc))
 
             # Create flows the the last switch (INT Sink)
             new_flows += list(self.enable_int_sink(destination, evc, reverse))
@@ -502,7 +519,7 @@ class Main(KytosNApp):
             return self.reply(msg="INT enabled for EVC ID %s on direction %s -> %s" %
                                   (evc_id, evc["uni_a"]["interface_id"], evc["uni_z"]["interface_id"]))
 
-        self.reply(fail=True, msg="no proxy ports available or error creating INT flows. Check Kytos logs!")
+        return self.reply(fail=True, msg="no proxy ports available or error creating INT flows. Check Kytos logs!")
 
     def decommission_int(self, evc_id):
         """ Remove all INT flows for an EVC
@@ -546,6 +563,9 @@ class Main(KytosNApp):
             200 if successful
             400 if otherwise
         """
+        if not self.proxy_ports:
+            self.set_proxy_ports()
+
         content = request.get_json()
         evcs = content["evcs"]
         for evc_id in evcs:
