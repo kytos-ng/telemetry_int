@@ -20,7 +20,7 @@ if 'bdist_wheel' in sys.argv:
 # Paths setup with virtualenv detection
 BASE_ENV = Path(os.environ.get('VIRTUAL_ENV', '/'))
 
-NAPP_NAME = 'int'
+NAPP_NAME = 'telemetry'
 NAPP_VERSION = '0.1'
 
 # Kytos var folder
@@ -125,7 +125,7 @@ class InstallMode(install):
         super().run() does not install dependencies when running
         ``python setup.py install`` (pypa/setuptools#456).
         """
-        print(f'Installing NApp amlight/int...')
+        print(f'Installing NApp amlight/telemetry...')
         install_path = Path(INSTALLED_PATH)
 
         if not install_path.exists():

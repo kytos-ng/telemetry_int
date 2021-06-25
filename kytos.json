@@ -1,10 +1,10 @@
 {
   "author": "amlight",
   "username": "amlight",
-  "name": "int",
+  "name": "telemetry",
   "description": "Napp to deploy In-band Network Telemetry",
   "version": "1.0",
-  "napp_dependencies": [],
+  "napp_dependencies": ["amlight/noviflow", "kytos/topology", "kytos/flow_manager", "kytos/pathfinder"],
   "license": "",
   "tags": [],
   "url": ""

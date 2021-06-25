@@ -1,1 +1,1 @@
-"""Module for the NApp amlight/int."""
+"""Module for the NApp amlight/telemetry."""
