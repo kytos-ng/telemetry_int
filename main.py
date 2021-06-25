@@ -156,7 +156,9 @@ class Main(KytosNApp):
                     new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
                     new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
 
-                    new_int_flow_tbl_0_tcp["actions"].insert(0, {"action_type": "add_int_metadata"})
+                    for instruction in new_int_flow_tbl_0_tcp["instructions"]:
+                        if instruction["instruction_type"] == "apply_actions":
+                            instruction["actions"].insert(0, {"action_type": "add_int_metadata"})
 
                     # Prepare UDP Flow
                     new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
@@ -276,7 +278,7 @@ class Main(KytosNApp):
             new_flows = self.enable_int_source(source, evc, reverse)
 
             # Create flows the INT hops
-            # new_flows += list(self.enable_int_hop(get_int_hops(evc, source, destination), evc))
+            new_flows += list(self.enable_int_hop(get_int_hops(evc, source, destination), evc))
 
             # Create flows the the last switch (INT Sink)
             new_flows += list(self.enable_int_sink(destination, evc, reverse))
@@ -321,7 +323,7 @@ class Main(KytosNApp):
 
         # Direction uni_a -> uni_z
         if uni_z["switch"] in self.proxy_ports:
-            # has_int_z = self.provision_int_unidirectional(evc, uni_a, uni_z, reverse=True)
+            has_int_z = self.provision_int_unidirectional(evc, uni_a, uni_z, reverse=True)
             if has_int_z:
                 self.add_evc_to_list(evc_id)
 
