@@ -1,0 +1,99 @@
+""" """
+import json
+import requests
+from requests import HTTPError
+from napps.amlight.telemetry.settings import flow_manager_api
+from napps.amlight.telemetry.settings import mef_eline_api
+from napps.amlight.telemetry.settings import pathfinder_api
+from napps.amlight.telemetry.settings import topology_api
+
+
+def kytos_api(get=False, put=False, post=False,
+              topology=False,
+              mef_eline=False, evc_id=None,
+              flow_manager=False,
+              pathfinder=False,
+              data=None, metadata=False):
+    """ Main function to handle requests to Kytos API."""
+
+    kytos_api_url = (topology_api if topology else flow_manager_api if flow_manager
+                     else mef_eline_api if mef_eline else pathfinder_api if pathfinder else "")
+
+    headers = {'Content-Type': 'application/json'}
+
+    try:
+        if get:
+            if data:
+                kytos_api_url += data
+            return requests.get(kytos_api_url).json()
+
+        elif put:
+            headers = {'Content-Type': 'application/json'}
+            requests.put(kytos_api_url, headers=headers)
+
+        elif post:
+
+            if mef_eline and metadata:
+                url = f"{kytos_api_url}/{evc_id}/metadata"
+                print(url)
+                print(data)
+                response = requests.post(url,
+                                         headers=headers,
+                                         data=json.dumps(data))
+                print(response)
+                print(response.__dict__)
+                if response.status_code == 201:
+                    return True
+
+                return False
+
+    except HTTPError as http_err:
+        print(f'HTTP error occurred: {http_err}')
+
+    except Exception as err:
+        print(f'Other error occurred: {err}')
+
+    return False
+    # return in JSON
+    # TODO: add support for batch, temporizer, retries
+
+
+def get_evcs():
+    """ Get list of EVCs """
+    return kytos_api(get=True, mef_eline=True)
+
+
+def set_telemetry_metadata_true(evc_id, direction):
+    """ Set telemetry enabled metadata item to true """
+    data = {"telemetry":
+                {
+                    "enabled": "true",
+                    "direction": direction,
+                    "timestamp": "2022/01/01T01:01:01Z"
+                }
+            }
+    # TODO: add timestamp
+    return kytos_api(post=True,
+                     mef_eline=True, evc_id=evc_id,
+                     metadata=True,
+                     data=data)
+
+
+def set_telemetry_metadata_false(evc_id):
+    """ Set telemetry enabled metadata item to true """
+    data = {"telemetry":
+                {
+                    "enabled": "false",
+                    "timestamp": "2023/01/01T01:01:01Z"
+                }
+            }
+    # TODO: add timestamp
+    return kytos_api(post=True,
+                     mef_eline=True, evc_id=evc_id,
+                     metadata=True,
+                     data=data)
+
+
+def get_topology_interfaces():
+    """ Get list of interfaces """
+    return kytos_api(get=True, topology=True, data="interfaces")

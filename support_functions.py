@@ -2,34 +2,44 @@ import requests
 import json
 from kytos.core import log
 from napps.amlight.telemetry.settings import KYTOS_API
+from napps.amlight.telemetry.kytos_api_helper import get_evcs
+from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
+from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_true
+from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_false
 
 
-def add_to_apply_actions(instructions, new_instruction, position):
-    """ """
-    for instruction in instructions:
-        if instruction["instruction_type"] == "apply_actions":
-            instruction["actions"].insert(position, new_instruction)
-    return instructions
+# mef_eline support functions
+def get_evcs_ids():
+    """ get the list of all EVCs' IDs """
+    evc_ids = []
+    for evc in get_evcs().values():
+        evc_ids.append(evc["id"])
+    return evc_ids
 
 
-def create_proxy_ports(proxy_ports):
-    """ Query the topology napp, once a intra-switch loop is found, add it to the list of proxy ports """
-    topology_url = KYTOS_API + 'kytos/topology/v3/'
-    response = requests.get(topology_url).json()  # TODO: all queries to other napps need to be validated.
-    links = response["topology"]["links"]
+def get_evc_with_telemetry():
+    """ Retrieve the list of EVC IDs and list those with
+        metadata {"telemetry": {"enabled": true}} """
 
-    for link in links:
-        if links[link]["active"] and links[link]["enabled"]:
-            # Just want one proxy per switch,
-            if links[link]["endpoint_a"]["switch"] not in proxy_ports:
-                if links[link]["endpoint_a"]["switch"] == links[link]["endpoint_b"]["switch"]:
-                    if links[link]["endpoint_a"]["port_number"] < links[link]["endpoint_b"]["port_number"]:
-                        proxy_ports[links[link]["endpoint_a"]["switch"]] = (
-                            links[link]["endpoint_a"]["port_number"], links[link]["endpoint_b"]["port_number"])
-                    else:
-                        proxy_ports[links[link]["endpoint_a"]["switch"]] = (
-                            links[link]["endpoint_b"]["port_number"], links[link]["endpoint_a"]["port_number"])
-    return proxy_ports
+    evc_ids = {"evcs_with_telemetry": []}
+    try:
+        for evc in get_evcs().values():
+            if has_int_enabled(evc):
+                evc_ids["evcs_with_telemetry"].append(evc["id"])
+    except Exception as err:
+        return err
+
+    return evc_ids
+
+
+def has_int_enabled(evc):
+    """ check if evc has telemetry. """
+    if "telemetry" in evc["metadata"]:
+        if "enabled" in evc["metadata"]["telemetry"]:
+            if evc["metadata"]["telemetry"]["enabled"] == "true":
+                return True
+
+    return False
 
 
 def get_evc(evc_id):
@@ -40,10 +50,101 @@ def get_evc(evc_id):
         full evc if found
         False if not found
     """
-    mef_eline_url = KYTOS_API + 'kytos/mef_eline/v2/evc/'
-    evcs = requests.get(mef_eline_url).json()
+    evcs = get_evcs()
     if evc_id in evcs:
-        return evcs[evc_id]
+        return get_evcs()[evc_id]
+    return False
+
+def get_evc_unis(evc):
+    """ Parse EVC() for unis.
+    Args:
+        evc: EVC.__dict__
+    Returns:
+        uni_a and uni_z
+    """
+    uni_a = dict()
+    uni_a["interface"] = int(evc["uni_a"]["interface_id"].split(":")[8])
+    uni_a["switch"] = ":".join(evc["uni_a"]["interface_id"].split(":")[0:8])
+
+    uni_z = dict()
+    uni_z["interface"] = int(evc["uni_z"]["interface_id"].split(":")[8])
+    uni_z["switch"] = ":".join(evc["uni_z"]["interface_id"].split(":")[0:8])
+
+    return uni_a, uni_z
+
+
+def set_telemetry_true_for_evc(evc_id, direction):
+    """ Change the telemetry's enabled metadata field to true """
+    return set_telemetry_metadata_true(evc_id, direction)
+
+
+def set_telemetry_false_for_evc(evc_id):
+    """ Change the telemetry's enabled metadata field to false """
+    return set_telemetry_metadata_false(evc_id)
+
+
+# topology support functions
+def get_kytos_interface(switch, interface):
+    """ Get the Kytos Interface Interface as dict. Useful for multiple functions. """
+
+    kytos_interfaces = get_topology_interfaces()["interfaces"]
+    for kytos_interface in kytos_interfaces.values():
+        if switch == kytos_interface["switch"]:
+            if interface == kytos_interface["port_number"]:
+                return kytos_interface
+
+
+def get_proxy_status(switch, interface):
+    """ Check the interface state and status of a proxy port before using it. """
+    kytos_interface = get_kytos_interface(switch, interface)
+
+    if kytos_interface:
+        if kytos_interface["enabled"] and kytos_interface["active"]:
+            return kytos_interface
+
+    return None
+
+def get_proxy_port(switch, interface):
+    """ Return the proxy port assigned to a UNI """
+
+    kytos_interface = get_kytos_interface(switch, interface)
+
+    if kytos_interface:
+        if "proxy_port" in kytos_interface["metadata"]:
+            return get_proxy_status(switch, kytos_interface["metadata"]["proxy_port"])
+
+    return None
+
+
+def add_to_apply_actions(instructions, new_instruction, position):
+    """ """
+    for instruction in instructions:
+        if instruction["instruction_type"] == "apply_actions":
+            instruction["actions"].insert(position, new_instruction)
+    return instructions
+
+
+# def create_proxy_ports(proxy_ports):
+#     """ Query the topology napp, once an intra-switch loop is found, add it to the list of proxy ports """
+#
+#     response = kytos_api(get=True, topology=True)
+#
+#     topology_url = KYTOS_API + 'kytos/topology/v3/'
+#     response = requests.get(topology_url).json()  # TODO: all queries to other napps need to be validated.
+#     links = response["topology"]["links"]
+#
+#     for link in links:
+#         if links[link]["active"] and links[link]["enabled"]:
+#             # Just want one proxy per switch,
+#             if links[link]["endpoint_a"]["switch"] not in proxy_ports:
+#                 if links[link]["endpoint_a"]["switch"] == links[link]["endpoint_b"]["switch"]:
+#                     if links[link]["endpoint_a"]["port_number"] < links[link]["endpoint_b"]["port_number"]:
+#                         proxy_ports[links[link]["endpoint_a"]["switch"]] = (
+#                             links[link]["endpoint_a"]["port_number"], links[link]["endpoint_b"]["port_number"])
+#                     else:
+#                         proxy_ports[links[link]["endpoint_a"]["switch"]] = (
+#                             links[link]["endpoint_b"]["port_number"], links[link]["endpoint_a"]["port_number"])
+#     return proxy_ports
 
 
 def get_evc_flows(switch, evc):
@@ -64,22 +165,7 @@ def get_evc_flows(switch, evc):
     return flows
 
 
-def get_evc_unis(evc):
-    """ Parse EVC() for unis.
-    Args:
-        evc: EVC.__dict__
-    Returns:
-        uni_a and uni_z
-    """
-    uni_a = dict()
-    uni_a["interface"] = int(evc["uni_a"]["interface_id"].split(":")[8])
-    uni_a["switch"] = ":".join(evc["uni_a"]["interface_id"].split(":")[0:8])
 
-    uni_z = dict()
-    uni_z["interface"] = int(evc["uni_z"]["interface_id"].split(":")[8])
-    uni_z["switch"] = ":".join(evc["uni_z"]["interface_id"].split(":")[0:8])
-
-    return uni_a, uni_z
 
 
 def get_int_hops(evc, source, destination):

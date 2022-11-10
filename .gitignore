@@ -1,6 +1,11 @@
 .swp
 .pyc
 .napp
-
+.idea
+new_approach
+new_approach_simplified
+BLUEPRINT-31
+blueprint-31-txt
 __pycache__
 .tox
+request_int.py

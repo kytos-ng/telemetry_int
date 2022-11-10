@@ -1,6 +1,6 @@
-"""Main module of amlight/telemetry Kytos Network Application.
+"""Main module of kytos/telemetry Network Application.
 
-Napp to deploy In-band Network Telemetry
+Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 """
 import copy
@@ -8,21 +8,27 @@ from flask import jsonify, request
 from kytos.core import KytosNApp, log
 from kytos.core import rest
 from napps.amlight.telemetry import settings
-from napps.amlight.telemetry.support_funcions import add_to_apply_actions
-from napps.amlight.telemetry.support_funcions import create_proxy_ports
-from napps.amlight.telemetry.support_funcions import get_evc
-from napps.amlight.telemetry.support_funcions import get_evc_flows
-from napps.amlight.telemetry.support_funcions import get_evc_unis
-from napps.amlight.telemetry.support_funcions import get_int_hops
-from napps.amlight.telemetry.support_funcions import is_intra_switch_evc
-from napps.amlight.telemetry.support_funcions import modify_actions
-from napps.amlight.telemetry.support_funcions import push_flows
-from napps.amlight.telemetry.support_funcions import reply
-from napps.amlight.telemetry.support_funcions import set_priority
+from napps.amlight.telemetry.support_functions import add_to_apply_actions
+from napps.amlight.telemetry.support_functions import get_evc
+from napps.amlight.telemetry.support_functions import get_evcs_ids
+from napps.amlight.telemetry.support_functions import get_evc_with_telemetry
+from napps.amlight.telemetry.support_functions import get_evc_flows
+from napps.amlight.telemetry.support_functions import get_evc_unis
+from napps.amlight.telemetry.support_functions import get_int_hops
+from napps.amlight.telemetry.support_functions import get_proxy_port
+from napps.amlight.telemetry.support_functions import has_int_enabled
+from napps.amlight.telemetry.support_functions import is_intra_switch_evc
+from napps.amlight.telemetry.support_functions import modify_actions
+from napps.amlight.telemetry.support_functions import push_flows
+from napps.amlight.telemetry.support_functions import reply
+from napps.amlight.telemetry.support_functions import set_priority
+from napps.amlight.telemetry.support_functions import set_telemetry_true_for_evc
+from napps.amlight.telemetry.support_functions import set_telemetry_false_for_evc
+from napps.amlight.telemetry.telemetry_exceptions import *
 
 
 class Main(KytosNApp):
-    """Main class of amlight/telemetry NApp.
+    """Main class of kytos/telemetry NApp.
 
     This class is the entry point for this NApp.
     """
@@ -35,9 +41,9 @@ class Main(KytosNApp):
 
         So, if you have any setup routine, insert it here.
         """
-        log.info("Running Napp %s Version %s" % (settings.NAPP_NAME, settings.VERSION))
-        self.proxy_ports = {}
-        self.evcs_with_int = []
+        log.info(f"Running Napp {settings.NAPP_NAME} Version {settings.VERSION}")
+
+        # TODO: only loads after all other napps are loaded.
 
     def execute(self):
         """Run after the setup method execution.
@@ -54,8 +60,8 @@ class Main(KytosNApp):
 
         If you have some cleanup procedure, insert it here.
         """
-        log.info("shutdown")
-        del self.proxy_ports
+        log.info(f"Disabling Napp {settings.NAPP_NAME}")
+
 
     def enable_int_source(self, source, evc, reverse=False):
         """ At the INT source, one flow becomes 3: one for UDP on table 0, one for TCP on table 0, and one on table 2
@@ -171,7 +177,7 @@ class Main(KytosNApp):
 
     def enable_int_sink(self, destination, evc, reverse=False):
         """ At the INT sink, one flow becomes many:
-            a. Before the proxy, we do add_int_metadata as a INT hop. We need to keep the set_queue
+            a. Before the proxy, we do add_int_metadata as an INT hop. We need to keep the set_queue
             b. After the proxy, we do send_report and pop_int and output
             We only use table 0 for a.
             We use table 2 for b. for pop_int and output
@@ -272,6 +278,8 @@ class Main(KytosNApp):
         Returns:
              boolean
         """
+        # DEBUG: temp
+        return True
         try:
 
             # Create flows for the first switch (INT Source)
@@ -289,56 +297,73 @@ class Main(KytosNApp):
             log.info("Error: %s" % err)
             return False
 
-    def add_evc_to_list(self, evc_id):
-        """ Keep a list of INT-enabled EVCs until the MEF E-Line supports metadata."""
-        # In the future: Notify MEF_ELINE via metadata ["telemetry": "enabled"]
-        if evc_id not in self.evcs_with_int:
-            self.evcs_with_int.append(evc_id)
+    # def add_evc_to_list(self, evc_id):
+    #     """ Keep a list of INT-enabled EVCs until the MEF E-Line supports metadata."""
+    #     # In the future: Notify MEF_ELINE via metadata ["telemetry": "enabled"]
+    #     if evc_id not in self.evcs_with_int:
+    #         self.evcs_with_int.append(evc_id)
+
+    # TODO: create a getter/setter for self.evcs_with_int to get from mef_eline the list of
+    # evcs with INT to avoid sync issues.
+    # @property
+    # def evcs_with_int(self):
+    # @evcs_with_int.setter
+    # def evcs_with_int(self, value):
+    #
 
     def provision_int(self, evc_id):
         """ """
 
-        # Make sure evc_id isn't already INT-enabled. If changes are needed,
-        # USER should disable and enable it again.
-        if evc_id in self.evcs_with_int:
-            return reply(fail=True, msg="EVC ID %s is already INT enabled." % evc_id)
-
         # Get EVC().dict from evc_id
         evc = get_evc(evc_id)
         if not evc:
-            return reply(fail=True, msg="EVC %s does not exit." % evc_id)
+            raise EvcDoesNotExist(evc_id)
+
+        # Make sure evc_id isn't already INT-enabled. If changes are needed,
+        # USER should disable and enable it again.
+        if has_int_enabled(evc):
+            raise EvcAlreadyHasINT(evc_id)
 
         # Get the EVC endpoints
         uni_a, uni_z = get_evc_unis(evc)
 
         # Check if there are proxy ports on the endpoints' switches
-        has_int_a = False
-        has_int_z = False
+        uni_a_proxy_port = get_proxy_port(uni_a["switch"], uni_a["interface"])
+        uni_z_proxy_port = get_proxy_port(uni_z["switch"], uni_z["interface"])
+
+        # INT is enabled per direction. It's possible and acceptable to have INT just in one direction.
 
         # Direction uni_z -> uni_a
-        if uni_a["switch"] in self.proxy_ports:
-            has_int_a = self.provision_int_unidirectional(evc, uni_z, uni_a)
-            if has_int_a:
-                self.add_evc_to_list(evc_id)
+        if uni_a_proxy_port:
+            if not self.provision_int_unidirectional(evc, uni_z, uni_a):
+                # change EVC metadata "telemetry": {"enabled": true } via API
+                raise NotPossibleToEnableTelemetry(evc_id)
 
         # Direction uni_a -> uni_z
-        if uni_z["switch"] in self.proxy_ports:
-            has_int_z = self.provision_int_unidirectional(evc, uni_a, uni_z, reverse=True)
-            if has_int_z:
-                self.add_evc_to_list(evc_id)
+        if uni_z_proxy_port:
+            if not self.provision_int_unidirectional(evc, uni_a, uni_z):
+                raise NotPossibleToEnableTelemetry(evc_id)
 
-        if has_int_a:
-            if has_int_z:
-                return reply(msg="INT enabled for EVC ID %s on both directions" % evc_id)
+        # Change EVC metadata "telemetry": {"enabled": true } via API
+        if uni_a_proxy_port and uni_z_proxy_port:
+            if not set_telemetry_true_for_evc(evc_id, "bidirectional"):
+                raise NotPossibleToEnableTelemetry(evc_id)
+            msg = f"INT enabled for EVC ID {evc_id} on both directions"
+
+        elif uni_a_proxy_port or uni_z_proxy_port:
+            if not set_telemetry_true_for_evc(evc_id, "unidirectional"):
+                raise NotPossibleToEnableTelemetry(evc_id)
+
+            msg = f"INT enabled for EVC ID {evc_id} on direction "
+            if uni_z_proxy_port:
+                msg += f"{evc['uni_a']['interface_id']} -> {evc['uni_z']['interface_id']}"
             else:
-                return reply(msg="INT enabled for EVC ID %s on direction %s -> %s" %
-                                      (evc_id, evc["uni_z"]["interface_id"], evc["uni_a"]["interface_id"]))
+                msg += f"{evc['uni_z']['interface_id']} -> {evc['uni_a']['interface_id']}"
 
-        if has_int_z:
-            return reply(msg="INT enabled for EVC ID %s on direction %s -> %s" %
-                                  (evc_id, evc["uni_a"]["interface_id"], evc["uni_z"]["interface_id"]))
+        else:
+            raise NoProxyPortsAvailable(evc_id)
 
-        return reply(fail=True, msg="no proxy ports available or error creating INT flows. Check Kytos logs!")
+        return msg
 
     def decommission_int(self, evc_id):
         """ Remove all INT flows for an EVC
@@ -346,84 +371,128 @@ class Main(KytosNApp):
             evc_id: EVC to be returned to non-INT EVC
         """
 
-        if evc_id in self.evcs_with_int:
-            self.evcs_with_int.remove(evc_id)
+        # Get EVC().dict from evc_id
+        evc = get_evc(evc_id)
+        if not evc:
+            raise EvcDoesNotExist(evc_id)
 
-            # Get EVC() from evc_id
-            evc = get_evc(evc_id)
+        if not has_int_enabled(evc):
+            raise EvcHasNoINT(evc_id)
 
-            # Get the EVC endpoints
-            has_int_a = False
-            uni_a = dict()
-            uni_a["interface"] = int(evc["uni_a"]["interface_id"].split(":")[8])
-            uni_a["switch"] = ":".join(evc["uni_a"]["interface_id"].split(":")[0:8])
+        # TODO: code to actually remove flows.
 
-            has_int_z = False
-            uni_z = dict()
-            uni_z["interface"] = int(evc["uni_z"]["interface_id"].split(":")[8])
-            uni_z["switch"] = ":".join(evc["uni_z"]["interface_id"].split(":")[0:8])
+        if not set_telemetry_false_for_evc(evc_id):
+            raise NotPossibleToDisableTelemetry(evc_id)
 
-            # TODO
-            # if not self.provision_int_unidirectional(evc, uni_z, uni_a, disable=True):
-            #     return reply(fail=True, msg="Error disabling EVC ID %s" % evc_id)
-
-            return reply(msg="EVC ID %s is no longer INT-enabled" % evc_id)
-
-        return reply(fail=True, msg="EVC ID %s is not INT-enabled." % evc_id)
+        return f"EVC ID {evc_id} is no longer INT-enabled."
 
     # REST methods
 
-    @rest('v1/enable', methods=['POST'])
-    def enable_int(self):
-        """ REST to enable/create INT flows for an EVC_ID. evcs are provided via POST as a list
+    @rest('v1/evc/enable', methods=['POST'])
+    def enable_telemetry(self):
+        """ REST to enable/create INT flows for one or more EVC_IDs. evcs are provided via POST as a list
         Args:
-            None.
+            {"evc_ids": [list of evc_ids] }
 
         Returns:
             200 if successful
-            400 if otherwise
+
         """
-        if not self.proxy_ports:
-            self.proxy_ports = create_proxy_ports(self.proxy_ports)
+        # if not self.proxy_ports:  # TODO: make sure proxy ports are related to the EVCs listed.
+        #     return jsonify("Not Proxy Ports Available."), 401
 
         try:
             content = request.get_json()
-            for evc_id in content["evcs"]:
-                try:
-                    return jsonify(self.provision_int(evc_id)), 200
-                except Exception as err:
-                    return jsonify("Error enabling INT for EVC ID %s: %s" % (evc_id, err)), 400
-        except:
-            return jsonify("Incorrect request provided"), 400
+            evcs = content["evc_ids"]
 
-    @rest('v1/disable', methods=['POST'])
-    def disble_int(self):
-        """ REST to enable/create INT flows for an EVC_ID
+        except (TypeError, KeyError):
+            return jsonify("Incorrect request provided."), 401
+
+        status = {}
+
+        if not len(evcs):
+            # Enable telemetry for ALL EVCs.
+            evcs = get_evcs_ids()
+
+        # Process each EVC individually
+        for evc_id in evcs:
+
+            try:
+                status[evc_id] = self.provision_int(evc_id)
+
+            except EvcDoesNotExist as err_msg:
+                # Ignore since it is not an issue.
+                status[evc_id] = err_msg.message
+
+            except EvcAlreadyHasINT as err_msg:
+                # Ignore since it is not an issue.
+                status[evc_id] = err_msg.message
+
+            except NoProxyPortsAvailable as err_msg:
+                # TODO: document which EVC had error.
+                status[evc_id] = err_msg.message
+
+            except NotPossibleToEnableTelemetry as err_msg:
+                # Rollback INT configuration. If there is proxy port and it doesn't work, rollback both directions.
+                # It will be a decommission plus force.
+                status[evc_id] = err_msg.message
+
+            # except Exception as err_msg:
+            #     status[evc_id] = err_msg
+                # return jsonify(status), 403
+
+        return jsonify(status), 200
+
+    @rest('v1/evc/disable', methods=['POST'])
+    def disable_telemetry(self):
+        """ REST to disable/remove INT flows for an EVC_ID
         Args:
-            evc_ids: List of EVCs to be returned to non-INT EVCs
+            {"evc_ids": [list of evc_ids] }
         Returns:
             200 if successful
             400 if otherwise
         """
-        content = request.get_json()
-        evcs = content["evcs"]
+        try:
+            content = request.get_json()
+            evcs = content["evc_ids"]
+
+        except (TypeError, KeyError):
+            return jsonify("Incorrect request provided."), 401
+
+        status = {}
+
+        if not len(evcs):
+            # Disable telemetry for ALL EVCs.
+            evcs = get_evcs_ids()
+
         for evc_id in evcs:
+
             try:
-                return jsonify(self.decommission_int(evc_id)), 200
+                status[evc_id] = self.decommission_int(evc_id)
+
+            except EvcDoesNotExist as err_msg:
+                # Ignore since it is not an issue.
+                status[evc_id] = err_msg.message
+
+            except EvcHasNoINT as err_msg:
+                # Ignore since it is not an issue.
+                status[evc_id] = err_msg.message
+
+            except NotPossibleToDisableTelemetry as err_msg:
+                # Rollback INT configuration. This error will lead to inconsistency.
+                # Critical
+                status[evc_id] = err_msg.message
+
             except Exception as err:
-                return jsonify("Error disabling INT for EVC ID %s: %s" % (evc_id, err)), 400
+                print(err)
+                status[evc_id] = err
 
-    @rest('v1/')
-    def get_evcs_with_int(self):
+        return jsonify(status), 200
+
+    @rest('v1/evc')
+    def get_evcs(self):
         """ REST to return the list of EVCs with INT enabled """
-        return jsonify(self.evcs_with_int), 200
-
-    @rest('v1/proxies')
-    def get_proxies(self):
-        """ REST to return the list of proxy ports in the topology """
-        if not self.proxy_ports:
-            self.proxy_ports = create_proxy_ports(self.proxy_ports)
-        return jsonify(self.proxy_ports), 200
+        return jsonify(get_evc_with_telemetry()), 200
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
@@ -445,4 +514,6 @@ class Main(KytosNApp):
 
     def listen_for_topology_changes(self):
         """ If the topology changes, make sure it is not the loop ports. If so, update proxy ports """
+        # TODO:
+        # self.proxy_ports = create_proxy_ports(self.proxy_ports)
         pass

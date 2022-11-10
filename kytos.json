@@ -2,7 +2,7 @@
   "author": "amlight",
   "username": "amlight",
   "name": "telemetry",
-  "description": "Napp to deploy In-band Network Telemetry",
+  "description": "Napp to deploy In-band Network Telemetry for EVCs",
   "version": "1.0",
   "napp_dependencies": ["amlight/noviflow", "kytos/topology", "kytos/flow_manager", "kytos/pathfinder"],
   "license": "",
