@@ -51,3 +51,13 @@ class EvcHasNoINT(ErrorBase):
     """ """
     def __init__(self, evc_id, message="INT was not enabled for this EVC."):
         super().__init__(evc_id, message)
+
+
+class FlowsNotFound(ErrorBase):
+    def __init__(self, evc_id, message="Flow not found. Kytos still loading?"):
+        super().__init__(evc_id, message)
+
+
+class UnsupportedFlow(ErrorBase):
+    def __init__(self, evc_id, message="Unsupported Flow found."):
+        super().__init__(evc_id, message)

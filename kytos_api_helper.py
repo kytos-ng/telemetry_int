@@ -8,10 +8,10 @@ from napps.amlight.telemetry.settings import pathfinder_api
 from napps.amlight.telemetry.settings import topology_api
 
 
-def kytos_api(get=False, put=False, post=False,
+def kytos_api(get=False, put=False, post=False, delete=False,
               topology=False,
               mef_eline=False, evc_id=None,
-              flow_manager=False,
+              flow_manager=False, switch=None,
               pathfinder=False,
               data=None, metadata=False):
     """ Main function to handle requests to Kytos API."""
@@ -35,17 +35,43 @@ def kytos_api(get=False, put=False, post=False,
 
             if mef_eline and metadata:
                 url = f"{kytos_api_url}/{evc_id}/metadata"
-                print(url)
-                print(data)
+                # print(url)
+                # print(data)
                 response = requests.post(url,
                                          headers=headers,
                                          data=json.dumps(data))
-                print(response)
-                print(response.__dict__)
+                # print(response)
+                # print(response.__dict__)
                 if response.status_code == 201:
                     return True
 
                 return False
+
+            if flow_manager:
+                url = f"{kytos_api_url}/{switch}"
+                response = requests.post(url,
+                                         headers=headers,
+                                         data=json.dumps(data))
+                # debug:
+                # print(response)
+                # print(response.__dict__)
+
+                if response.status_code == 202:
+                    return True
+
+        elif delete:
+
+            if flow_manager:
+                url = f"{kytos_api_url}/{switch}"
+                response = requests.delete(url,
+                                           headers=headers,
+                                           data=json.dumps(data))
+                # debug:
+                # print(response)
+                print(response.__dict__)
+
+                if response.status_code == 202:
+                    return True
 
     except HTTPError as http_err:
         print(f'HTTP error occurred: {http_err}')
@@ -54,7 +80,7 @@ def kytos_api(get=False, put=False, post=False,
         print(f'Other error occurred: {err}')
 
     return False
-    # return in JSON
+
     # TODO: add support for batch, temporizer, retries
 
 
@@ -97,3 +123,15 @@ def set_telemetry_metadata_false(evc_id):
 def get_topology_interfaces():
     """ Get list of interfaces """
     return kytos_api(get=True, topology=True, data="interfaces")
+
+
+def kytos_push_flows(switch, data):
+    return kytos_api(post=True, flow_manager=True, switch=switch, data=data)
+
+
+def kytos_get_flows(switch):
+    return kytos_api(get=True, flow_manager=True, switch=switch)
+
+
+def kytos_delete_flows(switch, data):
+    return kytos_api(delete=True, flow_manager=True, switch=switch, data=data)

@@ -2,10 +2,14 @@ import requests
 import json
 from kytos.core import log
 from napps.amlight.telemetry.settings import KYTOS_API
+from napps.amlight.telemetry.settings import COOKIE_PREFIX
 from napps.amlight.telemetry.kytos_api_helper import get_evcs
 from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
 from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_true
 from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_false
+from napps.amlight.telemetry.kytos_api_helper import kytos_delete_flows
+from napps.amlight.telemetry.kytos_api_helper import kytos_push_flows
+from napps.amlight.telemetry.kytos_api_helper import kytos_get_flows
 
 
 # mef_eline support functions
@@ -100,7 +104,7 @@ def get_proxy_status(switch, interface):
 
     if kytos_interface:
         if kytos_interface["enabled"] and kytos_interface["active"]:
-            return kytos_interface
+            return kytos_interface['port_number']
 
     return None
 
@@ -124,48 +128,31 @@ def add_to_apply_actions(instructions, new_instruction, position):
     return instructions
 
 
-# def create_proxy_ports(proxy_ports):
-#     """ Query the topology napp, once an intra-switch loop is found, add it to the list of proxy ports """
-#
-#     response = kytos_api(get=True, topology=True)
-#
-#     topology_url = KYTOS_API + 'kytos/topology/v3/'
-#     response = requests.get(topology_url).json()  # TODO: all queries to other napps need to be validated.
-#     links = response["topology"]["links"]
-#
-#     for link in links:
-#         if links[link]["active"] and links[link]["enabled"]:
-#             # Just want one proxy per switch,
-#             if links[link]["endpoint_a"]["switch"] not in proxy_ports:
-#                 if links[link]["endpoint_a"]["switch"] == links[link]["endpoint_b"]["switch"]:
-#                     if links[link]["endpoint_a"]["port_number"] < links[link]["endpoint_b"]["port_number"]:
-#                         proxy_ports[links[link]["endpoint_a"]["switch"]] = (
-#                             links[link]["endpoint_a"]["port_number"], links[link]["endpoint_b"]["port_number"])
-#                     else:
-#                         proxy_ports[links[link]["endpoint_a"]["switch"]] = (
-#                             links[link]["endpoint_b"]["port_number"], links[link]["endpoint_a"]["port_number"])
-#     return proxy_ports
-
-
-def get_evc_flows(switch, evc):
+def get_evc_flows(switch, evc, telemetry=False):
     """ Get EVC's flows from a specific switch.
     Args:
-        evc: evc.__dict__
         switch: dpid
+        evc: evc.__dict__
+
     Returns:
         list of flows
         """
     flows = []
-    headers = {'Content-Type': 'application/json'}
-    flow_manager_url = KYTOS_API + 'kytos/flow_manager/v2/flows/' + switch  # TODO: all queries to other napps need to be validated.
-    flow_response = requests.get(flow_manager_url, headers=headers).json()
+    flow_response = kytos_get_flows(switch)
     for flow in flow_response[switch]["flows"]:
-        if flow["cookie"] == int("0xaa" + evc["id"], 16):
+        if evc["id"] == get_id_from_cookie(flow["cookie"], telemetry):
             flows.append(flow)
+
     return flows
 
 
-
+def get_id_from_cookie(cookie, telemetry):
+    """Return the evc id given a cookie value."""
+    if telemetry:
+        evc_id = cookie - (int(COOKIE_PREFIX, 16) << 56)
+    else:
+        evc_id = cookie - (0xAA << 56)
+    return f"{evc_id:x}".zfill(14)
 
 
 def get_int_hops(evc, source, destination):
@@ -244,13 +231,22 @@ def print_flows(flows):
     log.info("===================================")
     for flow in flows:
         # log.info(flow)
-        log.info(flow["switch"])
-        log.info(flow["table_id"])
-        log.info(flow["match"])
-        try:
-            log.info(flow["instructions"])
-        except:
-            log.info(flow["actions"])
+        log.info(f"Switch: {flow['switch']}")
+        log.info(f"Table ID: {flow['table_id']}")
+        log.info(f"Match: {flow['match']}")
+
+        for instruction in flow['instructions']:
+
+            log.info(f"Instruction Type: {instruction['instruction_type']}")
+            if 'actions' in instruction:
+                for action in instruction['actions']:
+                    if action['action_type'] == 'output':
+                        log.info(f"Action_type: {action['action_type']} port_no: {action['port']}")
+                    elif action['action_type'] == 'set_vlan':
+                        log.info(f"Action_type: {action['action_type']} vlan_id: {action['vlan_id']}")
+                    else:
+                        log.info(f"Action_type: {action}")
+
         log.info("===================================")
 
 
@@ -267,26 +263,15 @@ def push_flows(flows):
     print_flows(flows)
 
     # Debug
-    response = True
+    # response = True
 
-    headers = {'Content-Type': 'application/json'}
     for flow in flows:
-        flow_manager_url = KYTOS_API + 'kytos/flow_manager/v2/flows/' + flow["switch"]
         flow_to_push = {"flows": [flow]}
-        payload = json.dumps(flow_to_push)
-
-        # log.info(payload)  # Debug
-
-        # response = requests.post(flow_manager_url, headers=headers, data=payload).json()  # TODO: all queries to other napps need to be validated.
-        del flow_to_push
-
-        if not response:  # TODO: parse error code.
+        if not kytos_push_flows(flow["switch"], flow_to_push):
             return False
 
-    if flows:
-        log.info("Flows pushed with success.")
-        return True
-    return False
+    log.info("Flows pushed with success.")
+    return True
 
 
 def reply(fail=False, msg=""):
@@ -295,11 +280,53 @@ def reply(fail=False, msg=""):
 
 
 def set_priority(f_id, priority):
-    """ Find a suitable priority number """
-    if priority + 1000 < 65534:
-        return priority + 1000
+    """ Find a suitable priority number. EP031 describes 100 as the addition."""
+    if priority + 100 < 65534:
+        return priority + 100
     if priority + 1 < 65534:
-        return priority + 1000
+        return priority + 100
 
-    log.info("Error: Flow ID %s has priority too high for INT" % f_id)
+    log.info(f"Error: Flow ID {f_id} has reached max priority supported")
     return priority
+
+
+def get_new_cookie(cookie):
+    """ Convert from mef-eline cookie (0xaa) to telemetry (0xA8)"""
+    value = hex(cookie)
+    value = value.replace('0xaa', COOKIE_PREFIX)
+    return int(value, 16)
+
+
+def retrieve_switches(evc):
+    """ """
+    switches = [] 
+
+    uni_a, uni_z = get_evc_unis(evc)
+
+    switches.append(uni_a["switch"])
+    
+    if uni_a["switch"] != uni_z["switch"]:
+        switches.append(uni_z["switch"])
+
+        current_path = evc['current_path']
+
+        for nni in current_path:
+            switches.append(nni['endpoint_a']['switch'])
+            switches.append(nni['endpoint_b']['switch'])
+
+        failover_path = evc['failover_path']
+        for nni in failover_path:
+            switches.append(nni['endpoint_a']['switch'])
+            switches.append(nni['endpoint_b']['switch'])
+
+    return switches
+
+
+def delete_flows(flows):
+    """ Delete flows from Kytos"""
+    for flow in flows:
+        flow_to_push = {"flows": [flow]}
+        if not kytos_delete_flows(flow["switch"], flow_to_push):
+            return False
+
+    return True
