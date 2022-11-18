@@ -16,6 +16,8 @@ def kytos_api(get=False, put=False, post=False, delete=False,
               data=None, metadata=False):
     """ Main function to handle requests to Kytos API."""
 
+    # TODO: add support for batch, temporizer, retries
+
     kytos_api_url = (topology_api if topology else flow_manager_api if flow_manager
                      else mef_eline_api if mef_eline else pathfinder_api if pathfinder else "")
 
@@ -28,60 +30,41 @@ def kytos_api(get=False, put=False, post=False, delete=False,
             return requests.get(kytos_api_url).json()
 
         elif put:
-            headers = {'Content-Type': 'application/json'}
             requests.put(kytos_api_url, headers=headers)
 
         elif post:
 
             if mef_eline and metadata:
                 url = f"{kytos_api_url}/{evc_id}/metadata"
-                # print(url)
-                # print(data)
-                response = requests.post(url,
-                                         headers=headers,
-                                         data=json.dumps(data))
-                # print(response)
-                # print(response.__dict__)
-                if response.status_code == 201:
-                    return True
-
-                return False
+                response = requests.post(url, headers=headers, data=json.dumps(data))
+                return True if response.status_code == 201 else False
 
             if flow_manager:
                 url = f"{kytos_api_url}/{switch}"
-                response = requests.post(url,
-                                         headers=headers,
-                                         data=json.dumps(data))
-                # debug:
-                # print(response)
-                # print(response.__dict__)
+                response = requests.post(url, headers=headers, data=json.dumps(data))
+                return True if response.status_code == 202 else False
 
+            if pathfinder:
+                data = {"source": source, "destination": destination}
+                response = requests.post(url=kytos_api_url, headers=headers, data=json.dumps(data))
                 if response.status_code == 202:
-                    return True
+                    return response["paths"][0]["hops"] if "paths" in response else False
+                return False
 
         elif delete:
 
             if flow_manager:
                 url = f"{kytos_api_url}/{switch}"
-                response = requests.delete(url,
-                                           headers=headers,
-                                           data=json.dumps(data))
-                # debug:
-                # print(response)
-                print(response.__dict__)
-
-                if response.status_code == 202:
-                    return True
+                response = requests.delete(url, headers=headers, data=json.dumps(data))
+                return True if response.status_code == 202 else False
 
     except HTTPError as http_err:
-        print(f'HTTP error occurred: {http_err}')
+        log.error(f'HTTP error occurred: {http_err}')
 
     except Exception as err:
-        print(f'Other error occurred: {err}')
+        log.error(f'Other error occurred: {err}')
 
     return False
-
-    # TODO: add support for batch, temporizer, retries
 
 
 def get_evcs():
@@ -91,13 +74,7 @@ def get_evcs():
 
 def set_telemetry_metadata_true(evc_id, direction):
     """ Set telemetry enabled metadata item to true """
-    data = {"telemetry":
-                {
-                    "enabled": "true",
-                    "direction": direction,
-                    "timestamp": "2022/01/01T01:01:01Z"
-                }
-            }
+    data = {"telemetry": {"enabled": "true", "direction": direction, "timestamp": "2022/01/01T01:01:01Z"}}
     # TODO: add timestamp
     return kytos_api(post=True,
                      mef_eline=True, evc_id=evc_id,
@@ -106,13 +83,8 @@ def set_telemetry_metadata_true(evc_id, direction):
 
 
 def set_telemetry_metadata_false(evc_id):
-    """ Set telemetry enabled metadata item to true """
-    data = {"telemetry":
-                {
-                    "enabled": "false",
-                    "timestamp": "2023/01/01T01:01:01Z"
-                }
-            }
+    """ Set telemetry enabled metadata item to false """
+    data = {"telemetry": {"enabled": "false", "timestamp": "2023/01/01T01:01:01Z"}}
     # TODO: add timestamp
     return kytos_api(post=True,
                      mef_eline=True, evc_id=evc_id,
@@ -125,13 +97,21 @@ def get_topology_interfaces():
     return kytos_api(get=True, topology=True, data="interfaces")
 
 
-def kytos_push_flows(switch, data):
-    return kytos_api(post=True, flow_manager=True, switch=switch, data=data)
-
-
 def kytos_get_flows(switch):
+    """ Get flows from Flow Manager"""
     return kytos_api(get=True, flow_manager=True, switch=switch)
 
 
 def kytos_delete_flows(switch, data):
+    """ Delete flows on Flow Manager"""
     return kytos_api(delete=True, flow_manager=True, switch=switch, data=data)
+
+
+def kytos_push_flows(switch, data):
+    """ Push flows to Flow Manager """
+    return kytos_api(post=True, flow_manager=True, switch=switch, data=data)
+
+
+def get_path(source, destination):
+    """ Get path between two switches """
+    return kytos_api(post=True, pathfinder=True, data={"source": source, "destination": destination}).json()

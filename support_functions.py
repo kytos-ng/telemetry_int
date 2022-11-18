@@ -1,15 +1,20 @@
+""" Support function for main.py """
+
+
 import requests
 import json
 from kytos.core import log
 from napps.amlight.telemetry.settings import KYTOS_API
 from napps.amlight.telemetry.settings import COOKIE_PREFIX
 from napps.amlight.telemetry.kytos_api_helper import get_evcs
+from napps.amlight.telemetry.kytos_api_helper import get_path
 from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
+from napps.amlight.telemetry.kytos_api_helper import kytos_delete_flows
+from napps.amlight.telemetry.kytos_api_helper import kytos_get_flows
+from napps.amlight.telemetry.kytos_api_helper import kytos_push_flows
 from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_true
 from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_false
-from napps.amlight.telemetry.kytos_api_helper import kytos_delete_flows
-from napps.amlight.telemetry.kytos_api_helper import kytos_push_flows
-from napps.amlight.telemetry.kytos_api_helper import kytos_get_flows
+from napps.amlight.telemetry.proxy_port import ProxyPort
 
 
 # mef_eline support functions
@@ -52,12 +57,13 @@ def get_evc(evc_id):
         evc_id: evc_id provided by user via REST
     Returns:
         full evc if found
-        False if not found
+        False is not found
     """
     evcs = get_evcs()
     if evc_id in evcs:
         return get_evcs()[evc_id]
     return False
+
 
 def get_evc_unis(evc):
     """ Parse EVC() for unis.
@@ -87,9 +93,8 @@ def set_telemetry_false_for_evc(evc_id):
     return set_telemetry_metadata_false(evc_id)
 
 
-# topology support functions
 def get_kytos_interface(switch, interface):
-    """ Get the Kytos Interface Interface as dict. Useful for multiple functions. """
+    """ Get the Kytos Interface as dict. Useful for multiple functions. """
 
     kytos_interfaces = get_topology_interfaces()["interfaces"]
     for kytos_interface in kytos_interfaces.values():
@@ -98,30 +103,25 @@ def get_kytos_interface(switch, interface):
                 return kytos_interface
 
 
-def get_proxy_status(switch, interface):
-    """ Check the interface state and status of a proxy port before using it. """
-    kytos_interface = get_kytos_interface(switch, interface)
+def create_proxy_port(switch, proxy_port):
+    """ Return the ProxyPort class to support single and multi-home loops """
+    pp = ProxyPort(switch=switch, proxy_port=proxy_port)
+    return pp if pp.is_ready() else None
 
-    if kytos_interface:
-        if kytos_interface["enabled"] and kytos_interface["active"]:
-            return kytos_interface['port_number']
-
-    return None
 
 def get_proxy_port(switch, interface):
     """ Return the proxy port assigned to a UNI """
-
     kytos_interface = get_kytos_interface(switch, interface)
 
     if kytos_interface:
         if "proxy_port" in kytos_interface["metadata"]:
-            return get_proxy_status(switch, kytos_interface["metadata"]["proxy_port"])
+            return create_proxy_port(switch, kytos_interface["metadata"]["proxy_port"])
 
     return None
 
 
 def add_to_apply_actions(instructions, new_instruction, position):
-    """ """
+    """ Create the actions list """
     for instruction in instructions:
         if instruction["instruction_type"] == "apply_actions":
             instruction["actions"].insert(position, new_instruction)
@@ -133,7 +133,7 @@ def get_evc_flows(switch, evc, telemetry=False):
     Args:
         switch: dpid
         evc: evc.__dict__
-
+        telemetry: bool to indicate if we are looking for telemetry or mef_eline flows
     Returns:
         list of flows
         """
@@ -147,7 +147,7 @@ def get_evc_flows(switch, evc, telemetry=False):
 
 
 def get_id_from_cookie(cookie, telemetry):
-    """Return the evc id given a cookie value."""
+    """Return the evc id given a cookie value. By default, searches for mef_eline cookies. """
     if telemetry:
         evc_id = cookie - (int(COOKIE_PREFIX, 16) << 56)
     else:
@@ -161,7 +161,6 @@ def get_int_hops(evc, source, destination):
         evc: EVC.__dict__
         source: source UNI
         destination: destination UNI
-        reverse: flow direction - Z->A or A->Z
     Returns:
         list of INT hops
     """
@@ -172,7 +171,8 @@ def get_int_hops(evc, source, destination):
         return int_hops
 
     by_three = 1
-    for hop in get_path_pathfinder(source["switch"], destination["switch"]):
+    # for hop in get_path_pathfinder(source["switch"], destination["switch"]):
+    for hop in get_path(source["switch"], destination["switch"]):
         if by_three % 3 == 0:
             interface = int(hop.split(":")[8])
             switch = ":".join(hop.split(":")[0:8])
@@ -182,12 +182,12 @@ def get_int_hops(evc, source, destination):
     return int_hops
 
 
-def get_path_pathfinder(source, destination):
-    """ Get the path from source to destination """
-    response = requests.post(url='%s/kytos/pathfinder/v2/' % KYTOS_API,
-                             headers={'Content-Type': 'application/json'},
-                             data=json.dumps({"source": source, "destination": destination})).json()
-    return response["paths"][0]["hops"] if "paths" in response else False
+# def get_path_pathfinder(source, destination):
+#     """ Get the path from source to destination """
+#     response = requests.post(url='%s/kytos/pathfinder/v2/' % KYTOS_API,
+#                              headers={'Content-Type': 'application/json'},
+#                              data=json.dumps({"source": source, "destination": destination})).json()
+#     return response["paths"][0]["hops"] if "paths" in response else False
 
 
 def is_intra_switch_evc(evc):
@@ -205,7 +205,7 @@ def modify_actions(actions, actions_to_change, remove=True):
     Args:
         actions = current list of actions on a flow
         actions_to_change = list of actions as strings
-        remove = boolen
+        remove = boolean
     Return
         actions
     """
@@ -227,10 +227,9 @@ def modify_actions(actions, actions_to_change, remove=True):
 
 
 def print_flows(flows):
-    """ For debugging purposes"""
+    """ For debugging purposes """
     log.info("===================================")
     for flow in flows:
-        # log.info(flow)
         log.info(f"Switch: {flow['switch']}")
         log.info(f"Table ID: {flow['table_id']}")
         log.info(f"Match: {flow['match']}")
@@ -262,9 +261,6 @@ def push_flows(flows):
     # Debug:
     print_flows(flows)
 
-    # Debug
-    # response = True
-
     for flow in flows:
         flow_to_push = {"flows": [flow]}
         if not kytos_push_flows(flow["switch"], flow_to_push):
@@ -274,17 +270,12 @@ def push_flows(flows):
     return True
 
 
-def reply(fail=False, msg=""):
-    """ """
-    return {"status": "success" if not fail else "error", "message": msg}
-
-
 def set_priority(f_id, priority):
     """ Find a suitable priority number. EP031 describes 100 as the addition."""
     if priority + 100 < 65534:
         return priority + 100
     if priority + 1 < 65534:
-        return priority + 100
+        return priority + 1
 
     log.info(f"Error: Flow ID {f_id} has reached max priority supported")
     return priority
@@ -298,33 +289,40 @@ def get_new_cookie(cookie):
 
 
 def retrieve_switches(evc):
-    """ """
-    switches = [] 
-
+    """ Retrieve switches in the EVC's current or fail-over paths
+     Args:
+         evc: dict
+     Returns:
+         list of DPIDs
+    """
+    switches = []
     uni_a, uni_z = get_evc_unis(evc)
-
     switches.append(uni_a["switch"])
-    
+
+    # Inter-switch EVCs
     if uni_a["switch"] != uni_z["switch"]:
         switches.append(uni_z["switch"])
 
-        current_path = evc['current_path']
-
-        for nni in current_path:
+        for nni in evc['current_path']:
             switches.append(nni['endpoint_a']['switch'])
             switches.append(nni['endpoint_b']['switch'])
 
-        failover_path = evc['failover_path']
-        for nni in failover_path:
+        for nni in evc['failover_path']:
             switches.append(nni['endpoint_a']['switch'])
             switches.append(nni['endpoint_b']['switch'])
 
-    return switches
+    # Remove duplicates
+    return [*set(switches)]
 
 
 def delete_flows(flows):
     """ Delete flows from Kytos"""
+
+    # Debug
+    print_flows(flows)
+
     for flow in flows:
+        flow['cookie_mask'] = 18446744073709551615
         flow_to_push = {"flows": [flow]}
         if not kytos_delete_flows(flow["switch"], flow_to_push):
             return False

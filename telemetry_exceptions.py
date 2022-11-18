@@ -1,3 +1,4 @@
+""" Customized Exceptions """
 
 
 class ErrorBase(Exception):
@@ -34,6 +35,7 @@ class NotPossibleToEnableTelemetry(ErrorBase):
     """ """
     def __init__(self, evc_id, message="error enabling telemetry. Check logs."):
         super().__init__(evc_id, message)
+
 
 class NotPossibleToDisableTelemetry(ErrorBase):
     """ """
