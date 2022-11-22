@@ -114,8 +114,8 @@ class Main(KytosNApp):
             raise UnsupportedFlow()
 
         # Prepare TCP Flow for Table 0
-        new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
-        new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
+        new_int_flow_tbl_0_tcp["match"]["dl_type"] = settings.IPv4
+        new_int_flow_tbl_0_tcp["match"]["nw_proto"] = settings.TCP
         # TODO: Create an exception for when the priority has reached max value
         new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"],
                                                           new_int_flow_tbl_0_tcp["priority"])
@@ -123,15 +123,15 @@ class Main(KytosNApp):
         # The flow_manager has two outputs: instructions and actions.
         instructions = [{"instruction_type": "apply_actions",
                          "actions": [{"action_type": "push_int"}]},
-                        {"instruction_type": "goto_table", "table_id": 2}]
+                        {"instruction_type": "goto_table", "table_id": settings.INT_TABLE}]
         new_int_flow_tbl_0_tcp["instructions"] = instructions
 
         # Prepare UDP Flow for Table 0. Everything the same as TCP except the nw_proto
         new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
-        new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
+        new_int_flow_tbl_0_udp["match"]["nw_proto"] = settings.UDP
 
         # Prepare Flows for Table 2 - No TCP or UDP specifics
-        new_int_flow_tbl_2["table_id"] = 2
+        new_int_flow_tbl_2["table_id"] = settings.INT_TABLE
 
         # if intra-switch EVC, then output port should be the proxy
         if is_intra_switch_evc(evc):
@@ -185,8 +185,8 @@ class Main(KytosNApp):
                         new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
 
                     # Prepare TCP Flow
-                    new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
-                    new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
+                    new_int_flow_tbl_0_tcp["match"]["dl_type"] = settings.IPv4
+                    new_int_flow_tbl_0_tcp["match"]["nw_proto"] = settings.TCP
                     prio_ = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
                     new_int_flow_tbl_0_tcp["priority"] = prio_
 
@@ -196,7 +196,7 @@ class Main(KytosNApp):
 
                     # Prepare UDP Flow
                     new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
-                    new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
+                    new_int_flow_tbl_0_udp["match"]["nw_proto"] = settings.UDP
 
                     new_flows.append(new_int_flow_tbl_0_tcp)
                     new_flows.append(new_int_flow_tbl_0_udp)
@@ -246,8 +246,8 @@ class Main(KytosNApp):
 
         # Prepare TCP Flow for Table 0 PRE proxy
         if not is_intra_switch_evc(evc):
-            new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
-            new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
+            new_int_flow_tbl_0_tcp["match"]["dl_type"] = settings.IPv4
+            new_int_flow_tbl_0_tcp["match"]["nw_proto"] = settings.TCP
             prio_ = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
             new_int_flow_tbl_0_tcp["priority"] = prio_
 
@@ -265,7 +265,7 @@ class Main(KytosNApp):
 
             # Prepare UDP Flow for Table 0
             new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
-            new_int_flow_tbl_0_udp["match"]["nw_proto"] = 17
+            new_int_flow_tbl_0_udp["match"]["nw_proto"] = settings.UDP
 
             new_flows.append(new_int_flow_tbl_0_tcp)
             new_flows.append(new_int_flow_tbl_0_udp)
@@ -280,12 +280,12 @@ class Main(KytosNApp):
 
         instructions = [{"instruction_type": "apply_actions",
                          "actions": [{"action_type": "send_report"}]},
-                        {"instruction_type": "goto_table", "table_id": 2}]
+                        {"instruction_type": "goto_table", "table_id": settings.INT_TABLE}]
         new_int_flow_tbl_0_pos["instructions"] = instructions
 
         # Prepare Flows for Table 2 POS proxy
         new_int_flow_tbl_2_pos["match"]["in_port"] = in_port_no
-        new_int_flow_tbl_2_pos["table_id"] = 2
+        new_int_flow_tbl_2_pos["table_id"] = settings.INT_TABLE
 
         for instruction in new_int_flow_tbl_2_pos["instructions"]:
             if instruction["instruction_type"] == "apply_actions":
