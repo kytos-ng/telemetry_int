@@ -58,7 +58,7 @@ def get_evc(evc_id):
     """
     evcs = get_evcs()
     if evc_id in evcs:
-        return get_evcs()[evc_id]
+        return evcs[evc_id]
     return False
 
 
