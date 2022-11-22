@@ -7,7 +7,6 @@ from kytos.core import log
 from napps.amlight.telemetry.settings import KYTOS_API
 from napps.amlight.telemetry.settings import COOKIE_PREFIX
 from napps.amlight.telemetry.kytos_api_helper import get_evcs
-from napps.amlight.telemetry.kytos_api_helper import get_path
 from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
 from napps.amlight.telemetry.kytos_api_helper import kytos_delete_flows
 from napps.amlight.telemetry.kytos_api_helper import kytos_get_flows
@@ -142,8 +141,31 @@ def get_evc_flows(switch, evc, telemetry=False):
     for flow in flow_response[switch]["flows"]:
         if evc["id"] == get_id_from_cookie(flow["cookie"], telemetry):
             flows.append(flow)
-
     return flows
+
+
+def get_unidirectional_path(evc, source, destination):
+    """
+        source: {'interface': x, 'switch': 'x'}
+        destination: {'interface': x, 'switch': 'x'}
+    """
+
+    source_id = source['switch'] + ':' + str(source['interface'])
+    destination_id = destination['switch'] + ':' + str(destination['interface'])
+
+    interface_ids = []
+
+    target = 'endpoint_b' if evc["uni_a"]['interface_id'] == source_id else 'endpoint_a'
+
+    for nni in evc["current_path"]:
+        if not nni[target]["switch"] in destination_id and not nni[target]["switch"] in source_id:
+            interface_ids.append(nni[target]["id"])
+
+    for nni in evc["failover_path"]:
+        if not nni[target]["switch"] in destination_id and not nni[target]["switch"] in source_id:
+            interface_ids.append(nni[target]["id"])
+
+    return interface_ids
 
 
 def get_id_from_cookie(cookie, telemetry):
@@ -153,41 +175,6 @@ def get_id_from_cookie(cookie, telemetry):
     else:
         evc_id = cookie - (0xAA << 56)
     return f"{evc_id:x}".zfill(14)
-
-
-def get_int_hops(evc, source, destination):
-    """ Get the list of INT switches between the INT Source and INT Destination/Sink
-    Args:
-        evc: EVC.__dict__
-        source: source UNI
-        destination: destination UNI
-    Returns:
-        list of INT hops
-    """
-
-    int_hops = []
-
-    if not evc["current_path"]:
-        return int_hops
-
-    by_three = 1
-    # for hop in get_path_pathfinder(source["switch"], destination["switch"]):
-    for hop in get_path(source["switch"], destination["switch"]):
-        if by_three % 3 == 0:
-            interface = int(hop.split(":")[8])
-            switch = ":".join(hop.split(":")[0:8])
-            if switch != destination["switch"]:
-                int_hops.append((switch, interface))
-        by_three += 1
-    return int_hops
-
-
-# def get_path_pathfinder(source, destination):
-#     """ Get the path from source to destination """
-#     response = requests.post(url='%s/kytos/pathfinder/v2/' % KYTOS_API,
-#                              headers={'Content-Type': 'application/json'},
-#                              data=json.dumps({"source": source, "destination": destination})).json()
-#     return response["paths"][0]["hops"] if "paths" in response else False
 
 
 def is_intra_switch_evc(evc):

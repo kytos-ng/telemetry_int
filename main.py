@@ -15,14 +15,13 @@ from napps.amlight.telemetry.support_functions import get_evcs_ids
 from napps.amlight.telemetry.support_functions import get_evc_with_telemetry
 from napps.amlight.telemetry.support_functions import get_evc_flows
 from napps. amlight.telemetry.support_functions import get_evc_unis
-from napps.amlight.telemetry.support_functions import get_int_hops
+from napps.amlight.telemetry.support_functions import get_unidirectional_path
 from napps.amlight.telemetry.support_functions import get_new_cookie
 from napps.amlight.telemetry.support_functions import get_proxy_port
 from napps.amlight.telemetry.support_functions import has_int_enabled
 from napps.amlight.telemetry.support_functions import is_intra_switch_evc
 from napps.amlight.telemetry.support_functions import modify_actions
 from napps.amlight.telemetry.support_functions import push_flows
-from napps.amlight.telemetry.support_functions import reply
 from napps.amlight.telemetry.support_functions import retrieve_switches
 from napps.amlight.telemetry.support_functions import set_priority
 from napps.amlight.telemetry.support_functions import set_telemetry_true_for_evc
@@ -98,7 +97,6 @@ class Main(KytosNApp):
 
         # Get cookie with telemetry's cookie prefix.
         new_int_flow_tbl_0_tcp['cookie'] = get_new_cookie(flow["cookie"])
-        new_int_flow_tbl_0_tcp['cookie_mask'] = settings.COOKIE_MASK
 
         # Deepcopy to use for table 2 later
         new_int_flow_tbl_2 = copy.deepcopy(new_int_flow_tbl_0_tcp)
@@ -148,26 +146,30 @@ class Main(KytosNApp):
         return new_flows
 
     @staticmethod
-    def enable_int_hop(int_hops, evc):
+    def enable_int_hop(evc, source, destination):
         """ At the INT hops, one flow adds two more: one for UDP on table 0, one for TCP on table 0
-        On table 0, we add 'add_int_metadata' before other actions
+        On table 0, we add 'add_int_metadata' before other actions. We use source and destination to
+        create the unidirectional support for telemetry.
 
         Args:
-            int_hops: list of switches
             evc: EVC.__dict__
+            source: interface_id
+            destination: interface_id
         Returns:
             list of new flows to install
         """
 
         new_flows = list()
-        for int_hop in int_hops:
-            switch = int_hop[0]
-            port_number = int_hop[1]
+
+        for interface_id in get_unidirectional_path(evc, source, destination):
+
+            switch = ":".join(interface_id.split(":")[0:8])
             for flow in get_evc_flows(switch, evc):
-                if flow["match"]["in_port"] == port_number:
+                interface = int(interface_id.split(":")[8])
+                if flow['match']['in_port'] == interface:
+
                     new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
                     new_int_flow_tbl_0_tcp['cookie'] = get_new_cookie(flow["cookie"])
-                    new_int_flow_tbl_0_tcp['cookie_mask'] = settings.COOKIE_MASK
                     for extraneous_key in ["stats", "id"]:
                         new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
 
@@ -211,7 +213,6 @@ class Main(KytosNApp):
             if flow["match"]["in_port"] != destination["interface"]:
                 new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
                 new_int_flow_tbl_0_tcp['cookie'] = get_new_cookie(flow["cookie"])
-                new_int_flow_tbl_0_tcp['cookie_mask'] = settings.COOKIE_MASK
                 break
 
         if not new_int_flow_tbl_0_tcp:
@@ -258,8 +259,6 @@ class Main(KytosNApp):
             del instruction
 
         # Prepare Flows for Table 0 AFTER proxy. No difference between TCP or UDP
-        log.info(proxy_port.__dict__)
-        log.info(proxy_port.destination)
         in_port_no = proxy_port.destination
 
         new_int_flow_tbl_0_pos["match"]["in_port"] = in_port_no
@@ -299,8 +298,8 @@ class Main(KytosNApp):
             new_flows = self.enable_int_source(source, evc, proxy_port.source)
 
             # Create flows the INT hops
-            new_flows += list(self.enable_int_hop(get_int_hops(evc, source, destination), evc))
-            #
+            new_flows += list(self.enable_int_hop(evc, source, destination))
+
             # # Create flows the the last switch (INT Sink)
             new_flows += list(self.enable_int_sink(destination, evc, proxy_port))
 
@@ -512,6 +511,7 @@ class Main(KytosNApp):
         """ Endpoint to force the telemetry napp to search for INT flows and delete them
         accordingly to the evc metadata """
 
+        # TODO
         for evc_id in get_evcs_ids():
             return jsonify("ok"), 200
 

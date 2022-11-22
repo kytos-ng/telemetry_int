@@ -2,9 +2,9 @@
 import json
 import requests
 from requests import HTTPError
+from kytos.core import KytosNApp, log
 from napps.amlight.telemetry.settings import flow_manager_api
 from napps.amlight.telemetry.settings import mef_eline_api
-from napps.amlight.telemetry.settings import pathfinder_api
 from napps.amlight.telemetry.settings import topology_api
 
 
@@ -12,14 +12,13 @@ def kytos_api(get=False, put=False, post=False, delete=False,
               topology=False,
               mef_eline=False, evc_id=None,
               flow_manager=False, switch=None,
-              pathfinder=False,
               data=None, metadata=False):
     """ Main function to handle requests to Kytos API."""
 
     # TODO: add support for batch, temporizer, retries
 
     kytos_api_url = (topology_api if topology else flow_manager_api if flow_manager
-                     else mef_eline_api if mef_eline else pathfinder_api if pathfinder else "")
+                     else mef_eline_api if mef_eline else "")
 
     headers = {'Content-Type': 'application/json'}
 
@@ -43,13 +42,6 @@ def kytos_api(get=False, put=False, post=False, delete=False,
                 url = f"{kytos_api_url}/{switch}"
                 response = requests.post(url, headers=headers, data=json.dumps(data))
                 return True if response.status_code == 202 else False
-
-            if pathfinder:
-                data = {"source": source, "destination": destination}
-                response = requests.post(url=kytos_api_url, headers=headers, data=json.dumps(data))
-                if response.status_code == 202:
-                    return response["paths"][0]["hops"] if "paths" in response else False
-                return False
 
         elif delete:
 
@@ -111,7 +103,3 @@ def kytos_push_flows(switch, data):
     """ Push flows to Flow Manager """
     return kytos_api(post=True, flow_manager=True, switch=switch, data=data)
 
-
-def get_path(source, destination):
-    """ Get path between two switches """
-    return kytos_api(post=True, pathfinder=True, data={"source": source, "destination": destination}).json()
