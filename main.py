@@ -14,7 +14,7 @@ from napps.amlight.telemetry.support_functions import get_evc
 from napps.amlight.telemetry.support_functions import get_evcs_ids
 from napps.amlight.telemetry.support_functions import get_evc_with_telemetry
 from napps.amlight.telemetry.support_functions import get_evc_flows
-from napps. amlight.telemetry.support_functions import get_evc_unis
+from napps.amlight.telemetry.support_functions import get_evc_unis
 from napps.amlight.telemetry.support_functions import get_unidirectional_path
 from napps.amlight.telemetry.support_functions import get_new_cookie
 from napps.amlight.telemetry.support_functions import get_proxy_port
@@ -26,7 +26,14 @@ from napps.amlight.telemetry.support_functions import retrieve_switches
 from napps.amlight.telemetry.support_functions import set_priority
 from napps.amlight.telemetry.support_functions import set_telemetry_true_for_evc
 from napps.amlight.telemetry.support_functions import set_telemetry_false_for_evc
-from napps.amlight.telemetry.telemetry_exceptions import *
+from napps.amlight.telemetry.telemetry_exceptions import EvcAlreadyHasINT
+from napps.amlight.telemetry.telemetry_exceptions import EvcDoesNotExist
+from napps.amlight.telemetry.telemetry_exceptions import EvcHasNoINT
+from napps.amlight.telemetry.telemetry_exceptions import FlowsNotFound
+from napps.amlight.telemetry.telemetry_exceptions import NoProxyPortsAvailable
+from napps.amlight.telemetry.telemetry_exceptions import NotPossibleToDisableTelemetry
+from napps.amlight.telemetry.telemetry_exceptions import NotPossibleToEnableTelemetry
+from napps.amlight.telemetry.telemetry_exceptions import UnsupportedFlow
 
 
 class Main(KytosNApp):
@@ -55,7 +62,6 @@ class Main(KytosNApp):
 
             self.execute_as_loop(30)  # 30-second interval.
         """
-        pass
 
     def shutdown(self):
         """Run when your NApp is unloaded.
@@ -66,7 +72,8 @@ class Main(KytosNApp):
 
     @staticmethod
     def enable_int_source(source, evc, proxy_port):
-        """ At the INT source, one flow becomes 3: one for UDP on table 0, one for TCP on table 0, and one on table 2
+        """ At the INT source, one flow becomes 3: one for UDP on table 0,
+        one for TCP on table 0, and one on table 2
         On table 0, we use just new instructions: push_int and goto_table
         On table 2, we add add_int_metadata before the original actions
         INT flows will have higher priority. We don't delete the old flows.
@@ -77,9 +84,9 @@ class Main(KytosNApp):
         Returns:
             list of new flows to install
         """
-        new_flows = list()
+        new_flows = []
         new_int_flow_tbl_0_tcp = None
-        flow = dict()
+        flow = {}
 
         # Get the original flows
         for flow in get_evc_flows(source["switch"], evc):
@@ -110,12 +117,13 @@ class Main(KytosNApp):
         new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
         new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
         # TODO: Create an exception for when the priority has reached max value
-        new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+        new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"],
+                                                          new_int_flow_tbl_0_tcp["priority"])
 
         # The flow_manager has two outputs: instructions and actions.
-        instructions = list()
-        instructions.append({"instruction_type": "apply_actions", "actions": [{"action_type": "push_int"}]})
-        instructions.append({"instruction_type": "goto_table", "table_id": 2})
+        instructions = [{"instruction_type": "apply_actions",
+                         "actions": [{"action_type": "push_int"}]},
+                        {"instruction_type": "goto_table", "table_id": 2}]
         new_int_flow_tbl_0_tcp["instructions"] = instructions
 
         # Prepare UDP Flow for Table 0. Everything the same as TCP except the nw_proto
@@ -131,13 +139,16 @@ class Main(KytosNApp):
                 if instruction["instruction_type"] == "apply_actions":
                     for action in instruction["actions"]:
                         if action["action_type"] == "output":
-                            # Since this is the INT Source, we use source to avoid worrying about single or multi
+                            # Since this is the INT Source, we use source
+                            # to avoid worrying about single or multi
                             # home physical loops. The choice for destination is at the INT Sink.
                             action["port"] = proxy_port
 
-        new_int_flow_tbl_2["instructions"] = add_to_apply_actions(new_int_flow_tbl_2["instructions"],
-                                                                  new_instruction={"action_type": "add_int_metadata"},
-                                                                  position=0)
+        instructions = add_to_apply_actions(new_int_flow_tbl_2["instructions"],
+                                            new_instruction={"action_type": "add_int_metadata"},
+                                            position=0)
+
+        new_int_flow_tbl_2["instructions"] = instructions
 
         new_flows.append(new_int_flow_tbl_0_tcp)
         new_flows.append(new_int_flow_tbl_0_udp)
@@ -159,7 +170,7 @@ class Main(KytosNApp):
             list of new flows to install
         """
 
-        new_flows = list()
+        new_flows = []
 
         for interface_id in get_unidirectional_path(evc, source, destination):
 
@@ -176,7 +187,8 @@ class Main(KytosNApp):
                     # Prepare TCP Flow
                     new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
                     new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
-                    new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+                    prio_ = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+                    new_int_flow_tbl_0_tcp["priority"] = prio_
 
                     for instruction in new_int_flow_tbl_0_tcp["instructions"]:
                         if instruction["instruction_type"] == "apply_actions":
@@ -194,10 +206,10 @@ class Main(KytosNApp):
     @staticmethod
     def enable_int_sink(destination, evc, proxy_port):
         """ At the INT sink, one flow becomes many:
-            a. Before the proxy, we do add_int_metadata as an INT hop. We need to keep the set_queue
-            b. After the proxy, we do send_report and pop_int and output
-            We only use table 0 for a.
-            We use table 2 for b. for pop_int and output
+            1. Before the proxy, we do add_int_metadata as an INT hop. We need to keep the set_queue
+            2. After the proxy, we do send_report and pop_int and output
+            We only use table 0 for #1.
+            We use table 2 for #2. for pop_int and output
         Args:
             destination: destination UNI
             evc: EVC.__dict__
@@ -205,9 +217,9 @@ class Main(KytosNApp):
         Returns:
             list of new flows to install
         """
-        new_flows = list()
+        new_flows = []
         new_int_flow_tbl_0_tcp = None
-        flow = dict()
+        flow = {}
 
         for flow in get_evc_flows(destination["switch"], evc):
             if flow["match"]["in_port"] != destination["interface"]:
@@ -236,7 +248,8 @@ class Main(KytosNApp):
         if not is_intra_switch_evc(evc):
             new_int_flow_tbl_0_tcp["match"]["dl_type"] = 2048
             new_int_flow_tbl_0_tcp["match"]["nw_proto"] = 6
-            new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+            prio_ = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+            new_int_flow_tbl_0_tcp["priority"] = prio_
 
             # Add telemetry, keep set_queue, output to the proxy port.
             output_port_no = proxy_port.source
@@ -256,17 +269,18 @@ class Main(KytosNApp):
 
             new_flows.append(new_int_flow_tbl_0_tcp)
             new_flows.append(new_int_flow_tbl_0_udp)
-            del instruction
+            del instruction  # pylint: disable=W0631
 
         # Prepare Flows for Table 0 AFTER proxy. No difference between TCP or UDP
         in_port_no = proxy_port.destination
 
         new_int_flow_tbl_0_pos["match"]["in_port"] = in_port_no
-        new_int_flow_tbl_0_pos["priority"] = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+        prio_ = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
+        new_int_flow_tbl_0_pos["priority"] = prio_
 
-        instructions = list()
-        instructions.append({"instruction_type": "apply_actions", "actions": [{"action_type": "send_report"}]})
-        instructions.append({"instruction_type": "goto_table", "table_id": 2})
+        instructions = [{"instruction_type": "apply_actions",
+                         "actions": [{"action_type": "send_report"}]},
+                        {"instruction_type": "goto_table", "table_id": 2}]
         new_int_flow_tbl_0_pos["instructions"] = instructions
 
         # Prepare Flows for Table 2 POS proxy
@@ -300,7 +314,7 @@ class Main(KytosNApp):
             # Create flows the INT hops
             new_flows += list(self.enable_int_hop(evc, source, destination))
 
-            # # Create flows the the last switch (INT Sink)
+            # # Create flows for the last switch (INT Sink)
             new_flows += list(self.enable_int_sink(destination, evc, proxy_port))
 
             return push_flows(new_flows)
@@ -308,12 +322,12 @@ class Main(KytosNApp):
         except FlowsNotFound:
             return False
 
-        except Exception as err:
-            log.info("Error: %s" % err)
+        except Exception as err:  # pylint: disable=W0703
+            log.info(f"Error: {err}")
             return False
 
     def provision_int(self, evc_id):
-        """ """
+        """ Create telemetry flows for an EVC. """
 
         evc = get_evc(evc_id)
         if not evc:
@@ -404,7 +418,8 @@ class Main(KytosNApp):
 
     @rest('v1/evc/enable', methods=['POST'])
     def enable_telemetry(self):
-        """ REST to enable/create INT flows for one or more EVC_IDs. evcs are provided via POST as a list
+        """ REST to enable/create INT flows for one or more EVC_IDs.
+                  evcs are provided via POST as a list
         Args:
             {"evc_ids": [list of evc_ids] }
 
@@ -421,7 +436,7 @@ class Main(KytosNApp):
 
         status = {}
 
-        if not len(evcs):
+        if not evcs:
             # Enable telemetry for ALL EVCs.
             evcs = get_evcs_ids()
 
@@ -444,8 +459,9 @@ class Main(KytosNApp):
                 status[evc_id] = err_msg.message
 
             except NotPossibleToEnableTelemetry as err_msg:
-                # Rollback INT configuration. If there is proxy port and it doesn't work, rollback both directions.
-                # It will be a decommission plus force.
+                # Rollback INT configuration. If there is proxy port,
+                # and it was not possible to enable telemetry, rollback both directions.
+                # It will be a decommission operation plus force.
                 status[evc_id] = err_msg.message
 
             except Exception as err_msg:
@@ -473,7 +489,7 @@ class Main(KytosNApp):
 
         status = {}
 
-        if not len(evcs):
+        if not evcs:
             # Disable telemetry for ALL EVCs.
             evcs = get_evcs_ids()
 
@@ -512,8 +528,8 @@ class Main(KytosNApp):
         accordingly to the evc metadata """
 
         # TODO
-        for evc_id in get_evcs_ids():
-            return jsonify("ok"), 200
+        # for evc_id in get_evcs_ids():
+        return jsonify("TBD"), 200
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
@@ -534,7 +550,8 @@ class Main(KytosNApp):
         pass
 
     def listen_for_topology_changes(self):
-        """ If the topology changes, make sure it is not the loop ports. If so, update proxy ports """
+        """ If the topology changes, make sure it is not the loop ports.
+        If so, update proxy ports """
         # TODO:
         # self.proxy_ports = create_proxy_ports(self.proxy_ports)
         pass

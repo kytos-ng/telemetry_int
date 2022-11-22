@@ -1,8 +1,12 @@
-""" """
+""" This module was created to be the main interface between the telemetry napp and all
+other kytos napps' APIs """
+
+
+import datetime
 import json
 import requests
 from requests import HTTPError
-from kytos.core import KytosNApp, log
+from kytos.core import log
 from napps.amlight.telemetry.settings import flow_manager_api
 from napps.amlight.telemetry.settings import mef_eline_api
 from napps.amlight.telemetry.settings import topology_api
@@ -26,29 +30,29 @@ def kytos_api(get=False, put=False, post=False, delete=False,
         if get:
             if data:
                 kytos_api_url += data
-            return requests.get(kytos_api_url).json()
+            return requests.get(kytos_api_url, timeout=10).json()
 
         elif put:
-            requests.put(kytos_api_url, headers=headers)
+            requests.put(kytos_api_url, timeout=10, headers=headers)
 
         elif post:
 
             if mef_eline and metadata:
                 url = f"{kytos_api_url}/{evc_id}/metadata"
-                response = requests.post(url, headers=headers, data=json.dumps(data))
-                return True if response.status_code == 201 else False
+                response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
+                return response.status_code == 201
 
             if flow_manager:
                 url = f"{kytos_api_url}/{switch}"
-                response = requests.post(url, headers=headers, data=json.dumps(data))
-                return True if response.status_code == 202 else False
+                response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
+                return response.status_code == 202
 
         elif delete:
 
             if flow_manager:
                 url = f"{kytos_api_url}/{switch}"
-                response = requests.delete(url, headers=headers, data=json.dumps(data))
-                return True if response.status_code == 202 else False
+                response = requests.delete(url, headers=headers, data=json.dumps(data), timeout=10)
+                return response.status_code == 202
 
     except HTTPError as http_err:
         log.error(f'HTTP error occurred: {http_err}')
@@ -66,7 +70,8 @@ def get_evcs():
 
 def set_telemetry_metadata_true(evc_id, direction):
     """ Set telemetry enabled metadata item to true """
-    data = {"telemetry": {"enabled": "true", "direction": direction, "timestamp": "2022/01/01T01:01:01Z"}}
+    data = {"telemetry": {"enabled": "true", "direction": direction,
+                          "timestamp": datetime.datetime.now().strftime("%m/%d/%YT%H:%M:%SZ")}}
     # TODO: add timestamp
     return kytos_api(post=True,
                      mef_eline=True, evc_id=evc_id,
@@ -76,8 +81,9 @@ def set_telemetry_metadata_true(evc_id, direction):
 
 def set_telemetry_metadata_false(evc_id):
     """ Set telemetry enabled metadata item to false """
-    data = {"telemetry": {"enabled": "false", "timestamp": "2023/01/01T01:01:01Z"}}
-    # TODO: add timestamp
+    data = {"telemetry": {"enabled": "false",
+                          "timestamp": datetime.datetime.now().strftime("%m/%d/%YT%H:%M:%SZ")}}
+
     return kytos_api(post=True,
                      mef_eline=True, evc_id=evc_id,
                      metadata=True,
@@ -102,4 +108,3 @@ def kytos_delete_flows(switch, data):
 def kytos_push_flows(switch, data):
     """ Push flows to Flow Manager """
     return kytos_api(post=True, flow_manager=True, switch=switch, data=data)
-

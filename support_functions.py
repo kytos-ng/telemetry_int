@@ -1,11 +1,9 @@
 """ Support function for main.py """
 
 
-import requests
-import json
 from kytos.core import log
-from napps.amlight.telemetry.settings import KYTOS_API
 from napps.amlight.telemetry.settings import COOKIE_PREFIX
+from napps.amlight.telemetry.settings import COOKIE_MASK
 from napps.amlight.telemetry.kytos_api_helper import get_evcs
 from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
 from napps.amlight.telemetry.kytos_api_helper import kytos_delete_flows
@@ -229,7 +227,8 @@ def print_flows(flows):
                     if action['action_type'] == 'output':
                         log.info(f"Action_type: {action['action_type']} port_no: {action['port']}")
                     elif action['action_type'] == 'set_vlan':
-                        log.info(f"Action_type: {action['action_type']} vlan_id: {action['vlan_id']}")
+                        log.info(f"Action_type: "
+                                 f"{action['action_type']} vlan_id: {action['vlan_id']}")
                     else:
                         log.info(f"Action_type: {action}")
 
@@ -309,7 +308,7 @@ def delete_flows(flows):
     print_flows(flows)
 
     for flow in flows:
-        flow['cookie_mask'] = 18446744073709551615
+        flow['cookie_mask'] = COOKIE_MASK
         flow_to_push = {"flows": [flow]}
         if not kytos_delete_flows(flow["switch"], flow_to_push):
             return False

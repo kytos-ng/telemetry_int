@@ -125,7 +125,7 @@ class InstallMode(install):
         super().run() does not install dependencies when running
         ``python setup.py install`` (pypa/setuptools#456).
         """
-        print(f'Installing NApp amlight/telemetry...')
+        print('Installing NApp amlight/telemetry...')
         install_path = Path(INSTALLED_PATH)
 
         if not install_path.exists():
