@@ -6,7 +6,6 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 import copy
 import time
 
-# from flask import jsonify, request
 from kytos.core import KytosNApp, log, rest
 from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
                                  get_json_or_400)
