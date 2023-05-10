@@ -5,36 +5,22 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 """
 import copy
 import time
-from flask import jsonify, request
-from kytos.core import KytosNApp, log
-from kytos.core import rest
+
+# from flask import jsonify, request
+from kytos.core import KytosNApp, log, rest
+from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
+                                 get_json_or_400)
 from napps.amlight.telemetry import settings
-from napps.amlight.telemetry.support_functions import add_to_apply_actions
-from napps.amlight.telemetry.support_functions import delete_flows
-from napps.amlight.telemetry.support_functions import get_evc
-from napps.amlight.telemetry.support_functions import get_evcs_ids
-from napps.amlight.telemetry.support_functions import get_evc_with_telemetry
-from napps.amlight.telemetry.support_functions import get_evc_flows
-from napps.amlight.telemetry.support_functions import get_evc_unis
-from napps.amlight.telemetry.support_functions import get_unidirectional_path
-from napps.amlight.telemetry.support_functions import get_new_cookie
-from napps.amlight.telemetry.support_functions import get_proxy_port
-from napps.amlight.telemetry.support_functions import has_int_enabled
-from napps.amlight.telemetry.support_functions import is_intra_switch_evc
-from napps.amlight.telemetry.support_functions import modify_actions
-from napps.amlight.telemetry.support_functions import push_flows
-from napps.amlight.telemetry.support_functions import retrieve_switches
-from napps.amlight.telemetry.support_functions import set_priority
-from napps.amlight.telemetry.support_functions import set_telemetry_true_for_evc
-from napps.amlight.telemetry.support_functions import set_telemetry_false_for_evc
-from napps.amlight.telemetry.telemetry_exceptions import EvcAlreadyHasINT
-from napps.amlight.telemetry.telemetry_exceptions import EvcDoesNotExist
-from napps.amlight.telemetry.telemetry_exceptions import EvcHasNoINT
-from napps.amlight.telemetry.telemetry_exceptions import FlowsNotFound
-from napps.amlight.telemetry.telemetry_exceptions import NoProxyPortsAvailable
-from napps.amlight.telemetry.telemetry_exceptions import NotPossibleToDisableTelemetry
-from napps.amlight.telemetry.telemetry_exceptions import NotPossibleToEnableTelemetry
-from napps.amlight.telemetry.telemetry_exceptions import UnsupportedFlow
+from napps.amlight.telemetry.support_functions import (
+    add_to_apply_actions, delete_flows, get_evc, get_evc_flows, get_evc_unis,
+    get_evc_with_telemetry, get_evcs_ids, get_new_cookie, get_proxy_port,
+    get_unidirectional_path, has_int_enabled, is_intra_switch_evc,
+    modify_actions, push_flows, retrieve_switches, set_priority,
+    set_telemetry_false_for_evc, set_telemetry_true_for_evc)
+from napps.amlight.telemetry.telemetry_exceptions import (
+    EvcAlreadyHasINT, EvcDoesNotExist, EvcHasNoINT, FlowsNotFound,
+    NoProxyPortsAvailable, NotPossibleToDisableTelemetry,
+    NotPossibleToEnableTelemetry, UnsupportedFlow)
 
 
 class Main(KytosNApp):
@@ -423,7 +409,7 @@ class Main(KytosNApp):
     # REST methods
 
     @rest('v1/evc/enable', methods=['POST'])
-    def enable_telemetry(self):
+    def enable_telemetry(self, request: Request) -> JSONResponse:
         """ REST to enable/create INT flows for one or more EVC_IDs.
                   evcs are provided via POST as a list
         Args:
@@ -434,11 +420,11 @@ class Main(KytosNApp):
         """
 
         try:
-            content = request.get_json()
+            content = get_json_or_400(request, self.controller.loop)
             evcs = content["evc_ids"]
 
         except (TypeError, KeyError):
-            return jsonify("Incorrect request provided."), 401
+            raise HTTPException(400, detail="Incorrect request provided.")
 
         status = {}
 
@@ -479,10 +465,10 @@ class Main(KytosNApp):
             if idx % 10 == 0:
                 time.sleep(10)
 
-        return jsonify(status), 200
+        return JSONResponse(status)
 
     @rest('v1/evc/disable', methods=['POST'])
-    def disable_telemetry(self):
+    def disable_telemetry(self, request: Request) -> JSONResponse:
         """ REST to disable/remove INT flows for an EVC_ID
         Args:
             {"evc_ids": [list of evc_ids] }
@@ -491,11 +477,11 @@ class Main(KytosNApp):
             400 is otherwise
         """
         try:
-            content = request.get_json()
+            content = get_json_or_400(request, self.controller.loop)
             evcs = content["evc_ids"]
 
         except (TypeError, KeyError):
-            return jsonify("Incorrect request provided."), 401
+            raise HTTPException(400, detail="Incorrect request provided.")
 
         status = {}
 
@@ -525,26 +511,26 @@ class Main(KytosNApp):
                 log.err(err)
                 status[evc_id] = err
 
-        return jsonify(status), 200
+        return JSONResponse(status)
 
     @rest('v1/evc')
-    def get_evcs(self):
+    def get_evcs(self, _request: Request) -> JSONResponse:
         """ REST to return the list of EVCs with INT enabled """
-        return jsonify(get_evc_with_telemetry()), 200
+        return JSONResponse(get_evc_with_telemetry())
 
     @rest('v1/sync')
-    def sync_flows(self):
+    def sync_flows(self, _request: Request) -> JSONResponse:
         """ Endpoint to force the telemetry napp to search for INT flows and delete them
         accordingly to the evc metadata. """
 
         # TODO
         # for evc_id in get_evcs_ids():
-        return jsonify("TBD"), 200
+        return JSONResponse("TBD")
 
     @rest('v1/evc/update')
-    def update_evc(self):
+    def update_evc(self, _request: Request) -> JSONResponse:
         """ If an EVC changed from unidirectional to bidirectional telemetry, make the change. """
-        pass
+        return JSONResponse({})
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
