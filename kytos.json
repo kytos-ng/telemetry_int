@@ -1,9 +1,9 @@
 {
-  "author": "amlight",
-  "username": "amlight",
-  "name": "telemetry",
+  "author": "kytos",
+  "username": "kytos",
+  "name": "telemetry_int",
   "description": "Napp to deploy In-band Network Telemetry for EVCs",
-  "version": "1.0",
+  "version": "2023.1.0",
   "napp_dependencies": ["amlight/noviflow", "kytos/topology", "kytos/flow_manager", "kytos/pathfinder"],
   "license": "",
   "tags": [],
