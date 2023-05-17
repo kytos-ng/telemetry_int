@@ -1,7 +1,7 @@
 """ This class helps to handle multi-home physical loops (two ports). """
 
 
-from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
+from .kytos_api_helper import get_topology_interfaces
 
 
 def get_kytos_interface(switch, interface):

@@ -2,16 +2,18 @@
 
 
 from kytos.core import log
-from napps.amlight.telemetry.settings import COOKIE_PREFIX
-from napps.amlight.telemetry.settings import COOKIE_MASK
-from napps.amlight.telemetry.kytos_api_helper import get_evcs
-from napps.amlight.telemetry.kytos_api_helper import get_topology_interfaces
-from napps.amlight.telemetry.kytos_api_helper import kytos_delete_flows
-from napps.amlight.telemetry.kytos_api_helper import kytos_get_flows
-from napps.amlight.telemetry.kytos_api_helper import kytos_push_flows
-from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_true
-from napps.amlight.telemetry.kytos_api_helper import set_telemetry_metadata_false
-from napps.amlight.telemetry.proxy_port import ProxyPort
+
+from .kytos_api_helper import (
+    get_evcs,
+    get_topology_interfaces,
+    kytos_delete_flows,
+    kytos_get_flows,
+    kytos_push_flows,
+    set_telemetry_metadata_false,
+    set_telemetry_metadata_true,
+)
+from .proxy_port import ProxyPort
+from .settings import COOKIE_MASK, COOKIE_PREFIX
 
 
 # mef_eline support functions
