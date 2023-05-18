@@ -59,8 +59,8 @@ class NoProxyPortsAvailable(ErrorBase):
 
 
 class EvcHasNoINT(ErrorBase):
-    """Exception in case the EVC doesn't have INT/telemetry enabled but it was treated as if.
-    That's a warning."""
+    """Exception in case the EVC doesn't have INT/telemetry enabled but it was
+    treated as if. That's a warning."""
 
     def __init__(self, evc_id, message="INT was not enabled for this EVC."):
         super().__init__(evc_id, message)
@@ -75,7 +75,8 @@ class FlowsNotFound(ErrorBase):
 
 
 class UnsupportedFlow(ErrorBase):
-    """Used for testing and debugging. Make sure the flows' retrieved are properly formed."""
+    """Used for testing and debugging. Make sure the flows' retrieved are properly
+    formed."""
 
     def __init__(self, evc_id, message="Unsupported Flow found."):
         super().__init__(evc_id, message)
