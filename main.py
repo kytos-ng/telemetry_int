@@ -21,7 +21,7 @@ from .exceptions import (
     NotPossibleToEnableTelemetry,
     UnsupportedFlow,
 )
-from .support_functions import (
+from .utils import (
     add_to_apply_actions,
     delete_flows,
     get_evc,
