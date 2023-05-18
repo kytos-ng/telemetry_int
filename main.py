@@ -7,7 +7,21 @@ import copy
 import time
 
 from napps.kytos.telemetry_int import settings
-from napps.kytos.telemetry_int.support_functions import (
+
+from kytos.core import KytosNApp, log, rest
+from kytos.core.rest_api import HTTPException, JSONResponse, Request, get_json_or_400
+
+from .exceptions import (
+    EvcAlreadyHasINT,
+    EvcDoesNotExist,
+    EvcHasNoINT,
+    FlowsNotFound,
+    NoProxyPortsAvailable,
+    NotPossibleToDisableTelemetry,
+    NotPossibleToEnableTelemetry,
+    UnsupportedFlow,
+)
+from .support_functions import (
     add_to_apply_actions,
     delete_flows,
     get_evc,
@@ -27,19 +41,8 @@ from napps.kytos.telemetry_int.support_functions import (
     set_telemetry_false_for_evc,
     set_telemetry_true_for_evc,
 )
-from napps.kytos.telemetry_int.telemetry_exceptions import (
-    EvcAlreadyHasINT,
-    EvcDoesNotExist,
-    EvcHasNoINT,
-    FlowsNotFound,
-    NoProxyPortsAvailable,
-    NotPossibleToDisableTelemetry,
-    NotPossibleToEnableTelemetry,
-    UnsupportedFlow,
-)
 
-from kytos.core import KytosNApp, log, rest
-from kytos.core.rest_api import HTTPException, JSONResponse, Request, get_json_or_400
+# pylint: disable=fixme
 
 
 class Main(KytosNApp):
@@ -77,7 +80,7 @@ class Main(KytosNApp):
 
     @staticmethod
     def enable_int_source(source, evc, proxy_port):
-        """ At the INT source, one flow becomes 3: one for UDP on table 0,
+        """At the INT source, one flow becomes 3: one for UDP on table 0,
         one for TCP on table 0, and one on table 2
         On table 0, we use just new instructions: push_int and goto_table
         On table 2, we add add_int_metadata before the original actions
@@ -108,27 +111,34 @@ class Main(KytosNApp):
             new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
 
         # Get cookie with telemetry's cookie prefix.
-        new_int_flow_tbl_0_tcp['cookie'] = get_new_cookie(flow["cookie"])
+        new_int_flow_tbl_0_tcp["cookie"] = get_new_cookie(flow["cookie"])
 
         # Deepcopy to use for table 2 later
         new_int_flow_tbl_2 = copy.deepcopy(new_int_flow_tbl_0_tcp)
 
         # Check compatibility:
         if "instructions" not in new_int_flow_tbl_0_tcp:
-            log.info("Error: Flow_Manager needs to support 'instructions' and it does not.")
-            raise UnsupportedFlow()
+            log.info(
+                "Error: Flow_Manager needs to support 'instructions' and it does not."
+            )
+            raise UnsupportedFlow(evc["id"])
 
         # Prepare TCP Flow for Table 0
         new_int_flow_tbl_0_tcp["match"]["dl_type"] = settings.IPv4
         new_int_flow_tbl_0_tcp["match"]["nw_proto"] = settings.TCP
         # TODO: Create an exception for when the priority has reached max value
-        new_int_flow_tbl_0_tcp["priority"] = set_priority(flow["id"],
-                                                          new_int_flow_tbl_0_tcp["priority"])
+        new_int_flow_tbl_0_tcp["priority"] = set_priority(
+            flow["id"], new_int_flow_tbl_0_tcp["priority"]
+        )
 
         # The flow_manager has two outputs: instructions and actions.
-        instructions = [{"instruction_type": "apply_actions",
-                         "actions": [{"action_type": "push_int"}]},
-                        {"instruction_type": "goto_table", "table_id": settings.INT_TABLE}]
+        instructions = [
+            {
+                "instruction_type": "apply_actions",
+                "actions": [{"action_type": "push_int"}],
+            },
+            {"instruction_type": "goto_table", "table_id": settings.INT_TABLE},
+        ]
         new_int_flow_tbl_0_tcp["instructions"] = instructions
 
         # Prepare UDP Flow for Table 0. Everything the same as TCP except the nw_proto
@@ -146,12 +156,15 @@ class Main(KytosNApp):
                         if action["action_type"] == "output":
                             # Since this is the INT Source, we use source
                             # to avoid worrying about single or multi
-                            # home physical loops. The choice for destination is at the INT Sink.
+                            # home physical loops.
+                            # The choice for destination is at the INT Sink.
                             action["port"] = proxy_port
 
-        instructions = add_to_apply_actions(new_int_flow_tbl_2["instructions"],
-                                            new_instruction={"action_type": "add_int_metadata"},
-                                            position=0)
+        instructions = add_to_apply_actions(
+            new_int_flow_tbl_2["instructions"],
+            new_instruction={"action_type": "add_int_metadata"},
+            position=0,
+        )
 
         new_int_flow_tbl_2["instructions"] = instructions
 
@@ -163,9 +176,10 @@ class Main(KytosNApp):
 
     @staticmethod
     def enable_int_hop(evc, source, destination):
-        """ At the INT hops, one flow adds two more: one for UDP on table 0, one for TCP on table 0
-        On table 0, we add 'add_int_metadata' before other actions. We use source and destination to
-        create the unidirectional support for telemetry.
+        """At the INT hops, one flow adds two more: one for UDP on table 0,
+        one for TCP on table 0. On table 0, we add 'add_int_metadata'
+        before other actions. We use source and destination to create the
+        unidirectional support for telemetry.
 
         Args:
             evc: EVC.__dict__
@@ -178,14 +192,12 @@ class Main(KytosNApp):
         new_flows = []
 
         for interface_id in get_unidirectional_path(evc, source, destination):
-
             switch = ":".join(interface_id.split(":")[0:8])
             for flow in get_evc_flows(switch, evc):
                 interface = int(interface_id.split(":")[8])
-                if flow['match']['in_port'] == interface:
-
+                if flow["match"]["in_port"] == interface:
                     new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
-                    new_int_flow_tbl_0_tcp['cookie'] = get_new_cookie(flow["cookie"])
+                    new_int_flow_tbl_0_tcp["cookie"] = get_new_cookie(flow["cookie"])
                     for extraneous_key in ["stats", "id"]:
                         new_int_flow_tbl_0_tcp.pop(extraneous_key, None)
 
@@ -197,7 +209,9 @@ class Main(KytosNApp):
 
                     for instruction in new_int_flow_tbl_0_tcp["instructions"]:
                         if instruction["instruction_type"] == "apply_actions":
-                            instruction["actions"].insert(0, {"action_type": "add_int_metadata"})
+                            instruction["actions"].insert(
+                                0, {"action_type": "add_int_metadata"}
+                            )
 
                     # Prepare UDP Flow
                     new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
@@ -210,8 +224,9 @@ class Main(KytosNApp):
 
     @staticmethod
     def enable_int_sink(destination, evc, proxy_port):
-        """ At the INT sink, one flow becomes many:
-            1. Before the proxy, we do add_int_metadata as an INT hop. We need to keep the set_queue
+        """At the INT sink, one flow becomes many:
+            1. Before the proxy, we do add_int_metadata as an INT hop.
+            We need to keep the set_queue
             2. After the proxy, we do send_report and pop_int and output
             We only use table 0 for #1.
             We use table 2 for #2. for pop_int and output
@@ -225,13 +240,12 @@ class Main(KytosNApp):
         new_flows = []
 
         for flow in get_evc_flows(destination["switch"], evc):
-
             # Only consider flows coming from NNI interfaces
             if flow["match"]["in_port"] == destination["interface"]:
                 continue
 
             new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
-            new_int_flow_tbl_0_tcp['cookie'] = get_new_cookie(flow["cookie"])
+            new_int_flow_tbl_0_tcp["cookie"] = get_new_cookie(flow["cookie"])
 
             if not new_int_flow_tbl_0_tcp:
                 log.info("Error: Flow not found. Kytos still loading.")
@@ -239,8 +253,10 @@ class Main(KytosNApp):
 
             # Check compatibility:
             if "instructions" not in new_int_flow_tbl_0_tcp:
-                log.info("Error: Flow_Manager needs to support 'instructions' and it does not.")
-                raise UnsupportedFlow()
+                log.error(
+                    "flow_manager needs to support 'instructions' and it does not."
+                )
+                raise UnsupportedFlow(evc["id"])
 
             # Remove keys that need to be recycled later by Flow_Manager.
             for extraneous_key in ["stats", "id"]:
@@ -262,11 +278,15 @@ class Main(KytosNApp):
                 for instruction in new_int_flow_tbl_0_tcp["instructions"]:
                     if instruction["instruction_type"] == "apply_actions":
                         # Keep set_queue
-                        actions = modify_actions(instruction["actions"],
-                                                 ["pop_vlan", "push_vlan", "set_vlan", "output"],
-                                                 remove=True)
+                        actions = modify_actions(
+                            instruction["actions"],
+                            ["pop_vlan", "push_vlan", "set_vlan", "output"],
+                            remove=True,
+                        )
                         actions.insert(0, {"action_type": "add_int_metadata"})
-                        actions.append({"action_type": "output", "port": output_port_no})
+                        actions.append(
+                            {"action_type": "output", "port": output_port_no}
+                        )
                         instruction["actions"] = actions
 
                 # Prepare UDP Flow for Table 0
@@ -284,9 +304,13 @@ class Main(KytosNApp):
             prio_ = set_priority(flow["id"], new_int_flow_tbl_0_tcp["priority"])
             new_int_flow_tbl_0_pos["priority"] = prio_
 
-            instructions = [{"instruction_type": "apply_actions",
-                             "actions": [{"action_type": "send_report"}]},
-                            {"instruction_type": "goto_table", "table_id": settings.INT_TABLE}]
+            instructions = [
+                {
+                    "instruction_type": "apply_actions",
+                    "actions": [{"action_type": "send_report"}],
+                },
+                {"instruction_type": "goto_table", "table_id": settings.INT_TABLE},
+            ]
             new_int_flow_tbl_0_pos["instructions"] = instructions
 
             # Prepare Flows for Table 2 POS proxy
@@ -307,7 +331,7 @@ class Main(KytosNApp):
         return new_flows
 
     def provision_int_unidirectional(self, evc, source, destination, proxy_port):
-        """ Create INT flows from source to destination
+        """Create INT flows from source to destination
         Args:
              evc:
              source:
@@ -336,8 +360,9 @@ class Main(KytosNApp):
             log.info(f"Error: {err}")
             return False
 
+    # pylint: disable=too-many-branches
     def provision_int(self, evc_id):
-        """ Create telemetry flows for an EVC. """
+        """Create telemetry flows for an EVC."""
 
         evc = get_evc(evc_id)
         if not evc:
@@ -360,13 +385,17 @@ class Main(KytosNApp):
 
         # Direction uni_z -> uni_a
         if uni_a_proxy_port:
-            if not self.provision_int_unidirectional(evc, uni_z, uni_a, uni_a_proxy_port):
+            if not self.provision_int_unidirectional(
+                evc, uni_z, uni_a, uni_a_proxy_port
+            ):
                 # change EVC metadata "telemetry": {"enabled": true } via API
                 raise NotPossibleToEnableTelemetry(evc_id)
 
         # Direction uni_a -> uni_z
         if uni_z_proxy_port:
-            if not self.provision_int_unidirectional(evc, uni_a, uni_z, uni_z_proxy_port):
+            if not self.provision_int_unidirectional(
+                evc, uni_a, uni_z, uni_z_proxy_port
+            ):
                 raise NotPossibleToEnableTelemetry(evc_id)
 
         # Change EVC metadata "telemetry": {"enabled": true } via API
@@ -381,18 +410,24 @@ class Main(KytosNApp):
 
             msg = f"INT enabled for EVC ID {evc_id} on direction "
             if uni_z_proxy_port:
-                msg += f"{evc['uni_a']['interface_id']} -> {evc['uni_z']['interface_id']}"
+                msg += (
+                    f"{evc['uni_a']['interface_id']} -> {evc['uni_z']['interface_id']}"
+                )
             else:
-                msg += f"{evc['uni_z']['interface_id']} -> {evc['uni_a']['interface_id']}"
+                msg += (
+                    f"{evc['uni_z']['interface_id']} -> {evc['uni_a']['interface_id']}"
+                )
 
         else:
             raise NoProxyPortsAvailable(evc_id)
 
         return msg
 
+    # pylint: enable=too-many-branches
+
     @staticmethod
     def remove_int_flows(evc):
-        """ Search for all flows belonging to an EVC and delete them. """
+        """Search for all flows belonging to an EVC and delete them."""
 
         for switch in retrieve_switches(evc):
             if not delete_flows(get_evc_flows(switch, evc, telemetry=True)):
@@ -401,7 +436,7 @@ class Main(KytosNApp):
         return True
 
     def decommission_int(self, evc_id):
-        """ Remove all INT flows for an EVC
+        """Remove all INT flows for an EVC
         Args:
             evc_id: EVC to be returned to non-INT EVC
         """
@@ -426,9 +461,9 @@ class Main(KytosNApp):
 
     # REST methods
 
-    @rest('v1/evc/enable', methods=['POST'])
+    @rest("v1/evc/enable", methods=["POST"])
     def enable_telemetry(self, request: Request) -> JSONResponse:
-        """ REST to enable/create INT flows for one or more EVC_IDs.
+        """REST to enable/create INT flows for one or more EVC_IDs.
                   evcs are provided via POST as a list
         Args:
             {"evc_ids": [list of evc_ids] }
@@ -440,7 +475,6 @@ class Main(KytosNApp):
         try:
             content = get_json_or_400(request, self.controller.loop)
             evcs = content["evc_ids"]
-
         except (TypeError, KeyError):
             raise HTTPException(400, detail="Incorrect request provided.")
 
@@ -452,32 +486,22 @@ class Main(KytosNApp):
 
         # Process each EVC individually
         for idx, evc_id in enumerate(evcs, start=1):
-
             try:
                 status[evc_id] = self.provision_int(evc_id)
-
             except EvcDoesNotExist as err_msg:
                 # Ignore since it is not an issue.
                 status[evc_id] = err_msg.message
-
             except EvcAlreadyHasINT as err_msg:
                 # Ignore since it is not an issue.
                 status[evc_id] = err_msg.message
-
             except NoProxyPortsAvailable as err_msg:
                 # TODO: document which EVC had error.
                 status[evc_id] = err_msg.message
-
             except NotPossibleToEnableTelemetry as err_msg:
                 # Rollback INT configuration. If there is proxy port,
                 # and it was not possible to enable telemetry, rollback both directions.
                 # It will be a decommission operation plus force.
                 status[evc_id] = err_msg.message
-
-            except Exception as err_msg:
-                # All others errors
-                log.err(err_msg)
-                status[evc_id] = str(err_msg)
 
             # Process every 10 EVCs and wait 10 seconds.
             if idx % 10 == 0:
@@ -485,9 +509,9 @@ class Main(KytosNApp):
 
         return JSONResponse(status)
 
-    @rest('v1/evc/disable', methods=['POST'])
+    @rest("v1/evc/disable", methods=["POST"])
     def disable_telemetry(self, request: Request) -> JSONResponse:
-        """ REST to disable/remove INT flows for an EVC_ID
+        """REST to disable/remove INT flows for an EVC_ID
         Args:
             {"evc_ids": [list of evc_ids] }
         Returns:
@@ -508,73 +532,68 @@ class Main(KytosNApp):
             evcs = get_evcs_ids()
 
         for evc_id in evcs:
-
             try:
                 status[evc_id] = self.decommission_int(evc_id)
-
             except EvcDoesNotExist as err_msg:
                 # Ignore since it is not an issue.
                 status[evc_id] = err_msg.message
-
             except EvcHasNoINT as err_msg:
                 # Ignore since it is not an issue.
                 status[evc_id] = err_msg.message
-
             except NotPossibleToDisableTelemetry as err_msg:
                 # Rollback INT configuration. This error will lead to inconsistency.
                 # Critical
                 status[evc_id] = err_msg.message
 
-            except Exception as err:
-                log.err(err)
-                status[evc_id] = err
-
         return JSONResponse(status)
 
-    @rest('v1/evc')
+    @rest("v1/evc")
     def get_evcs(self, _request: Request) -> JSONResponse:
-        """ REST to return the list of EVCs with INT enabled """
+        """REST to return the list of EVCs with INT enabled"""
         return JSONResponse(get_evc_with_telemetry())
 
-    @rest('v1/sync')
+    @rest("v1/sync")
     def sync_flows(self, _request: Request) -> JSONResponse:
-        """ Endpoint to force the telemetry napp to search for INT flows and delete them
-        accordingly to the evc metadata. """
+        """Endpoint to force the telemetry napp to search for INT flows and delete them
+        accordingly to the evc metadata."""
 
         # TODO
         # for evc_id in get_evcs_ids():
         return JSONResponse("TBD")
 
-    @rest('v1/evc/update')
+    @rest("v1/evc/update")
     def update_evc(self, _request: Request) -> JSONResponse:
-        """ If an EVC changed from unidirectional to bidirectional telemetry, make the change. """
+        """If an EVC changed from unidirectional to bidirectional telemetry,
+        make the change."""
         return JSONResponse({})
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
-        """ Change newly created EVC to INT-enabled EVC based on the metadata field (future) """
+        """Change newly created EVC to INT-enabled EVC based on the metadata field
+        (future)"""
         pass
 
     def listen_for_evc_change(self):
-        """ Change newly created EVC to INT-enabled EVC based on the metadata field (future) """
+        """Change newly created EVC to INT-enabled EVC based on the
+        metadata field (future)"""
         pass
 
     def listen_for_path_changes(self):
-        """ Change EVC's new path to INT-enabled EVC based on the metadata field when there
-        is a path change. (future) """
+        """Change EVC's new path to INT-enabled EVC based on the metadata field
+        when there is a path change. (future)"""
         pass
 
     def listen_for_evcs_removed(self):
-        """ Remove all INT flows belonging the just removed EVC (future) """
+        """Remove all INT flows belonging the just removed EVC (future)"""
         pass
 
     def listen_for_topology_changes(self):
-        """ If the topology changes, make sure it is not the loop ports.
-        If so, update proxy ports """
+        """If the topology changes, make sure it is not the loop ports.
+        If so, update proxy ports"""
         # TODO:
         # self.proxy_ports = create_proxy_ports(self.proxy_ports)
         pass
 
     def listen_for_evc_metadata_changes(self):
-        """ If the proxy port changes, the flows have to be reconfigured. """
+        """If the proxy port changes, the flows have to be reconfigured."""
         pass
