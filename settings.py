@@ -1,7 +1,6 @@
 """Module with the Constants used in the amlight/telemetry."""
 
 NAPP_NAME = "Telemetry Napp"
-VERSION = "1.0"
 KYTOS_API = "http://0.0.0.0:8181/api/"
 mef_eline_api = KYTOS_API + "kytos/mef_eline/v2/evc/"
 topology_api = KYTOS_API + "kytos/topology/v3/"

@@ -6,20 +6,40 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 import copy
 import time
 
+from napps.kytos.telemetry_int import settings
+from napps.kytos.telemetry_int.support_functions import (
+    add_to_apply_actions,
+    delete_flows,
+    get_evc,
+    get_evc_flows,
+    get_evc_unis,
+    get_evc_with_telemetry,
+    get_evcs_ids,
+    get_new_cookie,
+    get_proxy_port,
+    get_unidirectional_path,
+    has_int_enabled,
+    is_intra_switch_evc,
+    modify_actions,
+    push_flows,
+    retrieve_switches,
+    set_priority,
+    set_telemetry_false_for_evc,
+    set_telemetry_true_for_evc,
+)
+from napps.kytos.telemetry_int.telemetry_exceptions import (
+    EvcAlreadyHasINT,
+    EvcDoesNotExist,
+    EvcHasNoINT,
+    FlowsNotFound,
+    NoProxyPortsAvailable,
+    NotPossibleToDisableTelemetry,
+    NotPossibleToEnableTelemetry,
+    UnsupportedFlow,
+)
+
 from kytos.core import KytosNApp, log, rest
-from kytos.core.rest_api import (HTTPException, JSONResponse, Request,
-                                 get_json_or_400)
-from napps.amlight.telemetry import settings
-from napps.amlight.telemetry.support_functions import (
-    add_to_apply_actions, delete_flows, get_evc, get_evc_flows, get_evc_unis,
-    get_evc_with_telemetry, get_evcs_ids, get_new_cookie, get_proxy_port,
-    get_unidirectional_path, has_int_enabled, is_intra_switch_evc,
-    modify_actions, push_flows, retrieve_switches, set_priority,
-    set_telemetry_false_for_evc, set_telemetry_true_for_evc)
-from napps.amlight.telemetry.telemetry_exceptions import (
-    EvcAlreadyHasINT, EvcDoesNotExist, EvcHasNoINT, FlowsNotFound,
-    NoProxyPortsAvailable, NotPossibleToDisableTelemetry,
-    NotPossibleToEnableTelemetry, UnsupportedFlow)
+from kytos.core.rest_api import HTTPException, JSONResponse, Request, get_json_or_400
 
 
 class Main(KytosNApp):
@@ -36,7 +56,6 @@ class Main(KytosNApp):
 
         So, if you have any setup routine, insert it here.
         """
-        log.info(f"Running Napp {settings.NAPP_NAME} Version {settings.VERSION}")
 
         # TODO: only loads after all other napps are loaded.
 

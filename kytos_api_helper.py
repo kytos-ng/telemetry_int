@@ -4,12 +4,13 @@ other kytos napps' APIs """
 
 import datetime
 import json
+
 import requests
 from requests import HTTPError
+
 from kytos.core import log
-from napps.amlight.telemetry.settings import flow_manager_api
-from napps.amlight.telemetry.settings import mef_eline_api
-from napps.amlight.telemetry.settings import topology_api
+
+from .settings import flow_manager_api, mef_eline_api, topology_api
 
 
 def kytos_api(get=False, put=False, post=False, delete=False,
