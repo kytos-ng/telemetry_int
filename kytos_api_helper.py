@@ -106,11 +106,6 @@ def set_telemetry_metadata_false(evc_id):
     return kytos_api(post=True, mef_eline=True, evc_id=evc_id, metadata=True, data=data)
 
 
-def get_topology_interfaces():
-    """Get list of interfaces"""
-    return kytos_api(get=True, topology=True, data="interfaces")
-
-
 def kytos_get_flows(switch):
     """Get flows from Flow Manager"""
     return kytos_api(get=True, flow_manager=True, switch=switch)
