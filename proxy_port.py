@@ -2,10 +2,9 @@
 
 from typing import Optional
 
-
+from kytos.core.common import EntityStatus
 from kytos.core.controller import Controller
 from kytos.core.interface import Interface
-from kytos.core.common import EntityStatus
 
 
 class ProxyPort:
@@ -27,7 +26,7 @@ class ProxyPort:
         ):
             return None
 
-        destination = self.source.get_interface_by_port_no(
+        destination = self.source.switch.get_interface_by_port_no(
             self.source.metadata["looped"]["port_numbers"][1]
         )
         if not destination or destination.status != EntityStatus.UP:
