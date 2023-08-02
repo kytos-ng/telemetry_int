@@ -45,7 +45,9 @@ def test_get_evc_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
     data = get_evc_flows(cookie, dpid)
     assert (
         httpx_mock.call_args[0][0]
-        == f"http://0.0.0.0:8181/api/kytos/flow_manager/v2/stored_flows?cookie_range={cookie}&cookie_range={cookie}&state=installed&state=pending&dpid={dpid}"
+        == "http://0.0.0.0:8181/api/kytos/flow_manager/v2/stored_flows?"
+        f"cookie_range={cookie}&cookie_range={cookie}"
+        f"&state=installed&state=pending&dpid={dpid}"
     )
     assert len(data) == 1
     assert len(data[dpid]) == 2
