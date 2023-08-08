@@ -1,31 +1,24 @@
 """ Support function for main.py """
 
+import json
 
-from kytos.core import log
+from napps.kytos.telemetry_int import settings
+
+from kytos.core import Controller, log
+from kytos.core.interface import Interface
 
 from .kytos_api_helper import (
     get_evcs,
-    get_topology_interfaces,
-    kytos_delete_flows,
-    kytos_get_flows,
     kytos_push_flows,
     set_telemetry_metadata_false,
     set_telemetry_metadata_true,
 )
 from .proxy_port import ProxyPort
-from .settings import COOKIE_MASK, COOKIE_PREFIX
-
 
 # mef_eline support functions
-def get_evcs_ids():
-    """get the list of all EVCs' IDs"""
-    evc_ids = []
-    for evc in get_evcs().values():
-        evc_ids.append(evc["id"])
-    return evc_ids
 
 
-def get_evc_with_telemetry():
+def get_evc_with_telemetry() -> dict:
     """Retrieve the list of EVC IDs and list those with
     metadata {"telemetry": {"enabled": true}}"""
 
@@ -36,45 +29,32 @@ def get_evc_with_telemetry():
     return evc_ids
 
 
-def has_int_enabled(evc):
-    """check if evc has telemetry."""
-    if "telemetry" in evc["metadata"]:
-        if "enabled" in evc["metadata"]["telemetry"]:
-            if evc["metadata"]["telemetry"]["enabled"] == "true":
-                return True
-
-    return False
-
-
-def get_evc(evc_id):
-    """Get EVC from MEF E-Line using evc_id provided.
-    Args:
-        evc_id: evc_id provided by user via REST
-    Returns:
-        full evc if found
-        False is not found
-    """
-    evcs = get_evcs()
-    if evc_id in evcs:
-        return evcs[evc_id]
-    return False
+def has_int_enabled(evc: dict) -> bool:
+    """Check if evc has telemetry."""
+    return (
+        "telemetry" in evc["metadata"]
+        and isinstance(evc["metadata"]["telemetry"], dict)
+        and "enabled" in evc["metadata"]["telemetry"]
+        and evc["metadata"]["telemetry"]["enabled"]
+    )
 
 
-def get_evc_unis(evc):
-    """Parse EVC() for unis.
-    Args:
-        evc: EVC.__dict__
-    Returns:
-        uni_a and uni_z
-    """
-    uni_a, uni_z = {}, {}
-    uni_a["interface"] = int(evc["uni_a"]["interface_id"].split(":")[8])
-    uni_a["switch"] = ":".join(evc["uni_a"]["interface_id"].split(":")[0:8])
-
-    uni_z["interface"] = int(evc["uni_z"]["interface_id"].split(":")[8])
-    uni_z["switch"] = ":".join(evc["uni_z"]["interface_id"].split(":")[0:8])
-
-    return uni_a, uni_z
+def get_evc_unis(evc: dict) -> tuple[dict, dict]:
+    """Parse evc for unis."""
+    uni_a_split = evc["uni_a"]["interface_id"].split(":")
+    uni_z_split = evc["uni_z"]["interface_id"].split(":")
+    return (
+        {
+            "interface_id": evc["uni_a"]["interface_id"],
+            "port_number": int(uni_a_split[-1]),
+            "switch": ":".join(uni_a_split[:-1]),
+        },
+        {
+            "interface_id": evc["uni_z"]["interface_id"],
+            "port_number": int(uni_z_split[-1]),
+            "switch": ":".join(uni_z_split[:-1]),
+        },
+    )
 
 
 def set_telemetry_true_for_evc(evc_id, direction):
@@ -87,32 +67,23 @@ def set_telemetry_false_for_evc(evc_id):
     return set_telemetry_metadata_false(evc_id)
 
 
-def get_kytos_interface(switch, interface):
-    """Get the Kytos Interface as dict. Useful for multiple functions."""
-
-    kytos_interfaces = get_topology_interfaces()["interfaces"]
-    for kytos_interface in kytos_interfaces.values():
-        if switch == kytos_interface["switch"]:
-            if interface == kytos_interface["port_number"]:
-                return kytos_interface
-    return None
-
-
-def create_proxy_port(switch, proxy_port):
+def create_proxy_port(controller: Controller, interface: Interface):
     """Return the ProxyPort class to support single and multi-home loops"""
-    pp = ProxyPort(switch=switch, proxy_port=proxy_port)
+    pp = ProxyPort(controller, interface)
     return pp if pp.is_ready() else None
 
 
-def get_proxy_port(switch, interface):
+def get_proxy_port(controller: Controller, intf_id: str):
     """Return the proxy port assigned to a UNI"""
-    kytos_interface = get_kytos_interface(switch, interface)
-
-    if kytos_interface:
-        if "proxy_port" in kytos_interface["metadata"]:
-            return create_proxy_port(switch, kytos_interface["metadata"]["proxy_port"])
-
-    return None
+    interface = controller.get_interface_by_id(intf_id)
+    if not interface or "proxy_port" not in interface.metadata:
+        return None
+    source_intf = interface.switch.get_interface_by_port_no(
+        interface.metadata.get("proxy_port")
+    )
+    if not source_intf:
+        return None
+    return create_proxy_port(controller, source_intf)
 
 
 def add_to_apply_actions(instructions, new_instruction, position):
@@ -123,61 +94,55 @@ def add_to_apply_actions(instructions, new_instruction, position):
     return instructions
 
 
-def get_evc_flows(switch, evc, telemetry=False):
-    """Get EVC's flows from a specific switch.
-    Args:
-        switch: dpid
-        evc: evc.__dict__
-        telemetry: bool to indicate if we are looking for telemetry or mef_eline flows
-    Returns:
-        list of flows
-    """
-    flows = []
-    flow_response = kytos_get_flows(switch)
-    for flow in flow_response[switch]["flows"]:
-        if evc["id"] == get_id_from_cookie(flow["cookie"], telemetry):
-            flows.append(flow)
-    return flows
+def get_cookie(evc_id: str, mef_cookie_prefix=settings.MEF_COOKIE_PREFIX) -> int:
+    """Return the cookie integer from evc id."""
+    return int(evc_id, 16) + (mef_cookie_prefix << 56)
 
 
-def get_unidirectional_path(evc, source, destination):
-    """
-    source: {'interface': x, 'switch': 'x'}
-    destination: {'interface': x, 'switch': 'x'}
-    """
+def get_cookie_telemetry(evc_id: str, cookie_prefix=settings.COOKIE_PREFIX) -> int:
+    """Return telemetry cookie given an evc_id."""
+    return int(evc_id, 16) + (cookie_prefix << 56)
 
-    source_id = source["switch"] + ":" + str(source["interface"])
-    destination_id = destination["switch"] + ":" + str(destination["interface"])
+
+# pylint: disable=fixme
+def get_path_hop_interface_ids(evc, source, destination):
+    """
+    source: {'interface_id': x, 'port_number': int, 'switch': 'x'}
+    destination: {'interface_id': x, 'port_number': int, 'switch': 'x'}
+    """
+    # TODO double check convergence deployment optimizations later
+    # TODO double check static backup path
+
+    source_id = source["interface_id"]
+    destination_id = destination["interface_id"]
 
     interface_ids = []
 
-    target = "endpoint_b" if evc["uni_a"]["interface_id"] == source_id else "endpoint_a"
+    endpoint = (
+        "endpoint_b" if evc["uni_a"]["interface_id"] == source_id else "endpoint_a"
+    )
 
-    for nni in evc["current_path"]:
+    for link in evc["current_path"]:
         if (
-            not nni[target]["switch"] in destination_id
-            and not nni[target]["switch"] in source_id
+            not link[endpoint]["switch"] in destination_id
+            and not link[endpoint]["switch"] in source_id
         ):
-            interface_ids.append(nni[target]["id"])
+            interface_ids.append(link[endpoint]["id"])
 
-    for nni in evc["failover_path"]:
+    for link in evc["failover_path"]:
         if (
-            not nni[target]["switch"] in destination_id
-            and not nni[target]["switch"] in source_id
+            not link[endpoint]["switch"] in destination_id
+            and not link[endpoint]["switch"] in source_id
         ):
-            interface_ids.append(nni[target]["id"])
+            interface_ids.append(link[endpoint]["id"])
 
     return interface_ids
 
 
-def get_id_from_cookie(cookie, telemetry):
-    """Return the evc id given a cookie value.
-    By default, searches for mef_eline cookies."""
-    if telemetry:
-        evc_id = cookie - (int(COOKIE_PREFIX, 16) << 56)
-    else:
-        evc_id = cookie - (0xAA << 56)
-    return f"{evc_id:x}".zfill(14)
+def get_id_from_cookie(cookie: int) -> str:
+    """Return the evc id given a cookie value."""
+    evc_id = cookie & 0xFFFFFFFFFFFFFF
+    return f"{evc_id:x}"
 
 
 def is_intra_switch_evc(evc):
@@ -216,31 +181,11 @@ def modify_actions(actions, actions_to_change, remove=True):
     return actions
 
 
-def print_flows(flows):
+def print_flows(flows: list[dict]) -> None:
     """For debugging purposes"""
     log.info("===================================")
-    for flow in flows:
-        log.info(f"Switch: {flow['switch']}")
-        log.info(f"Table ID: {flow['table_id']}")
-        log.info(f"Match: {flow['match']}")
-
-        for instruction in flow["instructions"]:
-            log.info(f"Instruction Type: {instruction['instruction_type']}")
-            if "actions" in instruction:
-                for action in instruction["actions"]:
-                    if action["action_type"] == "output":
-                        log.info(
-                            f"Action_type: {action['action_type']} "
-                            f"port_no: {action['port']}"
-                        )
-                    elif action["action_type"] == "set_vlan":
-                        log.info(
-                            f"Action_type: "
-                            f"{action['action_type']} vlan_id: {action['vlan_id']}"
-                        )
-                    else:
-                        log.info(f"Action_type: {action}")
-
+    for flow in sorted(flows, key=lambda x: x["switch"]):
+        log.info(json.dumps(flow, indent=4))
         log.info("===================================")
 
 
@@ -260,66 +205,42 @@ def push_flows(flows):
         flow_to_push = {"flows": [flow]}
         if not kytos_push_flows(flow["switch"], flow_to_push):
             return False
-
-    log.info("Flows pushed with success.")
     return True
 
 
-def set_priority(f_id, priority):
+def set_priority(flow: dict) -> dict:
     """Find a suitable priority number. EP031 describes 100 as the addition."""
-    if priority + 100 < 65534:
-        return priority + 100
-    if priority + 1 < 65534:
-        return priority + 1
-
-    log.info(f"Error: Flow ID {f_id} has reached max priority supported")
-    return priority
-
-
-def get_new_cookie(cookie):
-    """Convert from mef-eline cookie (0xaa) to telemetry (0xA8)"""
-    value = hex(cookie)
-    value = value.replace("0xaa", COOKIE_PREFIX)
-    return int(value, 16)
+    if flow["flow"]["priority"] + 100 < (2**16 - 2):
+        flow["flow"]["priority"] += 100
+    elif flow["flow"]["priority"] + 1 < (2**16 - 2):
+        flow["flow"]["priority"] += 1
+    else:
+        raise ValueError(f"Flow {flow} would overflow max priority")
+    return flow
 
 
-def retrieve_switches(evc):
-    """Retrieve switches in the EVC's current or fail-over paths
-    Args:
-        evc: dict
-    Returns:
-        list of DPIDs
-    """
-    switches = []
-    uni_a, uni_z = get_evc_unis(evc)
-    switches.append(uni_a["switch"])
-
-    # Inter-switch EVCs
-    if uni_a["switch"] != uni_z["switch"]:
-        switches.append(uni_z["switch"])
-
-        for nni in evc["current_path"]:
-            switches.append(nni["endpoint_a"]["switch"])
-            switches.append(nni["endpoint_b"]["switch"])
-
-        for nni in evc["failover_path"]:
-            switches.append(nni["endpoint_a"]["switch"])
-            switches.append(nni["endpoint_b"]["switch"])
-
-    # Remove duplicates
-    return [*set(switches)]
+def get_new_cookie(cookie: int, cookie_prefix=settings.COOKIE_PREFIX) -> int:
+    """Convert from mef-eline cookie by replacing the most significant byte."""
+    return (cookie & 0xFFFFFFFFFFFFFF) + (cookie_prefix << 56)
 
 
-def delete_flows(flows):
-    """Delete flows from Kytos"""
+def set_new_cookie(flow: dict) -> dict:
+    """Set new cookie."""
+    flow["flow"]["cookie"] = get_new_cookie(flow["flow"]["cookie"])
+    return flow
 
-    # Debug
-    print_flows(flows)
 
-    for flow in flows:
-        flow["cookie_mask"] = COOKIE_MASK
-        flow_to_push = {"flows": [flow]}
-        if not kytos_delete_flows(flow["switch"], flow_to_push):
-            return False
+def set_instructions_from_actions(flow: dict) -> dict:
+    """Get intructions or convert from actions."""
+    if "instructions" in flow["flow"]:
+        return flow
 
-    return True
+    instructions = [
+        {
+            "instruction_type": "apply_actions",
+            "actions": flow["flow"].get("actions", []),
+        }
+    ]
+    flow["flow"].pop("actions", None)
+    flow["flow"]["instructions"] = instructions
+    return flow
