@@ -3,7 +3,6 @@ other kytos napps' APIs """
 
 
 from collections import defaultdict
-from typing import Iterable
 
 import httpx
 from tenacity import (
@@ -17,6 +16,7 @@ from tenacity import (
 
 from kytos.core.retry import before_sleep
 from napps.kytos.telemetry_int import settings
+from napps.kytos.telemetry_int.exceptions import UnrecoverableError
 
 
 @retry(
@@ -29,7 +29,13 @@ async def get_evcs(archived="false") -> dict:
     """Get EVCs."""
     async with httpx.AsyncClient(base_url=settings.mef_eline_api) as client:
         response = await client.get(f"/evc/?archived={archived}", timeout=10)
-        response.raise_for_status()
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        if not response.is_success:
+            raise UnrecoverableError(
+                f"Failed to get_evcs archived {archived}"
+                f"status code {response.status_code}, response text: {response.text}"
+            )
         return response.json()
 
 
@@ -37,7 +43,7 @@ async def get_evcs(archived="false") -> dict:
     stop=stop_after_attempt(5),
     wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
     before_sleep=before_sleep,
-    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+    retry=retry_if_exception_type(httpx.RequestError),
 )
 async def get_evc(evc_id: str) -> dict:
     """Get EVC."""
@@ -45,39 +51,22 @@ async def get_evc(evc_id: str) -> dict:
         response = await client.get(f"/evc/{evc_id}", timeout=10)
         if response.status_code == 404:
             return {}
-
-        response.raise_for_status()
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        if not response.is_success:
+            raise UnrecoverableError(
+                f"Failed to get_evc id {evc_id} "
+                f"status code {response.status_code}, response text: {response.text}"
+            )
         data = response.json()
         return {data["id"]: data}
 
 
-# TODO eventually remove it too
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
     before_sleep=before_sleep,
-    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
-)
-async def get_evc_flows(cookie: int, *dpid: str) -> dict:
-    """Get EVC's flows given a range of cookies."""
-    endpoint = (
-        f"stored_flows?cookie_range={cookie}&cookie_range={cookie}"
-        "&state=installed&state=pending"
-    )
-    if dpid:
-        dpid_query_args = [f"&dpid={val}" for val in dpid]
-        endpoint = f"{endpoint}{''.join(dpid_query_args)}"
-    async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
-        response = await client.get(f"/{endpoint}", timeout=10)
-        response.raise_for_status()
-        return response.json()
-
-
-@retry(
-    stop=stop_after_attempt(5),
-    wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
-    before_sleep=before_sleep,
-    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+    retry=retry_if_exception_type(httpx.RequestError),
 )
 async def get_stored_flows(
     cookies: list[int] = None,
@@ -98,7 +87,13 @@ async def get_stored_flows(
 
     async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
         response = await client.get(f"/{endpoint}", timeout=10)
-        response.raise_for_status()
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        if not response.is_success:
+            raise UnrecoverableError(
+                f"Failed to get_stored_flows cookies {cookies} "
+                f"status code {response.status_code}, response text: {response.text}"
+            )
         return _map_stored_flows_by_cookies(response.json())
 
 
@@ -119,15 +114,30 @@ def _map_stored_flows_by_cookies(stored_flows: dict) -> dict[int, list[dict]]:
     stop=stop_after_attempt(5),
     wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
     before_sleep=before_sleep,
-    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+    retry=retry_if_exception_type(httpx.RequestError),
 )
-async def add_evcs_metadata(evcs: Iterable[str], new_metadata: dict) -> dict:
+async def add_evcs_metadata(
+    evcs: dict[str, dict], new_metadata: dict, force=False
+) -> dict:
     """Add EVC metadata."""
     async with httpx.AsyncClient(base_url=settings.mef_eline_api) as client:
         response = await client.post(
             "/evc/metadata",
             timeout=10,
-            json={**new_metadata, **{"circuit_ids": [evc_id for evc_id in evcs]}},
+            json={
+                **new_metadata,
+                **{"circuit_ids": [evc_id for evc_id, evc in evcs.items() if evc]},
+            },
         )
-        response.raise_for_status()
-        return response.json()
+        if response.is_success:
+            return response.json()
+        # Ignore 404 if force just so it's easier to handle this concurrently
+        if response.status_code == 404 and force:
+            return {}
+
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        raise UnrecoverableError(
+            f"Failed to add_evc_metadata for EVC ids {list(evcs.keys())} "
+            f"status code {response.status_code}, response text: {response.text}"
+        )
