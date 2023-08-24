@@ -28,12 +28,7 @@ from .exceptions import (
 )
 from .kytos_api_helper import get_evc, get_evcs
 from .proxy_port import ProxyPort
-from .utils import (
-    get_evc_unis,
-    get_evc_with_telemetry,
-    get_proxy_port_or_raise,
-    has_int_enabled,
-)
+from napps.kytos.telemetry_int import utils
 
 # pylint: disable=fixme
 
@@ -90,36 +85,6 @@ class Main(KytosNApp):
 
         return await self.install_int_flows(switches_flows)
 
-    async def provision_int(self, evc: dict) -> str:
-        """Create telemetry flows for an EVC."""
-        # TODO change this to a list for dispatching in bulk
-
-        # Get the EVC endpoints
-        evc_id = evc["id"]
-        uni_a, uni_z = get_evc_unis(evc)
-        uni_a_intf_id, uni_z_intf_id = uni_a["interface_id"], uni_z["interface_id"]
-
-        uni_a_proxy_port = get_proxy_port_or_raise(self.controller, uni_a_intf_id)
-        uni_z_proxy_port = get_proxy_port_or_raise(self.controller, uni_z_intf_id)
-
-        await self.provision_int_unidirectional(evc, uni_z, uni_a, uni_a_proxy_port)
-        await self.provision_int_unidirectional(evc, uni_a, uni_z, uni_z_proxy_port)
-
-        # set_telemetry_true_for_evc(evc_id, "bidirectional")
-        return "enabled"
-
-    def decommission_int(self, evc: dict) -> str:
-        """Remove all INT flows for an EVC"""
-
-        evc_id = evc["id"]
-        self.remove_int_flows(evc)
-
-        # Update mef_eline.
-        # if not set_telemetry_false_for_evc(evc_id):
-        #     raise ErrorBase(evc_id, "failed to disable telemetry metadata")
-
-        return f"EVC ID {evc_id} is no longer INT-enabled."
-
     @rest("v1/evc/enable", methods=["POST"])
     async def enable_telemetry(self, request: Request) -> JSONResponse:
         """REST to enable INT flows on EVCs.
@@ -144,7 +109,7 @@ class Main(KytosNApp):
         if evc_ids:
             evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
         else:
-            evcs = {k: v for k, v in evcs.items() if not has_int_enabled(v)}
+            evcs = {k: v for k, v in evcs.items() if not utils.has_int_enabled(v)}
             if not evcs:
                 # There's no non-INT EVCs to get enabled.
                 return JSONResponse({})
@@ -173,7 +138,7 @@ class Main(KytosNApp):
         If a list of evc_ids is empty, it'll disable on all INT EVCs.
         """
         try:
-            content = await aget_json_or_400(request, self.controller.loop)
+            content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
             force = bool(content.get("force", False))
         except (TypeError, KeyError):
@@ -189,7 +154,7 @@ class Main(KytosNApp):
         if evc_ids:
             evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
         else:
-            evcs = {k: v for k, v in evcs.items() if has_int_enabled(v)}
+            evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
             if not evcs:
                 # There's no INT EVCs to get disabled.
                 return JSONResponse({})
@@ -214,7 +179,7 @@ class Main(KytosNApp):
     @rest("v1/evc")
     def get_evcs(self, _request: Request) -> JSONResponse:
         """REST to return the list of EVCs with INT enabled"""
-        return JSONResponse(get_evc_with_telemetry())
+        return JSONResponse(utils.get_evc_with_telemetry())
 
     @rest("v1/sync")
     def sync_flows(self, _request: Request) -> JSONResponse:

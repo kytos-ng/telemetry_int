@@ -167,7 +167,7 @@ class INTManager:
 
         """
         switch_flows = defaultdict(set)
-        for cookie, flows in stored_flows.items():
+        for flows in stored_flows.values():
             for flow in flows:
                 switch_flows[flow["switch"]].add(flow["flow"]["cookie"])
 
@@ -193,7 +193,7 @@ class INTManager:
                 await self.controller.buffers.app.aput(event)
                 await asyncio.sleep(settings.BATCH_INTERVAL)
 
-    async def _install_int_flows(self, stored_flows: dict[int, list]) -> None:
+    async def _install_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
         """Install INT flow mods.
 
         The flows will be batched per dpid based on settings.BATCH_SIZE and will wait
@@ -201,9 +201,9 @@ class INTManager:
         """
 
         switch_flows = defaultdict(list)
-        for cookie, flows in stored_flows.items():
+        for flows in stored_flows.values():
             for flow in flows:
-                switch_flows[flow["switch"]].add(flow["flow"])
+                switch_flows[flow["switch"]].append(flow["flow"])
 
         for dpid, flows in switch_flows.items():
             flow_vals = list(flows)

@@ -77,7 +77,7 @@ def get_proxy_port_or_raise(
     if not interface:
         raise ProxyPortNotFound(evc_id, f"UNI interface {intf_id} not found")
 
-    if not "proxy_port" not in interface.metadata:
+    if "proxy_port" not in interface.metadata:
         raise ProxyPortNotFound(evc_id, f"proxy_port metadata not found in {intf_id}")
 
     source_intf = interface.switch.get_interface_by_port_no(

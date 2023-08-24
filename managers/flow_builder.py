@@ -29,7 +29,8 @@ def build_int_flows(
             _build_int_sink_flows("uni_z", evc, stored_flows),
             _build_int_sink_flows("uni_a", evc, stored_flows),
         ):
-            flows_per_cookie[utils.get_cookie(evc_id, settings.COOKIE_PREFIX)] = flow
+            cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+            flows_per_cookie[cookie].append(flow)
     return flows_per_cookie
 
 
@@ -53,14 +54,13 @@ def _build_int_source_flows(
 
     # Get the original flows
     dpid = src_uni["switch"]
-    for flows in stored_flows[utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)]:
-        for flow in flows:
-            if (
-                flow["switch"] == dpid
-                and flow["flow"]["match"]["in_port"] == src_uni["port_number"]
-            ):
-                new_int_flow_tbl_0_tcp = flow
-                break
+    for flow in stored_flows[utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)]:
+        if (
+            flow["switch"] == dpid
+            and flow["flow"]["match"]["in_port"] == src_uni["port_number"]
+        ):
+            new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
+            break
 
     if not new_int_flow_tbl_0_tcp:
         raise FlowsNotFound(evc["id"])
@@ -187,8 +187,8 @@ def _build_int_sink_flows(
     dpid = dst_uni["switch"]
 
     for flow in stored_flows[utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)]:
-        # Only consider this sink's dpid  flows
-        if flow["dpid"] != dpid:
+        # Only consider this sink's dpid flows
+        if flow["switch"] != dpid:
             continue
         # Only consider flows coming from NNI interfaces
         if flow["flow"]["match"]["in_port"] == dst_uni["port_number"]:
@@ -202,6 +202,7 @@ def _build_int_sink_flows(
         utils.set_new_cookie(flow)
         utils.set_owner(new_int_flow_tbl_0_tcp)
         utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
+
         # Save for pos-proxy flows
         new_int_flow_tbl_0_pos = copy.deepcopy(new_int_flow_tbl_0_tcp)
         new_int_flow_tbl_2_pos = copy.deepcopy(new_int_flow_tbl_0_tcp)
@@ -232,7 +233,6 @@ def _build_int_sink_flows(
 
             new_flows.append(copy.deepcopy(new_int_flow_tbl_0_tcp))
             new_flows.append(copy.deepcopy(new_int_flow_tbl_0_udp))
-            del instruction  # pylint: disable=W0631
 
         # Prepare Flows for Table 0 AFTER proxy. No difference between TCP or UDP
         in_port_no = proxy_port.destination.port_number
