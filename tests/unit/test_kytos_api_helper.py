@@ -3,7 +3,7 @@ from httpx import Response
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.kytos_api_helper import (
     get_evc,
-    get_evc_flows,
+    get_stored_flows,
     get_evcs,
 )
 
@@ -34,11 +34,11 @@ async def test_get_evc(evcs_data, monkeypatch) -> None:
     assert data[evc_id] == evc_data
 
 
-async def test_get_evc_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
-    """Test get_evc_flows."""
+async def test_get_stored_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
+    """Test get_stored_flows."""
     evc_data = intra_evc_evpl_flows_data
     dpid = "00:00:00:00:00:00:00:01"
-    cookie = evc_data[dpid][0]["flow"]["cookie"]
+    cookies = [evc_data[dpid][0]["flow"]["cookie"]]
 
     aclient_mock, awith_mock = AsyncMock(), MagicMock()
     aclient_mock.get.return_value = Response(
@@ -47,11 +47,15 @@ async def test_get_evc_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
     awith_mock.return_value.__aenter__.return_value = aclient_mock
     monkeypatch.setattr("httpx.AsyncClient", awith_mock)
 
-    data = await get_evc_flows(cookie, dpid)
+    data = await get_stored_flows(cookies)
     assert (
         aclient_mock.get.call_args[0][0] == "/stored_flows?"
-        f"cookie_range={cookie}&cookie_range={cookie}"
-        f"&state=installed&state=pending&dpid={dpid}"
+        f"state=installed&state=pending&"
+        f"cookie_range={cookies[0]}&cookie_range={cookies[0]}"
     )
     assert len(data) == 1
-    assert len(data[dpid]) == 2
+    assert list(data.keys()) == cookies
+    assert len(data[cookies[0]]) == 2
+    for flows in data.values():
+        for flow in flows:
+            assert flow["switch"] == dpid
