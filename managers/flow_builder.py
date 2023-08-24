@@ -145,6 +145,7 @@ def _build_int_hop_flows(
         new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
         utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
         utils.set_new_cookie(flow)
+        utils.set_owner(new_int_flow_tbl_0_tcp)
 
         # Prepare TCP Flow
         new_int_flow_tbl_0_tcp["flow"]["match"]["dl_type"] = settings.IPv4
@@ -194,11 +195,12 @@ def _build_int_sink_flows(
             continue
 
         new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
-        utils.set_new_cookie(flow)
 
         if not new_int_flow_tbl_0_tcp:
             raise FlowsNotFound(evc["id"])
 
+        utils.set_new_cookie(flow)
+        utils.set_owner(new_int_flow_tbl_0_tcp)
         utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
         # Save for pos-proxy flows
         new_int_flow_tbl_0_pos = copy.deepcopy(new_int_flow_tbl_0_tcp)
@@ -250,6 +252,7 @@ def _build_int_sink_flows(
         # Prepare Flows for Table 2 POS proxy
         new_int_flow_tbl_2_pos["flow"]["match"]["in_port"] = in_port_no
         new_int_flow_tbl_2_pos["flow"]["table_id"] = settings.INT_TABLE
+        utils.set_table_group(new_int_flow_tbl_2_pos)
 
         for instruction in new_int_flow_tbl_2_pos["flow"]["instructions"]:
             if instruction["instruction_type"] == "apply_actions":
