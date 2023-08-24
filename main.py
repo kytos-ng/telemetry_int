@@ -3,23 +3,16 @@
 Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 """
-import itertools
-from collections import defaultdict
 
+from napps.kytos.telemetry_int import utils
 from tenacity import RetryError
 
-from kytos.core import KytosNApp, rest, log
-from kytos.core.rest_api import (
-    HTTPException,
-    JSONResponse,
-    Request,
-    aget_json_or_400,
-)
+from kytos.core import KytosNApp, log, rest
+from kytos.core.rest_api import HTTPException, JSONResponse, Request, aget_json_or_400
 
-from .managers.int import INTManager
 from .exceptions import (
-    EVCHasNoINT,
     EVCHasINT,
+    EVCHasNoINT,
     EVCNotFound,
     FlowsNotFound,
     ProxyPortNotFound,
@@ -27,8 +20,7 @@ from .exceptions import (
     UnrecoverableError,
 )
 from .kytos_api_helper import get_evc, get_evcs
-from .proxy_port import ProxyPort
-from napps.kytos.telemetry_int import utils
+from .managers.int import INTManager
 
 # pylint: disable=fixme
 
@@ -64,26 +56,6 @@ class Main(KytosNApp):
 
         If you have some cleanup procedure, insert it here.
         """
-
-    async def provision_int_unidirectional(
-        self, evc: dict, source_uni: dict, destination_uni: dict, proxy_port: ProxyPort
-    ) -> dict[str, list]:
-        """Create INT flows from source to destination."""
-        switches_flows = defaultdict(list)
-
-        # Create flows for the first switch (INT Source)
-        source_flows = self.enable_int_source(source_uni, evc, proxy_port)
-
-        # Create flows the INT hops
-        hop_flows = self.enable_int_hop(evc, source_uni, destination_uni)
-
-        # # Create flows for the last switch (INT Sink)
-        sink_flows = self.enable_int_sink(destination_uni, evc, proxy_port)
-
-        for flow in itertools.chain(source_flows, hop_flows, sink_flows):
-            switches_flows[flow["switch"]].append(flow)
-
-        return await self.install_int_flows(switches_flows)
 
     @rest("v1/evc/enable", methods=["POST"])
     async def enable_telemetry(self, request: Request) -> JSONResponse:

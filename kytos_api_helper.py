@@ -5,18 +5,18 @@ other kytos napps' APIs """
 from collections import defaultdict
 
 import httpx
+from napps.kytos.telemetry_int import settings
+from napps.kytos.telemetry_int.exceptions import UnrecoverableError
 from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
-    wait_random,
     wait_combine,
     wait_fixed,
+    wait_random,
 )
 
 from kytos.core.retry import before_sleep
-from napps.kytos.telemetry_int import settings
-from napps.kytos.telemetry_int.exceptions import UnrecoverableError
 
 
 @retry(
@@ -104,7 +104,7 @@ def _map_stored_flows_by_cookies(stored_flows: dict) -> dict[int, list[dict]]:
     reused upfront by bulk operations.
     """
     flows_by_cookies = defaultdict(list)
-    for dpid, flows in stored_flows.items():
+    for flows in stored_flows.values():
         for flow in flows:
             flows_by_cookies[flow["flow"]["cookie"]].append(flow)
     return flows_by_cookies

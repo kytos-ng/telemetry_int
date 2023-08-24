@@ -4,17 +4,10 @@ from napps.kytos.telemetry_int import settings
 
 from kytos.core import Controller
 
-from .kytos_api_helper import (
-    get_evcs,
-    get_stored_flows as _get_stored_flows,
-)
+from .exceptions import FlowsNotFound, PriorityOverflow, ProxyPortNotFound
+from .kytos_api_helper import get_evcs
+from .kytos_api_helper import get_stored_flows as _get_stored_flows
 from .proxy_port import ProxyPort
-
-from .exceptions import (
-    FlowsNotFound,
-    ProxyPortNotFound,
-    PriorityOverflow,
-)
 
 
 async def get_found_stored_flows(cookies: list[int] = None) -> dict[int, list[dict]]:

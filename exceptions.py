@@ -31,28 +31,15 @@ class EVCError(UnrecoverableError):
 
 
 class ProxyPortError(EVCError):
-
     """ProxyPortError."""
-
-    def __init__(self, evc_id: str, msg: str) -> None:
-        """Constructor of ProxyPortError."""
-        super().__init__(evc_id, msg)
 
 
 class ProxyPortNotFound(ProxyPortError):
     """ProxyPortNotFound."""
 
-    def __init__(self, evc_id: str, msg: str) -> None:
-        """Constructor of ProxyPortError."""
-        super().__init__(evc_id, msg)
-
 
 class ProxyPortStatusNotUP(ProxyPortError):
     """ProxyPortStatusNotUP."""
-
-    def __init__(self, evc_id: str, msg: str) -> None:
-        """Constructor of ProxyPortNotUP."""
-        super().__init__(evc_id, msg)
 
 
 class EVCHasNoINT(EVCError):
