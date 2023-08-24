@@ -45,7 +45,7 @@ class INTManager:
         log.info(f"Disabling telemetry INT on EVC ids: {list(evcs.keys())}")
 
         stored_flows = await api.get_stored_flows(
-            [utils.get_cookie(evc_id, settings.COOKIE_PREFIX) for evc_id in evcs]
+            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
         )
 
         metadata = {
@@ -77,7 +77,7 @@ class INTManager:
 
         stored_flows = flow_builder.build_int_flows(
             evcs,
-            await utils.get_stored_flows(
+            await utils.get_found_stored_flows(
                 [
                     utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
                     for evc_id in evcs
