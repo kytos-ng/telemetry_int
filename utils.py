@@ -169,14 +169,28 @@ def set_priority(flow: dict, evc_id: str = "") -> dict:
     return flow
 
 
-def get_new_cookie(cookie: int, cookie_prefix=settings.COOKIE_PREFIX) -> int:
+def set_owner(flow: dict) -> dict:
+    """Set flow owner."""
+    flow["flow"]["owner"] = "telemetry_int"
+    return flow
+
+
+def set_table_group(flow: dict, table_group="base") -> dict:
+    """Set flow owner."""
+    flow["flow"]["table_group"] = table_group
+    return flow
+
+
+def get_new_cookie(cookie: int, cookie_prefix=settings.INT_COOKIE_PREFIX) -> int:
     """Convert from mef-eline cookie by replacing the most significant byte."""
     return (cookie & 0xFFFFFFFFFFFFFF) + (cookie_prefix << 56)
 
 
 def set_new_cookie(flow: dict) -> dict:
     """Set new cookie."""
-    flow["flow"]["cookie"] = get_new_cookie(flow["flow"]["cookie"])
+    flow["flow"]["cookie"] = get_new_cookie(
+        flow["flow"]["cookie"], cookie_prefix=settings.INT_COOKIE_PREFIX
+    )
     return flow
 
 
