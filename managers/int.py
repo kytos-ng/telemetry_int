@@ -178,6 +178,8 @@ class INTManager:
                 batch_size = len(cookie_vals)
 
             for i in range(0, len(cookie_vals), batch_size):
+                if i > 0:
+                    await asyncio.sleep(settings.BATCH_INTERVAL)
                 flows = [
                     {"cookie": cookie, "cookie_mask": int(0xFFFFFFFFFFFFFFFF)}
                     for cookie in cookie_vals[i : i + batch_size]
@@ -191,7 +193,6 @@ class INTManager:
                     },
                 )
                 await self.controller.buffers.app.aput(event)
-                await asyncio.sleep(settings.BATCH_INTERVAL)
 
     async def _install_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
         """Install INT flow mods.
@@ -212,6 +213,8 @@ class INTManager:
                 batch_size = len(flow_vals)
 
             for i in range(0, len(flow_vals), batch_size):
+                if i > 0:
+                    await asyncio.sleep(settings.BATCH_INTERVAL)
                 flows = flow_vals[i : i + batch_size]
                 event = KytosEvent(
                     "kytos.flow_manager.flows.install",
@@ -222,4 +225,3 @@ class INTManager:
                     },
                 )
                 await self.controller.buffers.app.aput(event)
-                await asyncio.sleep(settings.BATCH_INTERVAL)
