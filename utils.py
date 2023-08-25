@@ -92,7 +92,9 @@ def get_proxy_port_or_raise(
     return pp
 
 
-def add_to_apply_actions(instructions, new_instruction, position):
+def add_to_apply_actions(
+    instructions: list[dict], new_instruction: dict, position: int
+):
     """Create the actions list"""
     for instruction in instructions:
         if instruction["instruction_type"] == "apply_actions":
@@ -123,7 +125,7 @@ def is_intra_switch_evc(evc):
     return False
 
 
-def modify_actions(actions, actions_to_change, remove=True):
+def modify_actions(actions: list[dict], actions_to_change: list[str], remove=True):
     """Change the current actions
     If remove == True, remove actions_to_change from actions.
     If remove == False, keep actions_to_change, remove everything else
@@ -134,21 +136,15 @@ def modify_actions(actions, actions_to_change, remove=True):
     Return
         actions
     """
-    indexes = []
-    count = 0
-
-    for action in actions:
+    del_indexes = set()
+    for index, action in enumerate(actions):
         if remove:
             if action["action_type"] in actions_to_change:
-                indexes.append(count)
+                del_indexes.add(index)
         else:
             if action["action_type"] not in actions_to_change:
-                indexes.append(count)
-        count += 1
-
-    for index in sorted(indexes, reverse=True):
-        del actions[index]
-    return actions
+                del_indexes.add(index)
+    return [action for i, action in enumerate(actions) if i not in del_indexes]
 
 
 def set_priority(flow: dict, evc_id: str = "") -> dict:
