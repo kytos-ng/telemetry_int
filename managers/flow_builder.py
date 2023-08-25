@@ -199,7 +199,7 @@ def _build_int_sink_flows(
         if not new_int_flow_tbl_0_tcp:
             raise FlowsNotFound(evc["id"])
 
-        utils.set_new_cookie(flow)
+        utils.set_new_cookie(new_int_flow_tbl_0_tcp)
         utils.set_owner(new_int_flow_tbl_0_tcp)
         utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
 
