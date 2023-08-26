@@ -42,9 +42,7 @@ class INTManager:
         """
         self._validate_disable_evcs(evcs, force)
 
-        log.info(
-            f"Disabling telemetry INT on EVC ids: {list(evcs.keys())}, force: {force}"
-        )
+        log.info(f"Disabling INT on EVC ids: {list(evcs.keys())}, force: {force}")
 
         stored_flows = await api.get_stored_flows(
             [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
@@ -57,7 +55,7 @@ class INTManager:
             }
         }
         await asyncio.gather(
-            self._remove_int_flows(stored_flows),
+            self.remove_int_flows(stored_flows),
             api.add_evcs_metadata(evcs, metadata, force),
         )
 
@@ -75,9 +73,7 @@ class INTManager:
         """
         evcs = self._validate_map_enable_evcs(evcs, force)
 
-        log.info(
-            f"Enabling telemetry INT on EVC ids: {list(evcs.keys())}, force: {force}"
-        )
+        log.info(f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}")
 
         stored_flows = flow_builder.build_int_flows(
             evcs,
@@ -96,7 +92,7 @@ class INTManager:
             }
         }
         await asyncio.gather(
-            self._install_int_flows(stored_flows), api.add_evcs_metadata(evcs, metadata)
+            self.install_int_flows(stored_flows), api.add_evcs_metadata(evcs, metadata)
         )
 
     def _validate_disable_evcs(
@@ -159,7 +155,7 @@ class INTManager:
                 )
         return evcs
 
-    async def _remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
+    async def remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
         """Delete int flows given a prefiltered stored_flows.
 
         Removal is driven by the stored flows instead of EVC ids and dpids to also
@@ -198,7 +194,7 @@ class INTManager:
                 )
                 await self.controller.buffers.app.aput(event)
 
-    async def _install_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
+    async def install_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
         """Install INT flow mods.
 
         The flows will be batched per dpid based on settings.BATCH_SIZE and will wait
