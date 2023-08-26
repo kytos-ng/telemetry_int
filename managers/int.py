@@ -3,6 +3,7 @@ import asyncio
 from collections import defaultdict
 from datetime import datetime
 
+from pyof.v0x04.controller2switch.table_mod import Table
 
 from kytos.core.controller import Controller
 from kytos.core.events import KytosEvent
@@ -181,7 +182,11 @@ class INTManager:
                 if i > 0:
                     await asyncio.sleep(settings.BATCH_INTERVAL)
                 flows = [
-                    {"cookie": cookie, "cookie_mask": int(0xFFFFFFFFFFFFFFFF)}
+                    {
+                        "cookie": cookie,
+                        "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
+                        "table_id": Table.OFPTT_ALL.value,
+                    }
                     for cookie in cookie_vals[i : i + batch_size]
                 ]
                 event = KytosEvent(
