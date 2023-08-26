@@ -25,8 +25,9 @@ from kytos.core.retry import before_sleep
     before_sleep=before_sleep,
     retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
 )
-async def get_evcs(archived="false") -> dict:
+async def get_evcs() -> dict:
     """Get EVCs."""
+    archived = "false"
     async with httpx.AsyncClient(base_url=settings.mef_eline_api) as client:
         response = await client.get(f"/evc/?archived={archived}", timeout=10)
         if response.is_server_error:
@@ -59,6 +60,8 @@ async def get_evc(evc_id: str) -> dict:
                 f"status code {response.status_code}, response text: {response.text}"
             )
         data = response.json()
+        if data["archived"]:
+            return {}
         return {data["id"]: data}
 
 
@@ -120,13 +123,19 @@ async def add_evcs_metadata(
     evcs: dict[str, dict], new_metadata: dict, force=False
 ) -> dict:
     """Add EVC metadata."""
+
+    circuit_ids = [evc_id for evc_id, evc in evcs.items() if evc]
+    # return early if there's no circuits to update their metadata
+    if not circuit_ids:
+        return {}
+
     async with httpx.AsyncClient(base_url=settings.mef_eline_api) as client:
         response = await client.post(
             "/evc/metadata",
             timeout=10,
             json={
                 **new_metadata,
-                **{"circuit_ids": [evc_id for evc_id, evc in evcs.items() if evc]},
+                **{"circuit_ids": circuit_ids},
             },
         )
         if response.is_success:

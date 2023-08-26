@@ -67,7 +67,9 @@ class Main(KytosNApp):
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
-            force = bool(content.get("force", False))
+            force = content.get("force", False)
+            if not isinstance(force, bool):
+                raise TypeError(f"'force' wrong type: {type(force)} expected bool")
         except (TypeError, KeyError):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
@@ -112,7 +114,9 @@ class Main(KytosNApp):
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
-            force = bool(content.get("force", False))
+            force = content.get("force", False)
+            if not isinstance(force, bool):
+                raise TypeError(f"'force' wrong type: {type(force)} expected bool")
         except (TypeError, KeyError):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
