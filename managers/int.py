@@ -42,7 +42,9 @@ class INTManager:
         """
         self._validate_disable_evcs(evcs, force)
 
-        log.info(f"Disabling telemetry INT on EVC ids: {list(evcs.keys())}")
+        log.info(
+            f"Disabling telemetry INT on EVC ids: {list(evcs.keys())}, force: {force}"
+        )
 
         stored_flows = await api.get_stored_flows(
             [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
@@ -73,7 +75,9 @@ class INTManager:
         """
         evcs = self._validate_map_enable_evcs(evcs, force)
 
-        log.info(f"Enabling telemetry INT on EVC ids: {list(evcs.keys())}")
+        log.info(
+            f"Enabling telemetry INT on EVC ids: {list(evcs.keys())}, force: {force}"
+        )
 
         stored_flows = flow_builder.build_int_flows(
             evcs,

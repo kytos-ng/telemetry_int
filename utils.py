@@ -34,7 +34,8 @@ def get_evc_with_telemetry() -> dict:
 def has_int_enabled(evc: dict) -> bool:
     """Check if evc has telemetry."""
     return (
-        "telemetry" in evc["metadata"]
+        "metadata" in evc
+        and "telemetry" in evc["metadata"]
         and isinstance(evc["metadata"]["telemetry"], dict)
         and "enabled" in evc["metadata"]["telemetry"]
         and evc["metadata"]["telemetry"]["enabled"]
