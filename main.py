@@ -4,10 +4,12 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 """
 
-from napps.kytos.telemetry_int import utils
+import napps.kytos.telemetry_int.kytos_api_helper as api
+from napps.kytos.telemetry_int import settings, utils
 from tenacity import RetryError
 
-from kytos.core import KytosNApp, log, rest
+from kytos.core import KytosEvent, KytosNApp, log, rest
+from kytos.core.helpers import alisten_to
 from kytos.core.rest_api import HTTPException, JSONResponse, Request, aget_json_or_400
 
 from .exceptions import (
@@ -19,7 +21,6 @@ from .exceptions import (
     ProxyPortStatusNotUP,
     UnrecoverableError,
 )
-from .kytos_api_helper import get_evc, get_evcs
 from .managers.int import INTManager
 
 # pylint: disable=fixme
@@ -74,7 +75,11 @@ class Main(KytosNApp):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
         try:
-            evcs = await get_evcs() if len(evc_ids) != 1 else await get_evc(evc_ids[0])
+            evcs = (
+                await api.get_evcs()
+                if len(evc_ids) != 1
+                else await api.get_evc(evc_ids[0])
+            )
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
             log.error(exc_error)
@@ -121,7 +126,11 @@ class Main(KytosNApp):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
         try:
-            evcs = await get_evcs() if len(evc_ids) != 1 else await get_evc(evc_ids[0])
+            evcs = (
+                await api.get_evcs()
+                if len(evc_ids) != 1
+                else await api.get_evc(evc_ids[0])
+            )
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
             log.error(exc_error)
@@ -171,6 +180,25 @@ class Main(KytosNApp):
         """If an EVC changed from unidirectional to bidirectional telemetry,
         make the change."""
         return JSONResponse({})
+
+    @alisten_to("kytos/mef_eline.deleted")
+    async def on_evc_deleted(self, event: KytosEvent) -> None:
+        """On EVC deleted."""
+        content = event.content
+        if (
+            "metadata" in content
+            and "telemetry" in content["metadata"]
+            and content["metadata"]["telemetry"]["enabled"]
+        ):
+            evc_id = content["evc_id"]
+            log.info(
+                f"EVC({evc_id}, {content.get('name', '')}) got deleted, "
+                "INT flows will be removed too"
+            )
+            stored_flows = await api.get_stored_flows(
+                [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)]
+            )
+            await self.int_manager.remove_int_flows(stored_flows)
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
