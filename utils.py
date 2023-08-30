@@ -88,7 +88,7 @@ def get_proxy_port_or_raise(
     if not pp.destination:
         raise ProxyPortNotFound(
             evc_id,
-            f"proxy_port of {intf_id} destination interface not found",
+            f"proxy_port of {intf_id} isn't looped or destination interface not found",
         )
     return pp
 
