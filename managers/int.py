@@ -52,7 +52,9 @@ class INTManager:
         metadata = {
             "telemetry": {
                 "enabled": False,
-                "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+                "status": "DOWN",
+                "status_reason": ["disabled"],
+                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
             }
         }
         await asyncio.gather(
@@ -89,7 +91,9 @@ class INTManager:
         metadata = {
             "telemetry": {
                 "enabled": True,
-                "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+                "status": "UP",
+                "status_reason": [],
+                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
             }
         }
         await asyncio.gather(
