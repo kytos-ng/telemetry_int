@@ -8,7 +8,12 @@ from kytos.core.interface import Interface
 
 
 class ProxyPort:
-    """This class helps to handle multi-home physical loops (two ports)."""
+    """This class helps to handle multi-home physical loops (two ports).
+
+    source interface is where the loop starts
+    destination interface is where the loop ends
+
+    """
 
     def __init__(self, controller: Controller, source: Interface):
         self.controller = controller
@@ -18,8 +23,7 @@ class ProxyPort:
     def destination(self) -> Optional[Interface]:
         """Destination interface of the loop."""
         if (
-            self.source.status != EntityStatus.UP
-            or "looped" not in self.source.metadata
+            "looped" not in self.source.metadata
             or "port_numbers" not in self.source.metadata["looped"]
             or not self.source.metadata["looped"]["port_numbers"]
             or len(self.source.metadata["looped"]["port_numbers"]) < 2
@@ -29,10 +33,18 @@ class ProxyPort:
         destination = self.source.switch.get_interface_by_port_no(
             self.source.metadata["looped"]["port_numbers"][1]
         )
-        if not destination or destination.status != EntityStatus.UP:
+        if not destination:
             return None
+
         return destination
 
-    def is_ready(self) -> Optional[bool]:
-        """Make sure this class has all it needs"""
-        return self.source and self.destination
+    @property
+    def status(self) -> EntityStatus:
+        """ProxyPort status."""
+        if (
+            self.source.status == EntityStatus.UP
+            and self.destination
+            and self.destination.status == EntityStatus.UP
+        ):
+            return EntityStatus.UP
+        return EntityStatus.DOWN

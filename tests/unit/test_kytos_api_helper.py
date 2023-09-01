@@ -1,53 +1,61 @@
 """Test kytos_api_helper.py"""
-from unittest.mock import MagicMock
-from napps.kytos.telemetry_int.kytos_api_helper import get_evcs, get_evc, get_evc_flows
+from httpx import Response
+from unittest.mock import AsyncMock, MagicMock
+from napps.kytos.telemetry_int.kytos_api_helper import (
+    get_evc,
+    get_stored_flows,
+    get_evcs,
+)
 
 
-def test_get_evcs(evcs_data, monkeypatch) -> None:
+async def test_get_evcs(evcs_data, monkeypatch) -> None:
     """Test get_evcs."""
-    httpx_mock, resp_mock = MagicMock(), MagicMock()
-    resp_mock.json.return_value = evcs_data
-    httpx_mock.return_value = resp_mock
-    monkeypatch.setattr("httpx.get", httpx_mock)
-    data = get_evcs()
-    assert (
-        httpx_mock.call_args[0][0]
-        == "http://0.0.0.0:8181/api/kytos/mef_eline/v2/evc/?archived=false"
-    )
-    assert list(data.keys()) == ["3766c105686749", "cbee9338673946"]
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.get.return_value = Response(200, json=evcs_data, request=MagicMock())
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    data = await get_evcs()
+    assert aclient_mock.get.call_args[0][0] == "/evc/?archived=false"
+    assert data == evcs_data
 
 
-def test_get_evc(evcs_data, monkeypatch) -> None:
+async def test_get_evc(evcs_data, monkeypatch) -> None:
     """Test get_evc."""
     evc_id = "3766c105686749"
     evc_data = evcs_data[evc_id]
-    httpx_mock, resp_mock = MagicMock(), MagicMock()
-    resp_mock.json.return_value = evc_data
-    httpx_mock.return_value = resp_mock
-    monkeypatch.setattr("httpx.get", httpx_mock)
-    data = get_evc(evc_id)
-    assert (
-        httpx_mock.call_args[0][0]
-        == f"http://0.0.0.0:8181/api/kytos/mef_eline/v2/evc/{evc_id}"
-    )
+
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.get.return_value = Response(200, json=evc_data, request=MagicMock())
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+
+    data = await get_evc(evc_id)
+    assert aclient_mock.get.call_args[0][0] == f"/evc/{evc_id}"
     assert data[evc_id] == evc_data
 
 
-def test_get_evc_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
-    """Test get_evc_flows."""
+async def test_get_stored_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
+    """Test get_stored_flows."""
     evc_data = intra_evc_evpl_flows_data
     dpid = "00:00:00:00:00:00:00:01"
-    cookie = evc_data[dpid][0]["flow"]["cookie"]
-    httpx_mock, resp_mock = MagicMock(), MagicMock()
-    resp_mock.json.return_value = evc_data
-    httpx_mock.return_value = resp_mock
-    monkeypatch.setattr("httpx.get", httpx_mock)
-    data = get_evc_flows(cookie, dpid)
+    cookies = [evc_data[dpid][0]["flow"]["cookie"]]
+
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.get.return_value = Response(
+        200, json=intra_evc_evpl_flows_data, request=MagicMock()
+    )
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+
+    data = await get_stored_flows(cookies)
     assert (
-        httpx_mock.call_args[0][0]
-        == "http://0.0.0.0:8181/api/kytos/flow_manager/v2/stored_flows?"
-        f"cookie_range={cookie}&cookie_range={cookie}"
-        f"&state=installed&state=pending&dpid={dpid}"
+        aclient_mock.get.call_args[0][0] == "/stored_flows?"
+        f"state=installed&state=pending&"
+        f"cookie_range={cookies[0]}&cookie_range={cookies[0]}"
     )
     assert len(data) == 1
-    assert len(data[dpid]) == 2
+    assert list(data.keys()) == cookies
+    assert len(data[cookies[0]]) == 2
+    for flows in data.values():
+        for flow in flows:
+            assert flow["switch"] == dpid
