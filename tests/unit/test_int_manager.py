@@ -36,12 +36,17 @@ class TestINTManager:
         """Test enable INT metadata args."""
         controller = MagicMock()
         api_mock = AsyncMock()
+        stored_flows_mock = AsyncMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.utils.get_found_stored_flows", stored_flows_mock
+        )
 
         int_manager = INTManager(controller)
         int_manager.remove_int_flows = AsyncMock()
         await int_manager.enable_int({}, False)
 
+        assert stored_flows_mock.call_count == 1
         assert api_mock.add_evcs_metadata.call_count == 1
         args = api_mock.add_evcs_metadata.call_args[0]
         assert args[0] == {}
