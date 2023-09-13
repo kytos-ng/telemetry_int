@@ -108,6 +108,12 @@ def _build_int_source_flows(
                         # The choice for destination is at the INT Sink.
                         action["port"] = proxy_port.source.port_number
 
+                # remove set_vlan action if it exists, this is for
+                # avoding a redundant set_vlan since it'll be set in the egress sink
+                instruction["actions"] = utils.modify_actions(
+                    instruction["actions"], ["set_vlan"], remove=True
+                )
+
     instructions = utils.add_to_apply_actions(
         new_int_flow_tbl_2["flow"]["instructions"],
         new_instruction={"action_type": "add_int_metadata"},
