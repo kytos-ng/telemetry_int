@@ -4,6 +4,7 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 """
 
+import asyncio
 from datetime import datetime
 
 import napps.kytos.telemetry_int.kytos_api_helper as api
@@ -44,6 +45,7 @@ class Main(KytosNApp):
         """
 
         self.int_manager = INTManager(self.controller)
+        self._ofpt_error_lock = asyncio.Lock()
 
     def execute(self):
         """Run after the setup method execution.
@@ -210,20 +212,49 @@ class Main(KytosNApp):
         """
         if event.content.get("error_exception"):
             return
+        if event.content.get("error_command") != "add":
+            return
 
         flow = event.content["flow"]
-        metadata = {
-            "telemetry": {
-                "enabled": False,
-                "status": "DOWN",
-                "status_reason": ["ofpt_error"],
-                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
-            }
-        }
         evc_id = utils.get_id_from_cookie(flow.cookie)
-        log.error(f"Disabling EVC({evc_id}) due to OFPT_ERROR")
-        evcs = {evc_id: {evc_id: evc_id}}
-        await api.add_evcs_metadata(evcs, metadata, force=True)
+        async with self._ofpt_error_lock:
+            evc = await api.get_evc(evc_id)
+            if (
+                not evc
+                or "telemetry" not in evc[evc_id]["metadata"]
+                or "enabled" not in evc[evc_id]["metadata"]["telemetry"]
+                or not evc[evc_id]["metadata"]["telemetry"]["enabled"]
+            ):
+                return
+
+            metadata = {
+                "telemetry": {
+                    "enabled": False,
+                    "status": "DOWN",
+                    "status_reason": ["ofpt_error"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            log.error(
+                f"Disabling EVC({evc_id}) due to OFPT_ERROR, "
+                f"error_type: {event.content.get('error_type')}, "
+                f"error_code: {event.content.get('error_code')}, "
+                f"flow: {flow.as_dict()} "
+            )
+
+            evcs = {evc_id: {evc_id: evc_id}}
+            stored_flows = await api.get_stored_flows(
+                [
+                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                    for evc_id in evcs
+                ]
+            )
+            await asyncio.gather(
+                self.int_manager.remove_int_flows(stored_flows),
+                api.add_evcs_metadata(evcs, metadata, force=True),
+            )
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
