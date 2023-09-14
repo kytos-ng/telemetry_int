@@ -4,10 +4,11 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 """
 
+from datetime import datetime
+
 import napps.kytos.telemetry_int.kytos_api_helper as api
 from napps.kytos.telemetry_int import settings, utils
 from tenacity import RetryError
-from datetime import datetime
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import alisten_to
@@ -202,8 +203,8 @@ class Main(KytosNApp):
             await self.int_manager.remove_int_flows(stored_flows)
 
     @alisten_to("kytos/flow_manager.flow.error")
-    async def handle_flow_mod_error(self, event: KytosEvent):
-        """Handle flow mod errors.
+    async def on_flow_mod_error(self, event: KytosEvent):
+        """On flow mod errors.
 
         Only OFPT_ERRORs will be handled, telemetry_int already uses force: true
         """
@@ -221,7 +222,7 @@ class Main(KytosNApp):
         }
         evc_id = utils.get_id_from_cookie(flow.cookie)
         evcs = {evc_id: {evc_id: evc_id}}
-        await api.add_evcs_metadata(evcs, metadata, force=True),
+        await api.add_evcs_metadata(evcs, metadata, force=True)
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
