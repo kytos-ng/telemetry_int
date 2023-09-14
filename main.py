@@ -7,6 +7,7 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 import napps.kytos.telemetry_int.kytos_api_helper as api
 from napps.kytos.telemetry_int import settings, utils
 from tenacity import RetryError
+from datetime import datetime
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.helpers import alisten_to
@@ -199,6 +200,28 @@ class Main(KytosNApp):
                 [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)]
             )
             await self.int_manager.remove_int_flows(stored_flows)
+
+    @alisten_to("kytos/flow_manager.flow.error")
+    async def handle_flow_mod_error(self, event: KytosEvent):
+        """Handle flow mod errors.
+
+        Only OFPT_ERRORs will be handled, telemetry_int already uses force: true
+        """
+        if event.content.get("error_exception"):
+            return
+
+        flow = event.content["flow"]
+        metadata = {
+            "telemetry": {
+                "enabled": False,
+                "status": "DOWN",
+                "status_reason": ["ofpt_error"],
+                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+        }
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        evcs = {evc_id: {evc_id: evc_id}}
+        await api.add_evcs_metadata(evcs, metadata, force=True),
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
