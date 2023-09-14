@@ -221,6 +221,7 @@ class Main(KytosNApp):
             }
         }
         evc_id = utils.get_id_from_cookie(flow.cookie)
+        log.error(f"Disabling EVC({evc_id}) due to OFPT_ERROR")
         evcs = {evc_id: {evc_id: evc_id}}
         await api.add_evcs_metadata(evcs, metadata, force=True)
 
