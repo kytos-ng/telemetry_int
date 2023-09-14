@@ -46,7 +46,7 @@ async def get_evcs() -> dict:
     before_sleep=before_sleep,
     retry=retry_if_exception_type(httpx.RequestError),
 )
-async def get_evc(evc_id: str) -> dict:
+async def get_evc(evc_id: str, exclude_archived=True) -> dict:
     """Get EVC."""
     async with httpx.AsyncClient(base_url=settings.mef_eline_api) as client:
         response = await client.get(f"/evc/{evc_id}", timeout=10)
@@ -60,7 +60,7 @@ async def get_evc(evc_id: str) -> dict:
                 f"status code {response.status_code}, response text: {response.text}"
             )
         data = response.json()
-        if data["archived"]:
+        if data["archived"] and exclude_archived:
             return {}
         return {data["id"]: data}
 

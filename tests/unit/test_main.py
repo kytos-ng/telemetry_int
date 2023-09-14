@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 from napps.kytos.telemetry_int.main import Main
+from napps.kytos.telemetry_int import utils
 from kytos.lib.helpers import get_controller_mock
 from kytos.core.events import KytosEvent
 
@@ -19,13 +20,15 @@ class TestMain:
     async def test_on_flow_mod_error(self, monkeypatch) -> None:
         """Test on_flow_mod_error."""
         api_mock, flow = AsyncMock(), MagicMock()
-        flow.cookie = 1
+        flow.cookie = 0xA800000000000001
         monkeypatch.setattr(
             "napps.kytos.telemetry_int.main.api",
             api_mock,
         )
         api_mock.get_evc.return_value = {
-            str(flow.cookie): {"metadata": {"telemetry": {"enabled": True}}}
+            utils.get_id_from_cookie(flow.cookie): {
+                "metadata": {"telemetry": {"enabled": True}}
+            }
         }
         self.napp.int_manager.remove_int_flows = AsyncMock()
 

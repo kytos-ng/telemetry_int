@@ -210,15 +210,19 @@ class Main(KytosNApp):
 
         Only OFPT_ERRORs will be handled, telemetry_int already uses force: true
         """
-        if event.content.get("error_exception"):
-            return
-        if event.content.get("error_command") != "add":
+        flow = event.content["flow"]
+        if any(
+            (
+                event.content.get("error_exception"),
+                event.content.get("error_command") != "add",
+                flow.cookie >> 56 != settings.INT_COOKIE_PREFIX,
+            )
+        ):
             return
 
-        flow = event.content["flow"]
-        evc_id = utils.get_id_from_cookie(flow.cookie)
         async with self._ofpt_error_lock:
-            evc = await api.get_evc(evc_id)
+            evc_id = utils.get_id_from_cookie(flow.cookie)
+            evc = await api.get_evc(evc_id, exclude_archived=False)
             if (
                 not evc
                 or "telemetry" not in evc[evc_id]["metadata"]
