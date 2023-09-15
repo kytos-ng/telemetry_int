@@ -52,7 +52,7 @@ def evcs_data() -> dict:
         "flow_removed_at": null,
         "updated_at": "2023-07-28T23:02:04"
     },
-    "cbee9338673946": {
+    "16a76ae61b2f46": {
         "active": true,
         "archived": false,
         "backup_path": [],
@@ -60,12 +60,12 @@ def evcs_data() -> dict:
         "circuit_scheduler": [],
         "current_path": [
             {
-                "id": "78282c4",
+                "id": "78282c4d5",
                 "endpoint_a": {
                     "id": "00:00:00:00:00:00:00:01:3",
                     "name": "s1-eth3",
                     "port_number": 3,
-                    "mac": "16:bf:c9:82:e2:45",
+                    "mac": "7e:b7:b4:cd:dd:ad",
                     "switch": "00:00:00:00:00:00:00:01",
                     "type": "interface",
                     "nni": true,
@@ -77,13 +77,13 @@ def evcs_data() -> dict:
                     "enabled": true,
                     "status": "UP",
                     "status_reason": [],
-                    "link": "78282c4"
+                    "link": "78282c4d5"
                 },
                 "endpoint_b": {
                     "id": "00:00:00:00:00:00:00:02:2",
                     "name": "s2-eth2",
                     "port_number": 2,
-                    "mac": "2e:cf:50:f4:78:27",
+                    "mac": "a6:57:de:b1:a2:f6",
                     "switch": "00:00:00:00:00:00:00:02",
                     "type": "interface",
                     "nni": true,
@@ -95,12 +95,12 @@ def evcs_data() -> dict:
                     "enabled": true,
                     "status": "UP",
                     "status_reason": [],
-                    "link": "78282c4"
+                    "link": "78282c4d5"
                 },
                 "metadata": {
                     "s_vlan": {
                         "tag_type": 1,
-                        "value": 2
+                        "value": 1
                     }
                 },
                 "active": true,
@@ -109,12 +109,12 @@ def evcs_data() -> dict:
                 "status_reason": []
             },
             {
-                "id": "4d42dc0",
+                "id": "4d42dc085",
                 "endpoint_a": {
                     "id": "00:00:00:00:00:00:00:02:3",
                     "name": "s2-eth3",
                     "port_number": 3,
-                    "mac": "7a:aa:59:ad:40:8d",
+                    "mac": "4e:2e:61:6c:f4:c0",
                     "switch": "00:00:00:00:00:00:00:02",
                     "type": "interface",
                     "nni": true,
@@ -126,13 +126,13 @@ def evcs_data() -> dict:
                     "enabled": true,
                     "status": "UP",
                     "status_reason": [],
-                    "link": "4d42dc0"
+                    "link": "4d42dc085"
                 },
                 "endpoint_b": {
                     "id": "00:00:00:00:00:00:00:03:2",
                     "name": "s3-eth2",
                     "port_number": 2,
-                    "mac": "72:4b:26:d0:d5:99",
+                    "mac": "9e:84:49:fc:13:14",
                     "switch": "00:00:00:00:00:00:00:03",
                     "type": "interface",
                     "nni": true,
@@ -144,12 +144,12 @@ def evcs_data() -> dict:
                     "enabled": true,
                     "status": "UP",
                     "status_reason": [],
-                    "link": "4d42dc0"
+                    "link": "4d42dc085"
                 },
                 "metadata": {
                     "s_vlan": {
                         "tag_type": 1,
-                        "value": 2
+                        "value": 1
                     }
                 },
                 "active": true,
@@ -158,133 +158,50 @@ def evcs_data() -> dict:
                 "status_reason": []
             }
         ],
-        "dynamic_backup_path": false,
+        "dynamic_backup_path": true,
         "enabled": true,
         "failover_path": [],
-        "id": "cbee9338673946",
+        "id": "16a76ae61b2f46",
         "metadata": {},
-        "name": "epl_static",
-        "primary_path": [
-            {
-                "id": "78282c4",
-                "endpoint_a": {
-                    "id": "00:00:00:00:00:00:00:01:3",
-                    "name": "s1-eth3",
-                    "port_number": 3,
-                    "mac": "16:bf:c9:82:e2:45",
-                    "switch": "00:00:00:00:00:00:00:01",
-                    "type": "interface",
-                    "nni": true,
-                    "uni": false,
-                    "speed": 1250000000.0,
-                    "metadata": {},
-                    "lldp": true,
-                    "active": true,
-                    "enabled": true,
-                    "status": "UP",
-                    "status_reason": [],
-                    "link": "78282c4"
-                },
-                "endpoint_b": {
-                    "id": "00:00:00:00:00:00:00:02:2",
-                    "name": "s2-eth2",
-                    "port_number": 2,
-                    "mac": "2e:cf:50:f4:78:27",
-                    "switch": "00:00:00:00:00:00:00:02",
-                    "type": "interface",
-                    "nni": true,
-                    "uni": false,
-                    "speed": 1250000000.0,
-                    "metadata": {},
-                    "lldp": true,
-                    "active": true,
-                    "enabled": true,
-                    "status": "UP",
-                    "status_reason": [],
-                    "link": "78282c4"
-                },
-                "metadata": {
-                    "s_vlan": {
-                        "tag_type": 1,
-                        "value": 2
-                    }
-                },
-                "active": true,
-                "enabled": true,
-                "status": "UP",
-                "status_reason": []
-            },
-            {
-                "id": "4d42dc0",
-                "endpoint_a": {
-                    "id": "00:00:00:00:00:00:00:02:3",
-                    "name": "s2-eth3",
-                    "port_number": 3,
-                    "mac": "7a:aa:59:ad:40:8d",
-                    "switch": "00:00:00:00:00:00:00:02",
-                    "type": "interface",
-                    "nni": true,
-                    "uni": false,
-                    "speed": 1250000000.0,
-                    "metadata": {},
-                    "lldp": true,
-                    "active": true,
-                    "enabled": true,
-                    "status": "UP",
-                    "status_reason": [],
-                    "link": "4d42dc0"
-                },
-                "endpoint_b": {
-                    "id": "00:00:00:00:00:00:00:03:2",
-                    "name": "s3-eth2",
-                    "port_number": 2,
-                    "mac": "72:4b:26:d0:d5:99",
-                    "switch": "00:00:00:00:00:00:00:03",
-                    "type": "interface",
-                    "nni": true,
-                    "uni": false,
-                    "speed": 1250000000.0,
-                    "metadata": {},
-                    "lldp": true,
-                    "active": true,
-                    "enabled": true,
-                    "status": "UP",
-                    "status_reason": [],
-                    "link": "4d42dc0"
-                },
-                "metadata": {
-                    "s_vlan": {
-                        "tag_type": 1,
-                        "value": 2
-                    }
-                },
-                "active": true,
-                "enabled": true,
-                "status": "UP",
-                "status_reason": []
-            }
-        ],
-        "service_level": 0,
+        "name": "evpl",
+        "primary_path": [],
+        "service_level": 6,
         "uni_a": {
+            "tag": {
+                "tag_type": 1,
+                "value": 101
+            },
             "interface_id": "00:00:00:00:00:00:00:01:1"
         },
         "uni_z": {
+            "tag": {
+                "tag_type": 1,
+                "value": 102
+            },
             "interface_id": "00:00:00:00:00:00:00:03:1"
         },
         "sb_priority": null,
         "execution_rounds": 0,
         "owner": null,
-        "queue_id": null,
-        "primary_constraints": {},
-        "secondary_constraints": {},
+        "queue_id": -1,
+        "primary_constraints": {
+            "mandatory_metrics": {
+                "ownership": "blue"
+            }
+        },
+        "secondary_constraints": {
+            "mandatory_metrics": {
+                "ownership": "blue"
+            }
+        },
         "primary_links": [],
         "backup_links": [],
-        "start_date": "2023-07-28T23:30:59",
-        "creation_time": "2023-07-28T23:30:59",
-        "request_time": "2023-07-28T23:30:59",
+        "start_date": "2023-09-15T13:11:53",
+        "creation_time": "2023-09-15T13:11:53",
+        "request_time": "2023-09-15T13:11:53",
         "end_date": null,
         "flow_removed_at": null,
-        "updated_at": "2023-07-28T23:30:59"
+        "updated_at": "2023-09-15T13:11:53"
     }
 }
 """
@@ -422,6 +339,222 @@ def intra_evc_epl_flows_data() -> dict:
             "state": "installed",
             "switch": "00:00:00:00:00:00:00:01",
             "updated_at": "2023-07-28T23:01:12.664000"
+        }
+    ]
+}
+"""
+    return json.loads(data)
+
+
+@pytest.fixture
+def inter_evc_evpl_flows_data() -> None:
+    """inter evc evpl flows data."""
+    data = """
+{
+    "00:00:00:00:00:00:00:02": [
+        {
+            "flow": {
+                "owner": "mef_eline",
+                "cookie": 12256167513504296774,
+                "match": {
+                    "in_port": 2,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 3
+                    }
+                ],
+                "table_id": 0,
+                "table_group": "evpl",
+                "priority": 20000,
+                "idle_timeout": 0,
+                "hard_timeout": 0
+            },
+            "flow_id": "4718c55780c7ff62be3fcb09f4e3d06f",
+            "id": "c96c36720cd2c9d761345588bf68c33a",
+            "inserted_at": "2023-09-15T13:11:53.147000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:02",
+            "updated_at": "2023-09-15T13:11:53.158000"
+        },
+        {
+            "flow": {
+                "owner": "mef_eline",
+                "cookie": 12256167513504296774,
+                "match": {
+                    "in_port": 3,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 2
+                    }
+                ],
+                "table_id": 0,
+                "table_group": "evpl",
+                "priority": 20000,
+                "idle_timeout": 0,
+                "hard_timeout": 0
+            },
+            "flow_id": "f4f4950beaf5bc8cb4b86c6799e2759e",
+            "id": "aefa4b6945337beb3125b96c60ecce28",
+            "inserted_at": "2023-09-15T13:11:53.147000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:02",
+            "updated_at": "2023-09-15T13:11:53.158000"
+        }
+    ],
+    "00:00:00:00:00:00:00:01": [
+        {
+            "flow": {
+                "owner": "mef_eline",
+                "cookie": 12256167513504296774,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": 101
+                },
+                "actions": [
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 102
+                    },
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 3
+                    }
+                ],
+                "table_id": 0,
+                "table_group": "evpl",
+                "priority": 20000,
+                "idle_timeout": 0,
+                "hard_timeout": 0
+            },
+            "flow_id": "97e07c78a6f19bb4b4c7a13d2fc2a1bc",
+            "id": "114d32fe5e21cbad93fe9881f579e9de",
+            "inserted_at": "2023-09-15T13:11:53.162000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:01",
+            "updated_at": "2023-09-15T13:11:53.184000"
+        },
+        {
+            "flow": {
+                "owner": "mef_eline",
+                "cookie": 12256167513504296774,
+                "match": {
+                    "in_port": 3,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "pop_vlan"
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 1
+                    }
+                ],
+                "table_id": 0,
+                "table_group": "evpl",
+                "priority": 20000,
+                "idle_timeout": 0,
+                "hard_timeout": 0
+            },
+            "flow_id": "40cdc7cbea439f4f714d2f2bc1dd0380",
+            "id": "9f15a56df3e30ef08745fdf16c5f389b",
+            "inserted_at": "2023-09-15T13:11:53.162000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:01",
+            "updated_at": "2023-09-15T13:11:53.184000"
+        }
+    ],
+    "00:00:00:00:00:00:00:03": [
+        {
+            "flow": {
+                "owner": "mef_eline",
+                "cookie": 12256167513504296774,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": 102
+                },
+                "actions": [
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 101
+                    },
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 2
+                    }
+                ],
+                "table_id": 0,
+                "table_group": "evpl",
+                "priority": 20000,
+                "idle_timeout": 0,
+                "hard_timeout": 0
+            },
+            "flow_id": "c3358aa562a5293443248ba6d551c623",
+            "id": "d830b9abbc4db82cd25169c0a91544b5",
+            "inserted_at": "2023-09-15T13:11:53.188000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:03",
+            "updated_at": "2023-09-15T13:11:53.201000"
+        },
+        {
+            "flow": {
+                "owner": "mef_eline",
+                "cookie": 12256167513504296774,
+                "match": {
+                    "in_port": 2,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "pop_vlan"
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 1
+                    }
+                ],
+                "table_id": 0,
+                "table_group": "evpl",
+                "priority": 20000,
+                "idle_timeout": 0,
+                "hard_timeout": 0
+            },
+            "flow_id": "9b96726b751a36c83eaaaee243181160",
+            "id": "106216e182ee653cf1901c3170efee23",
+            "inserted_at": "2023-09-15T13:11:53.188000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:03",
+            "updated_at": "2023-09-15T13:11:53.201000"
         }
     ]
 }
