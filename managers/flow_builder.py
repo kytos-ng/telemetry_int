@@ -50,7 +50,6 @@ def _build_int_source_flows(
     new_flows = []
     new_int_flow_tbl_0_tcp = {}
     src_uni = evc[uni_src_key]
-    proxy_port = src_uni["proxy_port"]
 
     # Get the original flows
     dpid = src_uni["switch"]
@@ -95,8 +94,10 @@ def _build_int_source_flows(
     new_int_flow_tbl_2["flow"]["table_id"] = settings.INT_TABLE
     utils.set_table_group(new_int_flow_tbl_2)
 
-    # if intra-switch EVC, then output port should be the proxy
+    # if intra-switch EVC, then output port should be the dst UNI's source port
     if utils.is_intra_switch_evc(evc):
+        dst_uni = evc["uni_z" if uni_src_key == "uni_a" else "uni_a"]
+        proxy_port = dst_uni["proxy_port"]
         for instruction in new_int_flow_tbl_2["flow"]["instructions"]:
             if instruction["instruction_type"] == "apply_actions":
                 for action in instruction["actions"]:
@@ -106,6 +107,12 @@ def _build_int_source_flows(
                         # home physical loops.
                         # The choice for destination is at the INT Sink.
                         action["port"] = proxy_port.source.port_number
+
+                # remove set_vlan action if it exists, this is for
+                # avoding a redundant set_vlan since it'll be set in the egress sink
+                instruction["actions"] = utils.modify_actions(
+                    instruction["actions"], ["set_vlan"], remove=True
+                )
 
     instructions = utils.add_to_apply_actions(
         new_int_flow_tbl_2["flow"]["instructions"],

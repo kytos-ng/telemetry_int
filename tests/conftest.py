@@ -402,7 +402,7 @@ def intra_evc_epl_flows_data() -> dict:
                 "owner": "mef_eline",
                 "cookie": 12265385089372284745,
                 "match": {
-                    "in_port": 2,
+                    "in_port": 2
                 },
                 "actions": [
                     {

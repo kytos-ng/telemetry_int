@@ -145,7 +145,7 @@ class INTManager:
                 dest_status = pp_a.status if pp_a.destination else None
                 raise ProxyPortStatusNotUP(
                     evc_id,
-                    f"proxy_port of {uni_a['interface_id']} isn't UP."
+                    f"proxy_port of {uni_a['interface_id']} isn't UP. "
                     f"source {pp_a.source.id} status {pp_a.source.status}, "
                     f"destination {dest_id} status {dest_status}",
                 )
