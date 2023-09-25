@@ -151,7 +151,7 @@ def _build_int_hop_flows(
 
         new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
         utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
-        utils.set_new_cookie(flow)
+        utils.set_new_cookie(new_int_flow_tbl_0_tcp)
         utils.set_owner(new_int_flow_tbl_0_tcp)
 
         # Prepare TCP Flow

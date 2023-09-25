@@ -13,7 +13,22 @@ from kytos.core.common import EntityStatus
 def test_build_int_flows_intra_evpl(
     evcs_data, intra_evc_evpl_flows_data, monkeypatch
 ) -> None:
-    """Test build INT flows intra EVPL."""
+    """Test build INT flows intra EVPL.
+
+                            +--------+
+                            |        |
+                         10 |      11|
+                   +--------+--------v--+
+                   |                    | 20
+                1  |                    +-----+
+     --------------+                    |     |
+        (vlan 200) |                    |     |
+                   |      sw1           |     |
+               2   |                    |21   |
+    ---------------+                    <-----+
+        (vlan 200) |                    |
+                   +--------------------+
+    """
     controller = get_controller_mock()
     int_manager = INTManager(controller)
     get_proxy_port_or_raise = MagicMock()
@@ -318,7 +333,22 @@ def test_build_int_flows_intra_evpl(
 def test_build_int_flows_intra_epl(
     evcs_data, intra_evc_epl_flows_data, monkeypatch
 ) -> None:
-    """Test build INT flows intra EPL."""
+    """Test build INT flows intra EPL.
+
+                            +--------+
+                            |        |
+                         10 |      11|
+                   +--------+--------v--+
+                   |                    | 20
+                1  |                    +-----+
+     --------------+                    |     |
+                   |                    |     |
+                   |      sw1           |     |
+               2   |                    |21   |
+    ---------------+                    <-----+
+                   |                    |
+                   +--------------------+
+    """
     controller = get_controller_mock()
     int_manager = INTManager(controller)
     get_proxy_port_or_raise = MagicMock()
