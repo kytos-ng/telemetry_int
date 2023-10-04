@@ -95,14 +95,14 @@ class Main(KytosNApp):
             evcs = {k: v for k, v in evcs.items() if not utils.has_int_enabled(v)}
             if not evcs:
                 # There's no non-INT EVCs to get enabled.
-                return JSONResponse({})
+                return JSONResponse(list(evcs.keys()))
 
         try:
             await self.int_manager.enable_int(evcs, force)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
         except (EVCHasINT, ProxyPortStatusNotUP) as exc:
-            raise HTTPException(400, detail=str(exc))
+            raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
             log.error(exc_error)
@@ -112,7 +112,7 @@ class Main(KytosNApp):
             log.error(exc_error)
             raise HTTPException(500, detail=exc_error)
 
-        return JSONResponse({}, status_code=201)
+        return JSONResponse(list(evcs.keys()), status_code=201)
 
     @rest("v1/evc/disable", methods=["POST"])
     async def disable_telemetry(self, request: Request) -> JSONResponse:
@@ -146,14 +146,14 @@ class Main(KytosNApp):
             evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
             if not evcs:
                 # There's no INT EVCs to get disabled.
-                return JSONResponse({})
+                return JSONResponse(list(evcs.keys()))
 
         try:
             await self.int_manager.disable_int(evcs, force)
         except EVCNotFound as exc:
             raise HTTPException(404, detail=str(exc))
         except EVCHasNoINT as exc:
-            raise HTTPException(400, detail=str(exc))
+            raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
             log.error(exc_error)
@@ -163,7 +163,7 @@ class Main(KytosNApp):
             log.error(exc_error)
             raise HTTPException(500, detail=exc_error)
 
-        return JSONResponse({})
+        return JSONResponse(list(evcs.keys()))
 
     @rest("v1/evc")
     def get_evcs(self, _request: Request) -> JSONResponse:

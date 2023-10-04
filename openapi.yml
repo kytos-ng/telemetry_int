@@ -1,0 +1,113 @@
+openapi: 3.0.0
+info:
+  version: v1
+  title: In-band Network Telemetry (INT) for EVCs
+  description: NApp to deploy In-band Network Telemetry (INT) for EVCs
+servers:
+  - url: /api/kytos/telemetry_int
+paths:
+  /v1/evc/enable:
+    post:
+      summary: Enable INT on EVCs
+      operationId: enable_evc
+      requestBody:
+        description: Enable INT on EVCs. If the list of evc_ids is empty, it will try to enable on non-INT EVCs.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+                force:
+                  type: boolean
+                  description: Force INT to get enabled again. It will enable even if the EVC already has INT or if a ProxyPort isn't UP.
+                  default: false
+      responses:
+        '201':
+          description: INT enabled on EVCs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          description: Invalid request payload
+        '409':
+          description: Conflict resource state. For instance, when an EVC already has INT or a ProxyPort status isn't UP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '404':
+          description: Dependent resource (EVC, flows or ProxyPort) not found 
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
+  /v1/evc/disable:
+    post:
+      summary: Disable INT on EVCs
+      operationId: disable_evc
+      requestBody:
+        description: Disable INT on EVCs. If the list of evc_ids is empty, it will try to disable on all INT EVCs.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+                force:
+                  type: boolean
+                  description: Force INT to get disabled again. It will try to disable even if the EVC isn't found or it doesn't have INT.
+                  default: false
+      responses:
+        '201':
+          description: INT disabled on EVCs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          description: Invalid request payload
+        '409':
+          description: Conflict resource state. For instance, when an EVC already has INT or a ProxyPort status isn't UP.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '404':
+          description: Dependent resource (EVC, flows or ProxyPort) not found 
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
+
+
+components:
+  schemas:
+    ErrResp: # Can be referenced via '#/components/schemas/ErrResp'
+      type: object
+      properties:
+        description:
+          type: string
+        code:
+          type: number
