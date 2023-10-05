@@ -176,11 +176,7 @@ class Main(KytosNApp):
         """REST to return the list of EVCs with INT enabled"""
         try:
             evcs = await api.get_evcs()
-            evcs = {
-                k: v
-                for k, v in evcs.items()
-                if utils.has_int_enabled(v)
-            }
+            evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
             return JSONResponse(evcs)
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
