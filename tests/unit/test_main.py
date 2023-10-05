@@ -75,28 +75,25 @@ class TestMain:
 
     async def test_get_enabled_evcs(self, monkeypatch) -> None:
         """Test get enabled evcs."""
-        api_mock, flow1, flow2 = AsyncMock(), MagicMock(), MagicMock()
-        flow1.cookie = 0xA800000000000001
-        flow2.cookie = 0xA800000000000002
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
         monkeypatch.setattr(
             "napps.kytos.telemetry_int.main.api",
             api_mock,
         )
 
-        evc1_id = utils.get_id_from_cookie(flow1.cookie)
-        evc2_id = utils.get_id_from_cookie(flow2.cookie)
+        evc_id = utils.get_id_from_cookie(flow.cookie)
         api_mock.get_evcs.return_value = {
-            evc1_id: {"metadata": {"telemetry": {"enabled": False}}},
-            evc2_id: {"metadata": {"telemetry": {"enabled": True}}}
+            evc_id: {"metadata": {"telemetry": {"enabled": True}}},
         }
 
         endpoint = f"{self.base_endpoint}/evc"
         response = await self.api_client.get(endpoint)
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
-        assert evc1_id not in data
-        assert evc2_id in data
+        assert evc_id in data
 
     async def test_on_flow_mod_error(self, monkeypatch) -> None:
         """Test on_flow_mod_error."""
