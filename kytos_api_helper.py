@@ -25,11 +25,15 @@ from kytos.core.retry import before_sleep
     before_sleep=before_sleep,
     retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
 )
-async def get_evcs() -> dict:
+async def get_evcs(**kwargs) -> dict:
     """Get EVCs."""
     archived = "false"
     async with httpx.AsyncClient(base_url=settings.mef_eline_api) as client:
-        response = await client.get(f"/evc/?archived={archived}", timeout=10)
+        endpoint = f"/evc/?archived={archived}"
+        if kwargs:
+            query_args = [f"{k}={v}" for k, v in kwargs.items()]
+            endpoint = f"{endpoint}&{'&'.join(query_args)}"
+        response = await client.get(endpoint, timeout=10)
         if response.is_server_error:
             raise httpx.RequestError(response.text)
         if not response.is_success:
