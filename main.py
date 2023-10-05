@@ -172,9 +172,24 @@ class Main(KytosNApp):
         return JSONResponse(list(evcs.keys()))
 
     @rest("v1/evc")
-    def get_evcs(self, _request: Request) -> JSONResponse:
+    async def get_evcs(self, _request: Request) -> JSONResponse:
         """REST to return the list of EVCs with INT enabled"""
-        return JSONResponse(utils.get_evc_with_telemetry())
+        try:
+            evcs = await api.get_evcs()
+            evcs = {
+                k: v
+                for k, v in evcs.items()
+                if utils.has_int_enabled(v)
+            }
+            return JSONResponse(evcs)
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
 
     @rest("v1/sync")
     def sync_flows(self, _request: Request) -> JSONResponse:
