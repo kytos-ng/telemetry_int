@@ -5,6 +5,7 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 """
 
 import asyncio
+import pathlib
 from datetime import datetime
 
 import napps.kytos.telemetry_int.kytos_api_helper as api
@@ -12,7 +13,7 @@ from napps.kytos.telemetry_int import settings, utils
 from tenacity import RetryError
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
-from kytos.core.helpers import alisten_to
+from kytos.core.helpers import alisten_to, avalidate_openapi_request, load_spec
 from kytos.core.rest_api import HTTPException, JSONResponse, Request, aget_json_or_400
 
 from .exceptions import (
@@ -34,6 +35,8 @@ class Main(KytosNApp):
 
     This class is the entry point for this NApp.
     """
+
+    spec = load_spec(pathlib.Path(__file__).parent / "openapi.yml")
 
     def setup(self):
         """Replace the '__init__' method for the KytosNApp subclass.
@@ -68,6 +71,7 @@ class Main(KytosNApp):
 
         If a list of evc_ids is empty, it'll enable on non-INT EVCs.
         """
+        await avalidate_openapi_request(self.spec, request)
 
         try:
             content = await aget_json_or_400(request)
@@ -120,6 +124,8 @@ class Main(KytosNApp):
 
         If a list of evc_ids is empty, it'll disable on all INT EVCs.
         """
+        await avalidate_openapi_request(self.spec, request)
+
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
