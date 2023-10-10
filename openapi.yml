@@ -6,10 +6,21 @@ info:
 servers:
   - url: /api/kytos/telemetry_int
 paths:
+  /v1/evc:
+    get:
+      summary: List all INT enabled EVCs
+      operationId: list_evcs
+      responses:
+        '200':
+          description: List all INT enabled EVCs. The schema object is the same as mef_eline '#/components/schemas/Circuit'
+          content:
+            application/json:
+              schema:
+                type: object
   /v1/evc/enable:
     post:
       summary: Enable INT on EVCs
-      operationId: enable_evc
+      operationId: enable_evcs
       requestBody:
         description: Enable INT on EVCs. If the list of evc_ids is empty, it will try to enable on non-INT EVCs.
         required: true
@@ -56,7 +67,7 @@ paths:
   /v1/evc/disable:
     post:
       summary: Disable INT on EVCs
-      operationId: disable_evc
+      operationId: disable_evcs
       requestBody:
         description: Disable INT on EVCs. If the list of evc_ids is empty, it will try to disable on all INT EVCs.
         required: true
