@@ -42,6 +42,13 @@ class ProxyPortStatusNotUP(ProxyPortError):
     """ProxyPortStatusNotUP."""
 
 
+class ProxyPortSameSourceIntraEVC(ProxyPortError):
+    """ProxyPortSameSourceIntraEVC.
+
+    Intra EVC UNIs must use different proxy ports.
+    """
+
+
 class EVCHasNoINT(EVCError):
     """Exception in case the EVC doesn't have INT enabled."""
 
