@@ -10,6 +10,11 @@ from kytos.lib.helpers import get_controller_mock, get_switch_mock, get_interfac
 from kytos.core.common import EntityStatus
 
 
+def test_flow_builder_default_table_groups() -> None:
+    """test flow builder default table groups."""
+    assert FlowBuilder().table_group == {"evpl": 2, "epl": 3}
+
+
 def test_build_int_flows_intra_evpl(
     evcs_data, intra_evc_evpl_flows_data, monkeypatch
 ) -> None:
