@@ -180,21 +180,6 @@ def test_set_owner() -> None:
     assert flow["flow"]["owner"] == "telemetry_int"
 
 
-def test_set_table_group() -> None:
-    """Test set_table_group."""
-    flow = {
-        "flow": {
-            "priority": 100,
-            "match": {"in_port": 100},
-            "actions": [{"action_type": "output", "port": 1}],
-        }
-    }
-    utils.set_table_group(flow)
-    assert flow["flow"]["table_group"] == "base"
-    utils.set_table_group(flow, "another")
-    assert flow["flow"]["table_group"] == "another"
-
-
 @pytest.mark.parametrize(
     "actions,actions_to_change,remove,expected_actions",
     [

@@ -1,7 +1,7 @@
 """Test flow_builder."""
 
 from unittest.mock import MagicMock
-from napps.kytos.telemetry_int.managers import flow_builder as fb
+from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from napps.kytos.telemetry_int.managers.int import INTManager
 from napps.kytos.telemetry_int.utils import ProxyPort, get_cookie
 from napps.kytos.telemetry_int import settings
@@ -93,7 +93,7 @@ def test_build_int_flows_intra_evpl(
     stored_flows = _map_stored_flows_by_cookies(intra_evc_evpl_flows_data)
 
     cookie = get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
-    flows = fb.build_int_flows(evcs_data, stored_flows)[cookie]
+    flows = FlowBuilder().build_int_flows(evcs_data, stored_flows)[cookie]
 
     n_expected_source_flows, n_expected_sink_flows = 3, 2
     assert len(flows) == (n_expected_source_flows + n_expected_sink_flows) * 2
@@ -148,7 +148,7 @@ def test_build_int_flows_intra_evpl(
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 1, "dl_vlan": 200},
                 "table_id": 2,
-                "table_group": "base",
+                "table_group": "evpl",
                 "priority": 20000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -215,7 +215,7 @@ def test_build_int_flows_intra_evpl(
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 2, "dl_vlan": 200},
                 "table_id": 2,
-                "table_group": "base",
+                "table_group": "evpl",
                 "priority": 20000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -258,7 +258,7 @@ def test_build_int_flows_intra_evpl(
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 11, "dl_vlan": 200},
                 "table_id": 2,
-                "table_group": "base",
+                "table_group": "evpl",
                 "priority": 20000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -301,7 +301,7 @@ def test_build_int_flows_intra_evpl(
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 21, "dl_vlan": 200},
                 "table_id": 2,
-                "table_group": "base",
+                "table_group": "evpl",
                 "priority": 20000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -413,7 +413,7 @@ def test_build_int_flows_intra_epl(
     stored_flows = _map_stored_flows_by_cookies(intra_evc_epl_flows_data)
 
     cookie = get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
-    flows = fb.build_int_flows(evcs_data, stored_flows)[cookie]
+    flows = FlowBuilder().build_int_flows(evcs_data, stored_flows)[cookie]
 
     n_expected_source_flows, n_expected_sink_flows = 3, 2
     assert len(flows) == (n_expected_source_flows + n_expected_sink_flows) * 2
@@ -434,7 +434,7 @@ def test_build_int_flows_intra_epl(
                         "instruction_type": "apply_actions",
                         "actions": [{"action_type": "push_int"}],
                     },
-                    {"instruction_type": "goto_table", "table_id": 2},
+                    {"instruction_type": "goto_table", "table_id": 3},
                 ],
             }
         },
@@ -457,7 +457,7 @@ def test_build_int_flows_intra_epl(
                         "instruction_type": "apply_actions",
                         "actions": [{"action_type": "push_int"}],
                     },
-                    {"instruction_type": "goto_table", "table_id": 2},
+                    {"instruction_type": "goto_table", "table_id": 3},
                 ],
             }
         },
@@ -466,8 +466,8 @@ def test_build_int_flows_intra_epl(
                 "owner": "telemetry_int",
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 1},
-                "table_id": 2,
-                "table_group": "base",
+                "table_id": 3,
+                "table_group": "epl",
                 "priority": 10000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -500,7 +500,7 @@ def test_build_int_flows_intra_epl(
                         "instruction_type": "apply_actions",
                         "actions": [{"action_type": "push_int"}],
                     },
-                    {"instruction_type": "goto_table", "table_id": 2},
+                    {"instruction_type": "goto_table", "table_id": 3},
                 ],
             }
         },
@@ -523,7 +523,7 @@ def test_build_int_flows_intra_epl(
                         "instruction_type": "apply_actions",
                         "actions": [{"action_type": "push_int"}],
                     },
-                    {"instruction_type": "goto_table", "table_id": 2},
+                    {"instruction_type": "goto_table", "table_id": 3},
                 ],
             }
         },
@@ -532,8 +532,8 @@ def test_build_int_flows_intra_epl(
                 "owner": "telemetry_int",
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 2},
-                "table_id": 2,
-                "table_group": "base",
+                "table_id": 3,
+                "table_group": "epl",
                 "priority": 10000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -566,7 +566,7 @@ def test_build_int_flows_intra_epl(
                         "instruction_type": "apply_actions",
                         "actions": [{"action_type": "send_report"}],
                     },
-                    {"instruction_type": "goto_table", "table_id": 2},
+                    {"instruction_type": "goto_table", "table_id": 3},
                 ],
             },
         },
@@ -575,8 +575,8 @@ def test_build_int_flows_intra_epl(
                 "owner": "telemetry_int",
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 11},
-                "table_id": 2,
-                "table_group": "base",
+                "table_id": 3,
+                "table_group": "epl",
                 "priority": 10000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
@@ -608,7 +608,7 @@ def test_build_int_flows_intra_epl(
                         "instruction_type": "apply_actions",
                         "actions": [{"action_type": "send_report"}],
                     },
-                    {"instruction_type": "goto_table", "table_id": 2},
+                    {"instruction_type": "goto_table", "table_id": 3},
                 ],
             },
         },
@@ -617,8 +617,8 @@ def test_build_int_flows_intra_epl(
                 "owner": "telemetry_int",
                 "cookie": int(0xA83766C105686749),
                 "match": {"in_port": 21},
-                "table_id": 2,
-                "table_group": "base",
+                "table_id": 3,
+                "table_group": "epl",
                 "priority": 10000,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
