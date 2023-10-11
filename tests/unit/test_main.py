@@ -97,6 +97,7 @@ class TestMain:
 
     async def test_on_table_enabled(self) -> None:
         """Test on_table_enabled."""
+        assert self.napp.int_manager.flow_builder.table_group == {"evpl": 2, "epl": 3}
         await self.napp.on_table_enabled(
             KytosEvent(content={"telemetry_int": {"evpl": 22, "epl": 33}})
         )
@@ -105,11 +106,13 @@ class TestMain:
 
     async def test_on_table_enabled_error(self, monkeypatch) -> None:
         """Test on_table_enabled error case."""
+        assert self.napp.int_manager.flow_builder.table_group == {"evpl": 2, "epl": 3}
         log_mock = MagicMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
         await self.napp.on_table_enabled(
             KytosEvent(content={"telemetry_int": {"invalid": 1}})
         )
+        assert self.napp.int_manager.flow_builder.table_group == {"evpl": 2, "epl": 3}
         assert log_mock.error.call_count == 1
         assert not self.napp.controller.buffers.app.aput.call_count
 
