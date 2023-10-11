@@ -5,10 +5,11 @@ mef_eline_api = f"{KYTOS_API}/kytos/mef_eline/v2"
 flow_manager_api = f"{KYTOS_API}/kytos/flow_manager/v2"
 INT_COOKIE_PREFIX = 0xA8
 MEF_COOKIE_PREFIX = 0xAA
-INT_TABLE = 2
 IPv4 = 2048
 TCP = 6
 UDP = 17
+
+TABLE_GROUP_ALLOWED = {"evpl", "epl"}
 
 # BATCH_INTERVAL: time interval between batch requests that will be sent to
 # flow_manager (in seconds) - zero enable sending all the requests in a row
