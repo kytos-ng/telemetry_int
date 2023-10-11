@@ -5,7 +5,6 @@ from napps.kytos.telemetry_int import settings
 from kytos.core import Controller
 
 from .exceptions import FlowsNotFound, PriorityOverflow, ProxyPortNotFound
-from .kytos_api_helper import get_evcs
 from .kytos_api_helper import get_stored_flows as _get_stored_flows
 from .proxy_port import ProxyPort
 
@@ -18,17 +17,6 @@ async def get_found_stored_flows(cookies: list[int] = None) -> dict[int, list[di
         if not flows:
             raise FlowsNotFound(get_id_from_cookie(cookie))
     return stored_flows
-
-
-def get_evc_with_telemetry() -> dict:
-    """Retrieve the list of EVC IDs and list those with
-    metadata {"telemetry": {"enabled": true}}"""
-
-    evc_ids = {"evcs_with_telemetry": []}
-    for evc in get_evcs().values():
-        if has_int_enabled(evc):
-            evc_ids["evcs_with_telemetry"].append(evc["id"])
-    return evc_ids
 
 
 def has_int_enabled(evc: dict) -> bool:
