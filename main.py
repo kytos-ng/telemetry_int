@@ -202,6 +202,25 @@ class Main(KytosNApp):
         make the change."""
         return JSONResponse({})
 
+    @alisten_to("kytos/of_multi_table.enable_table")
+    async def on_table_enabled(self, event):
+        """Handle of_multi_table.enable_table."""
+        table_group = event.content.get("telemetry_int", {})
+        if not table_group:
+            return
+        for group in table_group:
+            if group not in settings.TABLE_GROUP_ALLOWED:
+                log.error(
+                    f'The table group "{group}" is not allowed for '
+                    f"telemetry_int. Allowed table groups are "
+                    f"{settings.TABLE_GROUP_ALLOWED}"
+                )
+                return
+        self.int_manager.flow_builder.table_group.update(table_group)
+        content = {"group_table": self.int_manager.flow_builder.table_group}
+        event_out = KytosEvent(name="kytos/telemetry_int.enable_table", content=content)
+        await self.controller.buffers.app.aput(event_out)
+
     @alisten_to("kytos/mef_eline.deleted")
     async def on_evc_deleted(self, event: KytosEvent) -> None:
         """On EVC deleted."""
