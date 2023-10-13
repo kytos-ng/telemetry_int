@@ -1,6 +1,8 @@
 """Test INTManager"""
+import pytest
 
 from unittest.mock import AsyncMock, MagicMock
+from napps.kytos.telemetry_int.exceptions import ProxyPortSameSourceIntraEVC
 from napps.kytos.telemetry_int.managers.int import INTManager
 
 
@@ -58,3 +60,20 @@ class TestINTManager:
         assert telemetry_dict["enabled"] is True
         assert telemetry_dict["status"] == "UP"
         assert telemetry_dict["status_reason"] == []
+
+    def test_validate_intra_evc_different_proxy_ports(self) -> None:
+        """Test _validate_intra_evc_different_proxy_ports."""
+        pp_a, pp_z, controller = MagicMock(), MagicMock(), MagicMock()
+        evc = {
+            "id": "some_id",
+            "uni_a": {"proxy_port": pp_a, "interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"proxy_port": pp_z, "interface_id": "00:00:00:00:00:00:00:01:2"},
+        }
+
+        int_manager = INTManager(controller)
+        int_manager._validate_intra_evc_different_proxy_ports(evc)
+
+        source = MagicMock()
+        pp_a.source, pp_z.source = source, source
+        with pytest.raises(ProxyPortSameSourceIntraEVC):
+            int_manager._validate_intra_evc_different_proxy_ports(evc)

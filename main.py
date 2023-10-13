@@ -22,6 +22,7 @@ from .exceptions import (
     EVCNotFound,
     FlowsNotFound,
     ProxyPortNotFound,
+    ProxyPortSameSourceIntraEVC,
     ProxyPortStatusNotUP,
     UnrecoverableError,
 )
@@ -105,7 +106,7 @@ class Main(KytosNApp):
             await self.int_manager.enable_int(evcs, force)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
-        except (EVCHasINT, ProxyPortStatusNotUP) as exc:
+        except (EVCHasINT, ProxyPortStatusNotUP, ProxyPortSameSourceIntraEVC) as exc:
             raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())

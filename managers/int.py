@@ -19,6 +19,7 @@ from napps.kytos.telemetry_int.exceptions import (
     EVCHasINT,
     EVCHasNoINT,
     ProxyPortStatusNotUP,
+    ProxyPortSameSourceIntraEVC
 )
 
 
@@ -112,6 +113,31 @@ class INTManager:
             if not utils.has_int_enabled(evc) and not force:
                 raise EVCHasNoINT(evc_id)
 
+    def _validate_intra_evc_different_proxy_ports(self, evc: dict) -> None:
+        """Validate that an intra EVC is using different proxy ports.
+
+        If the same proxy port is used on both UNIs, of one the sink/pop related matches
+        would ended up being overwritten since they'd be the same. Currently, an
+        external loop will have unidirectional flows matching in the lower (source)
+        port number.
+        """
+        pp_a = evc["uni_a"].get("proxy_port")
+        pp_z = evc["uni_z"].get("proxy_port")
+        if any(
+            (
+                not utils.is_intra_switch_evc(evc),
+                pp_a is None,
+                pp_z is None,
+            )
+        ):
+            return
+        if pp_a.source != pp_z.source:
+            return
+
+        raise ProxyPortSameSourceIntraEVC(
+            evc["id"], "intra EVC UNIs must use different proxy ports"
+        )
+
     def _validate_map_enable_evcs(
         self,
         evcs: dict[str, dict],
@@ -158,6 +184,8 @@ class INTManager:
                     f"source {pp_z.source.id} status {pp_z.source.status}, "
                     f"destination {dest_id} status {dest_status}",
                 )
+
+            self._validate_intra_evc_different_proxy_ports(evc)
         return evcs
 
     async def remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
