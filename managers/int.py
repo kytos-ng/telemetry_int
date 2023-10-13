@@ -11,7 +11,7 @@ from napps.kytos.telemetry_int import utils
 from napps.kytos.telemetry_int import settings
 from kytos.core import log
 import napps.kytos.telemetry_int.kytos_api_helper as api
-from napps.kytos.telemetry_int.managers import flow_builder
+from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from kytos.core.common import EntityStatus
 
 from napps.kytos.telemetry_int.exceptions import (
@@ -30,6 +30,7 @@ class INTManager:
     def __init__(self, controller: Controller) -> None:
         """INTManager."""
         self.controller = controller
+        self.flow_builder = FlowBuilder()
 
     async def disable_int(self, evcs: dict[str, dict], force=False) -> None:
         """Disable INT on EVCs.
@@ -79,7 +80,7 @@ class INTManager:
 
         log.info(f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}")
 
-        stored_flows = flow_builder.build_int_flows(
+        stored_flows = self.flow_builder.build_int_flows(
             evcs,
             await utils.get_found_stored_flows(
                 [
