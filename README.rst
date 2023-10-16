@@ -28,6 +28,23 @@ Requirements
 - `kytos/noviflow <https://github.com/kytos-ng/noviflow>`_
 - `kytos/mef_eline <https://github.com/kytos-ng/mef_eline>`_
 
+Events
+======
+
+Subscribed
+----------
+- ``kytos/of_multi_table.enable_table``
+- ``kytos/mef_eline.deleted``
+- ``kytos/flow_manager.flow.error``
+
+Published
+---------
+
+kytos/of_lldp.enable_table
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A response from the ``kytos/of_multi_table.enable_table`` event to confirm table settings.
+
 General Information
 ===================
 
