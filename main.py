@@ -206,7 +206,8 @@ class Main(KytosNApp):
     async def on_mef_eline_loaded(self, _event: KytosEvent) -> None:
         """Handle kytos/mef_eline.loaded.
 
-        In the future api.get_evcs request will get replaced via a new event
+        In the future api.get_evcs request will get replaced via a new event TODO
+        https://github.com/kytos-ng/telemetry_int/issues/66
         """
         evcs = await api.get_evcs(archived=False)
         self.int_manager.load_uni_src_proxy_ports(evcs)
