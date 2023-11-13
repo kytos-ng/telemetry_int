@@ -174,7 +174,10 @@ class INTManager:
                 log.exception(exc)
                 return
 
-            log.info(f"Handling link_up {link}, deploying EVC ids: {list(to_install)}")
+            log.info(
+                f"Handling link_up {link}, deploying INT flows, "
+                f"EVC ids: {list(to_install)}"
+            )
             metadata = {
                 "telemetry": {
                     "enabled": True,
