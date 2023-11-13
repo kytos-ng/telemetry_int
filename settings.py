@@ -19,3 +19,7 @@ BATCH_INTERVAL = 0.2
 # number of FlowMod requests. Use 0 (zero) to disable BATCH mode, i.e. sends
 # everything at a glance
 BATCH_SIZE = 200
+
+# Fallback to mef_eline by removing INT flows if an external loop goes down. If
+# the loop goes UP again and the EVC is active, it'll install INT flows
+FALLBACK_TO_MEF_LOOP_DOWN = True

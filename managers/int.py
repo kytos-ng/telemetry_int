@@ -78,7 +78,7 @@ class INTManager:
 
     async def handle_pp_link_down(self, link: Link) -> None:
         """Handle proxy_port link_down."""
-        if not settings.FALLBACK_MEF_LOOP_STOPPED:
+        if not settings.FALLBACK_TO_MEF_LOOP_DOWN:
             return
         pp = self.srcs_pp.get(link.endpoint_a.id)
         if not pp:
@@ -117,7 +117,7 @@ class INTManager:
 
     async def handle_pp_link_up(self, link: Link) -> None:
         """Handle proxy_port link_up."""
-        if not settings.FALLBACK_MEF_LOOP_STOPPED:
+        if not settings.FALLBACK_TO_MEF_LOOP_DOWN:
             return
         pp = self.srcs_pp.get(link.endpoint_a.id)
         if not pp:
