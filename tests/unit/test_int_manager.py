@@ -4,11 +4,214 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.exceptions import ProxyPortSameSourceIntraEVC
 from napps.kytos.telemetry_int.managers.int import INTManager
+from napps.kytos.telemetry_int import exceptions
+from kytos.core.common import EntityStatus
+
+from kytos.lib.helpers import (
+    get_interface_mock,
+    get_controller_mock,
+    get_switch_mock,
+)
 
 
 class TestINTManager:
 
     """TestINTManager."""
+
+    def test_get_proxy_port_or_raise(self) -> None:
+        """Test proxy_port_or_raise."""
+        dpid_a = "00:00:00:00:00:00:00:01"
+        mock_switch_a = get_switch_mock(dpid_a, 0x04)
+        mock_interface_a = get_interface_mock("s1-eth1", 1, mock_switch_a)
+        mock_interface_a.metadata = {}
+        intf_id = f"{dpid_a}:1"
+        controller = get_controller_mock()
+        evc_id = "3766c105686749"
+        int_manager = INTManager(controller)
+
+        # Initially the mocked interface and switch hasn't been associated in the ctrllr
+        with pytest.raises(exceptions.ProxyPortNotFound) as exc:
+            int_manager.get_proxy_port_or_raise(intf_id, evc_id)
+        assert f"interface {intf_id} not found" in str(exc)
+
+        # Now, proxy_port still hasn't been set yet
+        controller.get_interface_by_id = lambda x: mock_interface_a
+        with pytest.raises(exceptions.ProxyPortNotFound) as exc:
+            int_manager.get_proxy_port_or_raise(intf_id, evc_id)
+        assert f"proxy_port metadata not found in {intf_id}" in str(exc)
+
+        # Now, destination interface hasn't been mocked yet
+        mock_interface_a.metadata = {"proxy_port": 5}
+        with pytest.raises(exceptions.ProxyPortDestNotFound) as exc:
+            int_manager.get_proxy_port_or_raise(intf_id, evc_id)
+        assert "destination interface not found" in str(exc)
+
+        mock_interface_b = get_interface_mock("s1-eth5", 5, mock_switch_a)
+        mock_interface_b.metadata = {"looped": {"port_numbers": [5, 6]}}
+        mock_interface_a.switch.get_interface_by_port_no = lambda x: mock_interface_b
+        # Now all dependencies have been mocked and it should get the ProxyPort
+        pp = int_manager.get_proxy_port_or_raise(intf_id, evc_id)
+        assert pp.source == mock_interface_b
+
+    def test_load_uni_src_proxy_port(self) -> None:
+        """Test test_load_uni_src_proxy_port."""
+        dpid_a = "00:00:00:00:00:00:00:01"
+        mock_switch_a = get_switch_mock(dpid_a, 0x04)
+        mock_interface_a = get_interface_mock("s1-eth1", 1, mock_switch_a)
+        mock_interface_a.metadata = {"proxy_port": 3}
+        mock_interface_z = get_interface_mock("s1-eth2", 2, mock_switch_a)
+        mock_interface_z.metadata = {"proxy_port": 5}
+        intf_id_a = f"{dpid_a}:1"
+        intf_id_z = f"{dpid_a}:2"
+        intf_id_a_1 = f"{dpid_a}:3"
+        intf_id_z_1 = f"{dpid_a}:5"
+
+        mock_interface_a_1 = get_interface_mock("s1-eth3", 3, mock_switch_a)
+        mock_interface_a_1.metadata = {"looped": {"port_numbers": [3, 4]}}
+        mock_interface_a_2 = get_interface_mock("s1-eth4", 4, mock_switch_a)
+        mock_interface_z_1 = get_interface_mock("s1-eth5", 5, mock_switch_a)
+        mock_interface_z_1.metadata = {"looped": {"port_numbers": [5, 6]}}
+        mock_interface_z_2 = get_interface_mock("s1-eth6", 6, mock_switch_a)
+
+        def get_interface_by_port_no(port_no):
+            data = {
+                1: mock_interface_a,
+                2: mock_interface_z,
+                3: mock_interface_a_1,
+                4: mock_interface_a_2,
+                5: mock_interface_z_1,
+                6: mock_interface_z_2,
+            }
+            return data[port_no]
+
+        def get_interface_by_id(intf_id):
+            data = {
+                intf_id_a: mock_interface_a,
+                intf_id_z: mock_interface_z,
+            }
+            return data[intf_id]
+
+        controller = get_controller_mock()
+        mock_switch_a.get_interface_by_port_no = get_interface_by_port_no
+        controller.get_interface_by_id = get_interface_by_id
+
+        evcs = {
+            "3766c105686749": {
+                "metadata": {"telemetry": {"enabled": True}},
+                "uni_a": {"interface_id": intf_id_a},
+                "uni_z": {"interface_id": intf_id_z},
+            },
+            "3766c105686748": {
+                "metadata": {"telemetry": {"enabled": True}},
+                "uni_a": {"interface_id": intf_id_a},
+                "uni_z": {"interface_id": intf_id_z},
+            },
+            "3766c105686747": {
+                "metadata": {"telemetry": {"enabled": False}},
+                "uni_a": {"interface_id": intf_id_a},
+                "uni_z": {"interface_id": intf_id_z},
+            },
+        }
+        int_manager = INTManager(controller)
+        int_manager.load_uni_src_proxy_ports(evcs)
+        assert len(int_manager.unis_src) == 2
+        assert int_manager.unis_src[intf_id_a] == intf_id_a_1
+        assert int_manager.unis_src[intf_id_z] == intf_id_z_1
+
+        assert len(int_manager.srcs_pp) == 2
+        assert int_manager.srcs_pp[intf_id_a_1].source == mock_interface_a_1
+        assert int_manager.srcs_pp[intf_id_a_1].destination == mock_interface_a_2
+        assert int_manager.srcs_pp[intf_id_z_1].source == mock_interface_z_1
+        assert int_manager.srcs_pp[intf_id_z_1].destination == mock_interface_z_2
+
+        assert int_manager.srcs_pp[intf_id_a_1].evc_ids == {
+            "3766c105686749",
+            "3766c105686748",
+        }
+        assert int_manager.srcs_pp[intf_id_z_1].evc_ids == {
+            "3766c105686749",
+            "3766c105686748",
+        }
+
+    async def test_handle_pp_link_down(self, monkeypatch):
+        """Test test_handle_pp_link_down."""
+        int_manager = INTManager(MagicMock())
+        api_mock, link_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        link_mock.endpoint_a.id = "some_intf_id"
+        evc_id = "3766c105686748"
+        int_manager.srcs_pp[link_mock.endpoint_a.id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {evc_id: {}}
+        int_manager.remove_int_flows = AsyncMock()
+
+        await int_manager.handle_pp_link_down(link_mock)
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {
+            "metadata.telemetry.enabled": "true",
+            "metadata.telemetry.status": "UP",
+        }
+        assert int_manager.remove_int_flows.call_count == 1
+        args = int_manager.remove_int_flows.call_args[0]
+        assert evc_id in args[0]
+        assert "telemetry" in args[1]
+        telemetry = args[1]["telemetry"]
+        assert telemetry["enabled"]
+        assert telemetry["status"] == "DOWN"
+        assert telemetry["status_reason"] == ["proxy_port_down"]
+        assert "status_updated_at" in telemetry
+
+    async def test_handle_pp_link_up(self, monkeypatch):
+        """Test handle_pp_link_up."""
+        int_manager = INTManager(MagicMock())
+        api_mock, link_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        sleep_mock = AsyncMock()
+        link_mock.endpoint_a.id = "3"
+        pp_mock.status = EntityStatus.UP
+        link_mock.status = EntityStatus.UP
+        link_mock.status_reason = []
+        evc_id = "3766c105686748"
+        uni_a_id, uni_z_id = "1", "2"
+        src_a_id, src_z_id = "3", "5"
+        int_manager.srcs_pp[src_a_id] = pp_mock
+        int_manager.srcs_pp[src_z_id] = pp_mock
+        int_manager.unis_src[uni_a_id] = src_a_id
+        int_manager.unis_src[uni_z_id] = src_z_id
+        pp_mock.evc_ids = {evc_id}
+
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.managers.int.asyncio.sleep", sleep_mock
+        )
+        api_mock.get_evcs.return_value = {
+            evc_id: {
+                "active": True,
+                "archived": False,
+                "uni_a": {"interface_id": uni_a_id},
+                "uni_z": {"interface_id": uni_z_id},
+            }
+        }
+        int_manager.install_int_flows = AsyncMock()
+        int_manager._validate_map_enable_evcs = MagicMock()
+
+        await int_manager.handle_pp_link_up(link_mock)
+        assert sleep_mock.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {
+            "metadata.telemetry.enabled": "true",
+            "metadata.telemetry.status": "DOWN",
+        }
+        assert int_manager.install_int_flows.call_count == 1
+        args = int_manager.install_int_flows.call_args[0]
+        assert "telemetry" in args[1]
+        telemetry_dict = args[1]["telemetry"]
+        expected_keys = ["enabled", "status", "status_reason", "status_updated_at"]
+        assert sorted(list(telemetry_dict.keys())) == sorted(expected_keys)
+        assert telemetry_dict["enabled"]
+        assert telemetry_dict["status"] == "UP"
+        assert not telemetry_dict["status_reason"]
 
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
@@ -17,7 +220,7 @@ class TestINTManager:
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
 
         int_manager = INTManager(controller)
-        int_manager.remove_int_flows = AsyncMock()
+        int_manager._remove_int_flows = AsyncMock()
         await int_manager.disable_int({}, False)
 
         assert api_mock.add_evcs_metadata.call_count == 1

@@ -118,23 +118,27 @@ class TestMain:
 
     async def test_on_flow_mod_error(self, monkeypatch) -> None:
         """Test on_flow_mod_error."""
-        api_mock, flow = AsyncMock(), MagicMock()
+        api_mock_main, api_mock_int, flow = AsyncMock(), AsyncMock(), MagicMock()
         flow.cookie = 0xA800000000000001
         monkeypatch.setattr(
             "napps.kytos.telemetry_int.main.api",
-            api_mock,
+            api_mock_main,
         )
-        api_mock.get_evc.return_value = {
-            utils.get_id_from_cookie(flow.cookie): {
-                "metadata": {"telemetry": {"enabled": True}}
-            }
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.managers.int.api",
+            api_mock_int,
+        )
+        cookie = utils.get_id_from_cookie(flow.cookie)
+        api_mock_main.get_evc.return_value = {
+            cookie: {"metadata": {"telemetry": {"enabled": True}}}
         }
-        self.napp.int_manager.remove_int_flows = AsyncMock()
+        api_mock_int.get_stored_flows.return_value = {cookie: [MagicMock()]}
+        self.napp.int_manager._remove_int_flows = AsyncMock()
 
         event = KytosEvent(content={"flow": flow, "error_command": "add"})
         await self.napp.on_flow_mod_error(event)
 
-        assert api_mock.get_evc.call_count == 1
-        assert api_mock.get_stored_flows.call_count == 1
-        assert api_mock.add_evcs_metadata.call_count == 1
-        assert self.napp.int_manager.remove_int_flows.call_count == 1
+        assert api_mock_main.get_evc.call_count == 1
+        assert api_mock_int.get_stored_flows.call_count == 1
+        assert api_mock_int.add_evcs_metadata.call_count == 1
+        assert self.napp.int_manager._remove_int_flows.call_count == 1
