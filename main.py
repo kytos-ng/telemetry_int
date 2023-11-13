@@ -202,6 +202,15 @@ class Main(KytosNApp):
         make the change."""
         return JSONResponse({})
 
+    @alisten_to("kytos/mef_eline.loaded")
+    async def on_mef_eline_loaded(self, _event: KytosEvent) -> None:
+        """Handle kytos/mef_eline.loaded.
+
+        In the future api.get_evcs request will get replaced via a new event
+        """
+        evcs = await api.get_evcs(archived=False)
+        self.int_manager.load_uni_src_proxy_ports(evcs)
+
     @alisten_to("kytos/of_multi_table.enable_table")
     async def on_table_enabled(self, event):
         """Handle of_multi_table.enable_table."""
@@ -231,14 +240,18 @@ class Main(KytosNApp):
             and content["metadata"]["telemetry"]["enabled"]
         ):
             evc_id = content["evc_id"]
-            log.info(
-                f"EVC({evc_id}, {content.get('name', '')}) got deleted, "
-                "INT flows will be removed too"
-            )
-            stored_flows = await api.get_stored_flows(
-                [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)]
-            )
-            await self.int_manager.remove_int_flows(stored_flows)
+            log.info(f"Event mef_eline.deleted on EVC id: {evc_id}")
+            await self.int_manager.disable_int({evc_id: content}, force=True)
+
+    @alisten_to("kytos/topology.link_down")
+    async def on_link_down(self, event):
+        """Handle topology.link_down."""
+        await self.int_manager.handle_pp_link_down(event.content["link"])
+
+    @alisten_to("kytos/topology.link_up")
+    async def on_link_up(self, event):
+        """Handle topology.link_up."""
+        await self.int_manager.handle_pp_link_up(event.content["link"])
 
     @alisten_to("kytos/flow_manager.flow.error")
     async def on_flow_mod_error(self, event: KytosEvent):
@@ -285,16 +298,7 @@ class Main(KytosNApp):
             )
 
             evcs = {evc_id: {evc_id: evc_id}}
-            stored_flows = await api.get_stored_flows(
-                [
-                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
-                    for evc_id in evcs
-                ]
-            )
-            await asyncio.gather(
-                self.int_manager.remove_int_flows(stored_flows),
-                api.add_evcs_metadata(evcs, metadata, force=True),
-            )
+            await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
     # Event-driven methods: future
     def listen_for_new_evcs(self):
@@ -312,13 +316,7 @@ class Main(KytosNApp):
         when there is a path change. (future)"""
         pass
 
-    def listen_for_evcs_removed(self):
-        """Remove all INT flows belonging the just removed EVC (future)"""
-        pass
-
     def listen_for_topology_changes(self):
         """If the topology changes, make sure it is not the loop ports.
         If so, update proxy ports"""
-        # TODO:
-        # self.proxy_ports = create_proxy_ports(self.proxy_ports)
         pass
