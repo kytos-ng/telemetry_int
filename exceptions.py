@@ -38,6 +38,10 @@ class ProxyPortNotFound(ProxyPortError):
     """ProxyPortNotFound."""
 
 
+class ProxyPortDestNotFound(ProxyPortError):
+    """ProxyPorDesttNotFound."""
+
+
 class ProxyPortStatusNotUP(ProxyPortError):
     """ProxyPortStatusNotUP."""
 
