@@ -202,15 +202,10 @@ class Main(KytosNApp):
         make the change."""
         return JSONResponse({})
 
-    @alisten_to("kytos/mef_eline.loaded")
-    async def on_mef_eline_loaded(self, _event: KytosEvent) -> None:
-        """Handle kytos/mef_eline.loaded.
-
-        In the future api.get_evcs request will get replaced via a new event TODO
-        https://github.com/kytos-ng/telemetry_int/issues/66
-        """
-        evcs = await api.get_evcs(archived=False)
-        self.int_manager.load_uni_src_proxy_ports(evcs)
+    @alisten_to("kytos/mef_eline.evcs_loaded")
+    async def on_mef_eline_evcs_loaded(self, event: KytosEvent) -> None:
+        """Handle kytos/mef_eline.evcs_loaded."""
+        self.int_manager.load_uni_src_proxy_ports(event.content)
 
     @alisten_to("kytos/of_multi_table.enable_table")
     async def on_table_enabled(self, event):
