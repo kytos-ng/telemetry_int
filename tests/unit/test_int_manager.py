@@ -213,6 +213,39 @@ class TestINTManager:
         assert telemetry_dict["status"] == "UP"
         assert not telemetry_dict["status_reason"]
 
+    async def test_handle_pp_metadata_removed(self, monkeypatch):
+        """Test handle_pp_metadata_removed."""
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        source_id = "some_source_id"
+        evc_id = "3766c105686748"
+        int_manager.unis_src[intf_mock.id] = source_id
+        int_manager.srcs_pp[source_id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        assert "proxy_port" not in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {evc_id: {}}
+        int_manager.remove_int_flows = AsyncMock()
+
+        await int_manager.handle_pp_metadata_removed(intf_mock)
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {
+            "metadata.telemetry.enabled": "true",
+            "metadata.telemetry.status": "UP",
+        }
+        assert int_manager.remove_int_flows.call_count == 1
+        args = int_manager.remove_int_flows.call_args[0]
+        assert evc_id in args[0]
+        assert "telemetry" in args[1]
+        telemetry = args[1]["telemetry"]
+        assert telemetry["enabled"]
+        assert telemetry["status"] == "DOWN"
+        assert telemetry["status_reason"] == ["proxy_port_metadata_removed"]
+        assert "status_updated_at" in telemetry
+
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
         controller = MagicMock()
