@@ -23,6 +23,7 @@ from napps.kytos.telemetry_int.exceptions import (
     EVCHasINT,
     EVCHasNoINT,
     FlowsNotFound,
+    ProxyPortError,
     ProxyPortStatusNotUP,
     ProxyPortDestNotFound,
     ProxyPortNotFound,
@@ -245,6 +246,7 @@ class INTManager:
 
         1 - EVC not found
         2 - EVC doesn't have INT
+        3 - ProxyPortNotFound or ProxyPortDestNotFound
 
         """
         self._validate_disable_evcs(evcs, force)
@@ -259,7 +261,11 @@ class INTManager:
             }
         }
         await self.remove_int_flows(evcs, metadata, force=force)
-        self._discard_pps_evc_ids(evcs)
+        try:
+            self._discard_pps_evc_ids(evcs)
+        except ProxyPortError:
+            if not force:
+                raise
 
     async def remove_int_flows(
         self, evcs: dict[str, dict], metadata: dict, force=False
