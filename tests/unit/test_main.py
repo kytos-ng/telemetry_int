@@ -150,3 +150,11 @@ class TestMain:
         self.napp.int_manager = MagicMock()
         await self.napp.on_mef_eline_evcs_loaded(event)
         self.napp.int_manager.load_uni_src_proxy_ports.assert_called_with(evcs)
+
+    async def test_on_intf_metadata_remove(self):
+        """Test on_intf_metadata_removed."""
+        intf = MagicMock()
+        event = KytosEvent(content={"interface": intf})
+        self.napp.int_manager = MagicMock()
+        await self.napp.on_intf_metadata_removed(event)
+        self.napp.int_manager.handle_pp_metadata_removed.assert_called_with(intf)
