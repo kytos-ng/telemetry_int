@@ -7,6 +7,7 @@ from pyof.v0x04.controller2switch.table_mod import Table
 
 from kytos.core.controller import Controller
 from kytos.core.events import KytosEvent
+from kytos.core.interface import Interface
 from napps.kytos.telemetry_int import utils
 from napps.kytos.telemetry_int import settings
 from kytos.core import log
@@ -38,6 +39,7 @@ class INTManager:
         self.controller = controller
         self.flow_builder = FlowBuilder()
         self._topo_link_lock = asyncio.Lock()
+        self._intf_meta_lock = asyncio.Lock()
 
         # Keep track between each uni intf id and its src intf id port
         self.unis_src: dict[str, str] = {}
@@ -193,6 +195,46 @@ class INTManager:
             except FlowsNotFound as exc:
                 log.exception(f"FlowsNotFound {str(exc)}")
                 return
+
+    async def handle_pp_metadata_removed(self, intf: Interface) -> None:
+        """Handle proxy port metadata removed."""
+        if "proxy_port" in intf.metadata:
+            return
+        try:
+            pp = self.srcs_pp[self.unis_src[intf.id]]
+            if not pp.evc_ids:
+                return
+        except KeyError:
+            return
+
+        async with self._intf_meta_lock:
+            evcs = await api.get_evcs(
+                **{
+                    "metadata.telemetry.enabled": "true",
+                    "metadata.telemetry.status": "UP",
+                }
+            )
+            to_deactivate = {
+                evc_id: evc for evc_id, evc in evcs.items() if evc_id in pp.evc_ids
+            }
+            if not to_deactivate:
+                return
+
+            log.info(
+                f"Handling interface metadata removed on {intf}, removing INT flows "
+                f"falling back to mef_eline, EVC ids: {list(to_deactivate)}"
+            )
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "DOWN",
+                    "status_reason": ["proxy_port_metadata_removed"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            await self.remove_int_flows(to_deactivate, metadata)
 
     async def disable_int(self, evcs: dict[str, dict], force=False) -> None:
         """Disable INT on EVCs.
