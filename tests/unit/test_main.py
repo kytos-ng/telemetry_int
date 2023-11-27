@@ -142,3 +142,11 @@ class TestMain:
         assert api_mock_int.get_stored_flows.call_count == 1
         assert api_mock_int.add_evcs_metadata.call_count == 1
         assert self.napp.int_manager._remove_int_flows.call_count == 1
+
+    async def test_on_mef_eline_evcs_loaded(self):
+        """Test on_mef_eline_evcs_loaded."""
+        evcs = {"1": {}, "2": {}}
+        event = KytosEvent(content=evcs)
+        self.napp.int_manager = MagicMock()
+        await self.napp.on_mef_eline_evcs_loaded(event)
+        self.napp.int_manager.load_uni_src_proxy_ports.assert_called_with(evcs)
