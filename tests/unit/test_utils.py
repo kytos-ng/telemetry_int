@@ -1,13 +1,6 @@
 """Test utils."""
 import pytest
 from napps.kytos.telemetry_int import utils
-from napps.kytos.telemetry_int import exceptions
-
-from kytos.lib.helpers import (
-    get_interface_mock,
-    get_controller_mock,
-    get_switch_mock,
-)
 
 
 @pytest.mark.parametrize(
@@ -213,38 +206,3 @@ def test_set_owner() -> None:
 def test_modify_actions(actions, actions_to_change, remove, expected_actions) -> None:
     """test modify_actions."""
     assert utils.modify_actions(actions, actions_to_change, remove) == expected_actions
-
-
-def test_get_proxy_port_or_raise() -> None:
-    """Test proxy_port_or_raise."""
-    dpid_a = "00:00:00:00:00:00:00:01"
-    mock_switch_a = get_switch_mock(dpid_a, 0x04)
-    mock_interface_a = get_interface_mock("s1-eth1", 1, mock_switch_a)
-    mock_interface_a.metadata = {}
-    intf_id = f"{dpid_a}:1"
-    controller = get_controller_mock()
-    evc_id = "3766c105686749"
-
-    # Initially the mocked interface and switch hasn't been associated in the controller
-    with pytest.raises(exceptions.ProxyPortNotFound) as exc:
-        utils.get_proxy_port_or_raise(controller, intf_id, evc_id)
-    assert f"interface {intf_id} not found" in str(exc)
-
-    # Now, proxy_port still hasn't been set yet
-    controller.get_interface_by_id = lambda x: mock_interface_a
-    with pytest.raises(exceptions.ProxyPortNotFound) as exc:
-        utils.get_proxy_port_or_raise(controller, intf_id, evc_id)
-    assert f"proxy_port metadata not found in {intf_id}" in str(exc)
-
-    # Now, destination interface hasn't been mocked yet
-    mock_interface_a.metadata = {"proxy_port": 5}
-    with pytest.raises(exceptions.ProxyPortNotFound) as exc:
-        utils.get_proxy_port_or_raise(controller, intf_id, evc_id)
-    assert "destination interface not found" in str(exc)
-
-    mock_interface_b = get_interface_mock("s1-eth5", 5, mock_switch_a)
-    mock_interface_b.metadata = {"looped": {"port_numbers": [5, 6]}}
-    mock_interface_a.switch.get_interface_by_port_no = lambda x: mock_interface_b
-    # Now all dependencies have been mocked and it should get the ProxyPort
-    pp = utils.get_proxy_port_or_raise(controller, intf_id, evc_id)
-    assert pp.source == mock_interface_b

@@ -2,11 +2,8 @@
 
 from napps.kytos.telemetry_int import settings
 
-from kytos.core import Controller
-
-from .exceptions import FlowsNotFound, PriorityOverflow, ProxyPortNotFound
+from .exceptions import FlowsNotFound, PriorityOverflow
 from .kytos_api_helper import get_stored_flows as _get_stored_flows
-from .proxy_port import ProxyPort
 
 
 async def get_found_stored_flows(cookies: list[int] = None) -> dict[int, list[dict]]:
@@ -48,37 +45,6 @@ def get_evc_unis(evc: dict) -> tuple[dict, dict]:
             "switch": ":".join(uni_z_split[:-1]),
         },
     )
-
-
-def get_proxy_port_or_raise(
-    controller: Controller, intf_id: str, evc_id: str
-) -> ProxyPort:
-    """Return a ProxyPort assigned to a UNI or raise."""
-
-    interface = controller.get_interface_by_id(intf_id)
-    if not interface:
-        raise ProxyPortNotFound(evc_id, f"UNI interface {intf_id} not found")
-
-    if "proxy_port" not in interface.metadata:
-        raise ProxyPortNotFound(evc_id, f"proxy_port metadata not found in {intf_id}")
-
-    source_intf = interface.switch.get_interface_by_port_no(
-        interface.metadata.get("proxy_port")
-    )
-    if not source_intf:
-        raise ProxyPortNotFound(
-            evc_id,
-            f"proxy_port of {intf_id} source interface not found",
-        )
-
-    pp = ProxyPort(controller, source_intf)
-
-    if not pp.destination:
-        raise ProxyPortNotFound(
-            evc_id,
-            f"proxy_port of {intf_id} isn't looped or destination interface not found",
-        )
-    return pp
 
 
 def add_to_apply_actions(

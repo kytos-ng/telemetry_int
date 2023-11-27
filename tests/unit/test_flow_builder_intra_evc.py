@@ -3,7 +3,8 @@
 from unittest.mock import MagicMock
 from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from napps.kytos.telemetry_int.managers.int import INTManager
-from napps.kytos.telemetry_int.utils import ProxyPort, get_cookie
+from napps.kytos.telemetry_int.utils import get_cookie
+from napps.kytos.telemetry_int.proxy_port import ProxyPort
 from napps.kytos.telemetry_int import settings
 from napps.kytos.telemetry_int.kytos_api_helper import _map_stored_flows_by_cookies
 from kytos.lib.helpers import get_controller_mock, get_switch_mock, get_interface_mock
@@ -15,9 +16,7 @@ def test_flow_builder_default_table_groups() -> None:
     assert FlowBuilder().table_group == {"evpl": 2, "epl": 3}
 
 
-def test_build_int_flows_intra_evpl(
-    evcs_data, intra_evc_evpl_flows_data, monkeypatch
-) -> None:
+def test_build_int_flows_intra_evpl(evcs_data, intra_evc_evpl_flows_data) -> None:
     """Test build INT flows intra EVPL.
 
                             +--------+
@@ -37,10 +36,7 @@ def test_build_int_flows_intra_evpl(
     controller = get_controller_mock()
     int_manager = INTManager(controller)
     get_proxy_port_or_raise = MagicMock()
-    monkeypatch.setattr(
-        "napps.kytos.telemetry_int.utils.get_proxy_port_or_raise",
-        get_proxy_port_or_raise,
-    )
+    int_manager.get_proxy_port_or_raise = get_proxy_port_or_raise
 
     evc_id = "3766c105686749"
     dpid_a = "00:00:00:00:00:00:00:01"
@@ -335,9 +331,7 @@ def test_build_int_flows_intra_evpl(
         assert (i, flow["flow"]) == (i, expected_flows[i]["flow"])
 
 
-def test_build_int_flows_intra_epl(
-    evcs_data, intra_evc_epl_flows_data, monkeypatch
-) -> None:
+def test_build_int_flows_intra_epl(evcs_data, intra_evc_epl_flows_data) -> None:
     """Test build INT flows intra EPL.
 
                             +--------+
@@ -357,10 +351,7 @@ def test_build_int_flows_intra_epl(
     controller = get_controller_mock()
     int_manager = INTManager(controller)
     get_proxy_port_or_raise = MagicMock()
-    monkeypatch.setattr(
-        "napps.kytos.telemetry_int.utils.get_proxy_port_or_raise",
-        get_proxy_port_or_raise,
-    )
+    int_manager.get_proxy_port_or_raise = get_proxy_port_or_raise
 
     evc_id = "3766c105686749"
     dpid_a = "00:00:00:00:00:00:00:01"

@@ -12,12 +12,14 @@ class ProxyPort:
 
     source interface is where the loop starts
     destination interface is where the loop ends
+    evc_ids are which evc ids this proxy port is being used by
 
     """
 
     def __init__(self, controller: Controller, source: Interface):
         self.controller = controller
         self.source = source
+        self.evc_ids: set[str] = set()
 
     @property
     def destination(self) -> Optional[Interface]:
@@ -48,3 +50,7 @@ class ProxyPort:
         ):
             return EntityStatus.UP
         return EntityStatus.DOWN
+
+    def __repr__(self) -> str:
+        """Repr method."""
+        return f"ProxyPort({self.source}, {self.destination}, {self.status})"
