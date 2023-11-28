@@ -296,6 +296,11 @@ class Main(KytosNApp):
             evcs = {evc_id: {evc_id: evc_id}}
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
+    @alisten_to("kytos/topology.interfaces.metadata.removed")
+    async def on_intf_metadata_removed(self, event: KytosEvent) -> None:
+        """On interface metadata removed."""
+        await self.int_manager.handle_pp_metadata_removed(event.content["interface"])
+
     # Event-driven methods: future
     def listen_for_new_evcs(self):
         """Change newly created EVC to INT-enabled EVC based on the metadata field
