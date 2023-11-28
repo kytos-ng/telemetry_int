@@ -103,6 +103,14 @@ class Main(KytosNApp):
                 return JSONResponse(list(evcs.keys()))
 
         try:
+            # First, it tries to get and remove the existing INT flows like mef_eline
+            stored_flows = await api.get_stored_flows(
+                [
+                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                    for evc_id in evcs
+                ]
+            )
+            await self.int_manager._remove_int_flows(stored_flows)
             await self.int_manager.enable_int(evcs, force)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
@@ -186,6 +194,55 @@ class Main(KytosNApp):
             exc_error = str(exc)
             log.error(exc_error)
             raise HTTPException(500, detail=exc_error)
+
+    @rest("v1/evc/redeploy", methods=["PATCH"])
+    async def redeploy_telemetry(self, request: Request) -> JSONResponse:
+        """REST to redeploy INT on EVCs.
+
+        If a list of evc_ids is empty, it'll redeploy on all INT EVCs.
+        """
+        await avalidate_openapi_request(self.spec, request)
+
+        try:
+            content = await aget_json_or_400(request)
+            evc_ids = content["evc_ids"]
+        except (TypeError, KeyError):
+            raise HTTPException(400, detail=f"Invalid payload: {content}")
+
+        try:
+            evcs = (
+                await api.get_evcs()
+                if len(evc_ids) != 1
+                else await api.get_evc(evc_ids[0])
+            )
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+
+        if evc_ids:
+            evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
+        else:
+            evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
+            if not evcs:
+                raise HTTPException(404, detail="There aren't INT EVCs to redeploy")
+
+        try:
+            await self.int_manager.redeploy_int(evcs)
+        except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
+            raise HTTPException(404, detail=str(exc))
+        except ProxyPortSameSourceIntraEVC as exc:
+            raise HTTPException(409, detail=str(exc))
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
+
+        return JSONResponse(list(evcs.keys()), status_code=201)
 
     @rest("v1/sync")
     def sync_flows(self, _request: Request) -> JSONResponse:

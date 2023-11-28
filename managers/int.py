@@ -305,6 +305,33 @@ class INTManager:
         await self.install_int_flows(evcs, metadata)
         self._add_pps_evc_ids(evcs)
 
+    async def redeploy_int(self, evcs: dict[str, dict]) -> None:
+        """Redeploy INT on EVCs. It'll only delete and install the flows again.
+
+        evcs is a dict of prefetched EVCs from mef_eline based on evc_ids.
+        """
+        evcs = self._validate_map_enable_evcs(evcs, force=True)
+        log.info(f"Redeploying INT on EVC ids: {list(evcs.keys())}, force: True")
+
+        stored_flows = await api.get_stored_flows(
+            [
+                utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                for evc_id in evcs
+            ]
+        )
+        await self._remove_int_flows(stored_flows)
+
+        found_stored_flows = self.flow_builder.build_int_flows(
+            evcs,
+            await utils.get_found_stored_flows(
+                [
+                    utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+                    for evc_id in evcs
+                ]
+            ),
+        )
+        await self._install_int_flows(found_stored_flows)
+
     async def install_int_flows(self, evcs: dict[str, dict], metadata: dict) -> None:
         """Install INT flows and set metadata on EVCs."""
         stored_flows = self.flow_builder.build_int_flows(
