@@ -111,6 +111,49 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/evc/redeploy:
+    patch:
+      summary: Redeploy INT on EVCs
+      operationId: redeploy_evcs
+      requestBody:
+        description: Redeploy INT on EVCs. If the list of evc_ids is empty, it will try to redeploy all INT EVCs.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: INT redeployed
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          description: Invalid request payload
+        '409':
+          description: Conflict resource state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '404':
+          description: Dependent resource (EVC, flows or ProxyPort) not found 
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
 
 
 components:
