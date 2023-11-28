@@ -39,6 +39,7 @@ class TestMain:
         endpoint = f"{self.base_endpoint}/evc/enable"
         response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
         assert self.napp.int_manager.enable_int.call_count == 1
+        assert self.napp.int_manager._remove_int_flows.call_count == 1
         assert response.status_code == 201
         assert response.json() == [evc_id]
 
