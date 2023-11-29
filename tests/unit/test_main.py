@@ -43,6 +43,28 @@ class TestMain:
         assert response.status_code == 201
         assert response.json() == [evc_id]
 
+    async def test_redeploy_telemetry(self, monkeypatch) -> None:
+        """Test redeploy telemetry."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evcs.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": False}}}
+        }
+
+        self.napp.int_manager = AsyncMock()
+
+        endpoint = f"{self.base_endpoint}/evc/redeploy"
+        response = await self.api_client.patch(endpoint, json={"evc_ids": [evc_id]})
+        assert self.napp.int_manager.redeploy_int.call_count == 1
+        assert response.status_code == 201
+        assert response.json() == [evc_id]
+
     @pytest.mark.parametrize("route", ["/evc/enable", "/evc/disable"])
     async def test_en_dis_openapi_validation(self, route: str) -> None:
         """Test OpenAPI enable/disable basic validation."""

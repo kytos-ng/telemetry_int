@@ -297,6 +297,39 @@ class TestINTManager:
         assert telemetry_dict["status"] == "UP"
         assert telemetry_dict["status_reason"] == []
 
+    async def test_redeploy_int(self, monkeypatch) -> None:
+        """Test redeploy int."""
+        controller = MagicMock()
+        api_mock = AsyncMock()
+        stored_flows_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.utils.get_found_stored_flows", stored_flows_mock
+        )
+
+        int_manager = INTManager(controller)
+        int_manager._remove_int_flows = AsyncMock()
+        int_manager._install_int_flows = AsyncMock()
+
+        dpid_a = "00:00:00:00:00:00:00:01"
+        intf_id_a = f"{dpid_a}:1"
+        intf_id_z = f"{dpid_a}:2"
+        evc_id = "3766c105686749"
+        evcs = {
+            evc_id: {
+                "metadata": {"telemetry": {"enabled": True}},
+                "uni_a": {"interface_id": intf_id_a},
+                "uni_z": {"interface_id": intf_id_z},
+            }
+        }
+        int_manager._validate_map_enable_evcs = MagicMock()
+        await int_manager.redeploy_int(evcs)
+
+        assert stored_flows_mock.call_count == 1
+        assert int_manager._remove_int_flows.call_count == 1
+        assert api_mock.get_stored_flows.call_count == 1
+        assert int_manager._install_int_flows.call_count == 1
+
     def test_validate_intra_evc_different_proxy_ports(self) -> None:
         """Test _validate_intra_evc_different_proxy_ports."""
         pp_a, pp_z, controller = MagicMock(), MagicMock(), MagicMock()
