@@ -84,16 +84,22 @@ async def get_stored_flows(
     cookie_range_args = []
     for cookie in cookies:
         # gte cookie
-        cookie_range_args.append(f"cookie_range={cookie}")
+        cookie_range_args.append(cookie)
         # lte cookie
-        cookie_range_args.append(f"cookie_range={cookie}")
+        cookie_range_args.append(cookie)
 
     endpoint = "stored_flows?state=installed&state=pending"
-    if cookie_range_args:
-        endpoint = f"{endpoint}&{'&'.join(cookie_range_args)}"
-
     async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
-        response = await client.get(f"/{endpoint}", timeout=10)
+        if cookie_range_args:
+            response = await client.request(
+                "GET",
+                f"/{endpoint}",
+                json={"cookie_range": cookie_range_args},
+                timeout=10,
+            )
+        else:
+            response = await client.get(f"/{endpoint}", timeout=10)
+
         if response.is_server_error:
             raise httpx.RequestError(response.text)
         if not response.is_success:
