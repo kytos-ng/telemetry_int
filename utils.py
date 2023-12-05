@@ -9,7 +9,7 @@ from .kytos_api_helper import get_stored_flows as _get_stored_flows
 async def get_found_stored_flows(cookies: list[int] = None) -> dict[int, list[dict]]:
     """Get stored flows ensuring that flows are found."""
     cookies = cookies or []
-    stored_flows = await _get_stored_flows()
+    stored_flows = await _get_stored_flows(cookies)
     for cookie, flows in stored_flows.items():
         if not flows:
             raise FlowsNotFound(get_id_from_cookie(cookie))
