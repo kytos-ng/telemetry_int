@@ -41,7 +41,7 @@ async def test_get_stored_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
     cookies = [evc_data[dpid][0]["flow"]["cookie"]]
 
     aclient_mock, awith_mock = AsyncMock(), MagicMock()
-    aclient_mock.get.return_value = Response(
+    aclient_mock.request.return_value = Response(
         200, json=intra_evc_evpl_flows_data, request=MagicMock()
     )
     awith_mock.return_value.__aenter__.return_value = aclient_mock
@@ -49,9 +49,36 @@ async def test_get_stored_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
 
     data = await get_stored_flows(cookies)
     assert (
+        aclient_mock.request.call_args[0][1] == "/stored_flows?"
+        "state=installed&state=pending"
+    )
+    assert len(data) == 1
+    assert list(data.keys()) == cookies
+    assert len(data[cookies[0]]) == 2
+    for flows in data.values():
+        for flow in flows:
+            assert flow["switch"] == dpid
+
+
+async def test_get_stored_flows_no_cookies_filter(
+    monkeypatch, intra_evc_evpl_flows_data
+) -> None:
+    """Test get_stored_flows no cookies."""
+    evc_data = intra_evc_evpl_flows_data
+    dpid = "00:00:00:00:00:00:00:01"
+    cookies = [evc_data[dpid][0]["flow"]["cookie"]]
+
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.get.return_value = Response(
+        200, json=intra_evc_evpl_flows_data, request=MagicMock()
+    )
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+
+    data = await get_stored_flows()
+    assert (
         aclient_mock.get.call_args[0][0] == "/stored_flows?"
-        f"state=installed&state=pending&"
-        f"cookie_range={cookies[0]}&cookie_range={cookies[0]}"
+        "state=installed&state=pending"
     )
     assert len(data) == 1
     assert list(data.keys()) == cookies
