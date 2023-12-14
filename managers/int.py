@@ -128,13 +128,6 @@ class INTManager:
         if not pp or not pp.evc_ids:
             return
 
-        # This sleep is to wait for at least a few seconds to ensure that the other
-        # proxy port would also have been considered up since the request
-        # on topology setting metadata might end up delaying, check out issue
-        # https://github.com/kytos-ng/of_lldp/issues/100
-        # TODO this will be optimized later on before releasing this NApp
-        await asyncio.sleep(5)
-
         async with self._topo_link_lock:
             if link.status != EntityStatus.UP or link.status_reason:
                 return

@@ -167,7 +167,6 @@ class TestINTManager:
         """Test handle_pp_link_up."""
         int_manager = INTManager(MagicMock())
         api_mock, link_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
-        sleep_mock = AsyncMock()
         link_mock.endpoint_a.id = "3"
         pp_mock.status = EntityStatus.UP
         link_mock.status = EntityStatus.UP
@@ -182,9 +181,6 @@ class TestINTManager:
         pp_mock.evc_ids = {evc_id}
 
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.asyncio.sleep", sleep_mock
-        )
         api_mock.get_evcs.return_value = {
             evc_id: {
                 "active": True,
@@ -197,7 +193,6 @@ class TestINTManager:
         int_manager._validate_map_enable_evcs = MagicMock()
 
         await int_manager.handle_pp_link_up(link_mock)
-        assert sleep_mock.call_count == 1
         assert api_mock.get_evcs.call_count == 1
         assert api_mock.get_evcs.call_args[1] == {
             "metadata.telemetry.enabled": "true",
