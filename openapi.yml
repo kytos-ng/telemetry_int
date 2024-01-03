@@ -154,6 +154,22 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/evc/compare:
+    get:
+      summary: List compare EVCs
+      operationId: compare_evc
+      responses:
+        '200':
+          description: List and compare which INT EVCs have flows installed comparing with mef_eline flows and telemetry metadata
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/CompareResp'
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
 
 
 components:
@@ -165,3 +181,14 @@ components:
           type: string
         code:
           type: number
+    CompareResp: # Can be referenced via '#/components/schemas/CompareResp'
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        compare_reason:
+          type: array
+          items:
+            type: string
