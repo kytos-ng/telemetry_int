@@ -283,7 +283,10 @@ class Main(KytosNApp):
             log.error(exc_error)
             raise HTTPException(500, detail=exc_error)
 
-        response = self.int_manager.evc_compare(int_flows, mef_flows, evcs)
+        response = [
+            {"id": k, "name": evcs[k]["name"], "compare_reason": v} for k, v in
+            self.int_manager.evc_compare(int_flows, mef_flows, evcs).items()
+        ]
         return JSONResponse(response)
 
     @alisten_to("kytos/mef_eline.evcs_loaded")
