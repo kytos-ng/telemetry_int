@@ -488,9 +488,9 @@ class INTManager:
         """EVC compare.
 
         Cases:
-        - Has INT flows but not telemetry metadata -> metadata_deleted
-        - No INT enabled metadata but has INT flows -> leaked_int_flows
-        - No INT flows but has mef flows and enabled metadata -> missing_s
+        - No INT enabled but has INT flows -> wrong_metadata_has_int_flows
+        - INT enabled but has less flows than mef flows -> missing_some_int_flows
+
         """
         int_flows = {
             utils.get_id_from_cookie(k): v for k, v in stored_int_flows.items()
@@ -502,12 +502,13 @@ class INTManager:
         results = defaultdict(list)
         for evc in evcs.values():
             evc_id = evc["id"]
+
             if (
-                "telemetry" not in evc["metadata"]
+                not utils.has_int_enabled(evc)
                 and evc_id in int_flows
                 and int_flows[evc_id]
             ):
-                results[evc_id].append("metadata_deleted")
+                results[evc_id].append("wrong_metadata_has_int_flows")
 
             if (
                 utils.has_int_enabled(evc)
@@ -515,19 +516,13 @@ class INTManager:
                 and mef_flows[evc_id]
                 and (
                     evc_id not in int_flows
-                    or len(int_flows.get(evc_id, [])) < len(mef_flows["id"])
+                    or (
+                        evc_id in int_flows
+                        and len(int_flows[evc_id]) < len(mef_flows["id"])
+                    )
                 )
             ):
                 results[evc_id].append("missing_some_int_flows")
-
-            if (
-                "telemetry" in evc["metadata"]
-                and "enabled" in evc["metadata"]["telemetry"]
-                and not evc["metadata"]["telemetry"]["enabled"]
-                and evc_id in int_flows
-                and int_flows[evc_id]
-            ):
-                results[evc_id].append("leaked_int_flows")
         return results
 
     async def _remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
