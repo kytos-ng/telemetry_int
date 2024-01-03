@@ -518,7 +518,7 @@ class INTManager:
                     evc_id not in int_flows
                     or (
                         evc_id in int_flows
-                        and len(int_flows[evc_id]) < len(mef_flows["id"])
+                        and len(int_flows[evc_id]) < len(mef_flows[evc_id])
                     )
                 )
             ):
