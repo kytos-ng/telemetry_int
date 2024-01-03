@@ -249,9 +249,10 @@ class Main(KytosNApp):
         """List and compare which INT EVCs have flows installed comparing with
         mef_eline flows and telemetry metadata. You should use this endpoint
         to confirm if both the telemetry metadata is still coherent and also
-        the minimum expected number of flows. A dict of EVCs will get returned
-        with the outcome of the comparision, only inconsistent/incoherent EVCs
-        will be returned with the reasons why.
+        the minimum expected number of flows. A list of EVCs will get returned
+        with the inconsistent INT EVCs. If you encounter any inconsistent
+        EVC you need to analyze the situation and then decide if you'd
+        like to force enable or disable INT.
         """
 
         try:
