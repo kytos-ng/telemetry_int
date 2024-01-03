@@ -118,6 +118,100 @@ class TestMain:
         assert len(data) == 1
         assert evc_id in data
 
+    async def test_get_evc_compare(self, monkeypatch) -> None:
+        """Test get evc compre ok case."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        evc_id = "1"
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evcs.return_value = {
+            evc_id: {
+                "id": evc_id,
+                "name": "evc",
+                "metadata": {"telemetry": {"enabled": True}},
+            },
+        }
+        api_mock.get_stored_flows.side_effect = [
+            {flow.cookie: [{"id": "some_1", "match": {"in_port": 1}}]},
+            {flow.cookie: [{"id": "some_2", "match": {"in_port": 1}}]},
+        ]
+
+        endpoint = f"{self.base_endpoint}/evc/compare"
+        response = await self.api_client.get(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 0
+
+    async def test_get_evc_compare_wrong_metadata(self, monkeypatch) -> None:
+        """Test get evc compre wrong_metadata_has_int_flows case."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        evc_id = "1"
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evcs.return_value = {
+            evc_id: {"id": evc_id, "name": "evc", "metadata": {}},
+        }
+        api_mock.get_stored_flows.side_effect = [
+            {flow.cookie: [{"id": "some_1", "match": {"in_port": 1}}]},
+            {flow.cookie: [{"id": "some_2", "match": {"in_port": 1}}]},
+        ]
+
+        endpoint = f"{self.base_endpoint}/evc/compare"
+        response = await self.api_client.get(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["id"] == evc_id
+        assert data[0]["compare_reason"] == ["wrong_metadata_has_int_flows"]
+        assert data[0]["name"] == "evc"
+
+    async def test_get_evc_compare_missing_some_int_flows(self, monkeypatch) -> None:
+        """Test get evc compre missing_some_int_flows case."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        evc_id = "1"
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evcs.return_value = {
+            evc_id: {
+                "id": evc_id,
+                "name": "evc",
+                "metadata": {"telemetry": {"enabled": True}},
+            },
+        }
+        api_mock.get_stored_flows.side_effect = [
+            {flow.cookie: [{"id": "some_1", "match": {"in_port": 1}}]},
+            {
+                flow.cookie: [
+                    {"id": "some_2", "match": {"in_port": 1}},
+                    {"id": "some_3", "match": {"in_port": 1}},
+                ]
+            },
+        ]
+
+        endpoint = f"{self.base_endpoint}/evc/compare"
+        response = await self.api_client.get(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["id"] == evc_id
+        assert data[0]["compare_reason"] == ["missing_some_int_flows"]
+        assert data[0]["name"] == "evc"
+
     async def test_on_table_enabled(self) -> None:
         """Test on_table_enabled."""
         assert self.napp.int_manager.flow_builder.table_group == {"evpl": 2, "epl": 3}
