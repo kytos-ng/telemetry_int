@@ -6,6 +6,7 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 import asyncio
 import pathlib
+from collections import defaultdict
 from datetime import datetime
 
 import napps.kytos.telemetry_int.kytos_api_helper as api
@@ -244,20 +245,79 @@ class Main(KytosNApp):
 
         return JSONResponse(list(evcs.keys()), status_code=201)
 
-    @rest("v1/sync")
-    def sync_flows(self, _request: Request) -> JSONResponse:
-        """Endpoint to force the telemetry napp to search for INT flows and delete them
-        accordingly to the evc metadata."""
+    @rest("v1/evc/compare")
+    async def evc_compare(self, _request: Request) -> JSONResponse:
+        """List and compare which INT EVCs have flows installed comparing with
+        mef_eline flows and telemetry metadata. You should use this endpoint
+        to confirm if both the telemetry metadata is still coherent and also
+        the minimum expected number of flows. A dict of EVCs will get returned
+        with the outcome of the comparision, only inconsistent/incoherent EVCs
+        will be returned with the reasons why.
 
-        # TODO
-        # for evc_id in get_evcs_ids():
-        return JSONResponse("TBD")
+        Cases:
+        - Has INT flows but not telemetry metadata -> metadata_deleted
+        - No INT enabled metadata but has INT flows -> leaked_int_flows
+        - No INT flows but has mef flows and enabled metadata -> missing_some_int_flows
+        """
 
-    @rest("v1/evc/update")
-    def update_evc(self, _request: Request) -> JSONResponse:
-        """If an EVC changed from unidirectional to bidirectional telemetry,
-        make the change."""
-        return JSONResponse({})
+        try:
+            int_flows, mef_flows, evcs = await asyncio.gather(
+                api.get_stored_flows(
+                    [
+                        settings.INT_COOKIE_PREFIX << 56,
+                        settings.INT_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                    ]
+                ),
+                api.get_stored_flows(
+                    [
+                        settings.MEF_COOKIE_PREFIX << 56,
+                        settings.MEF_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                    ]
+                ),
+                api.get_evcs(),
+            )
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
+
+        int_flows = {utils.get_id_from_cookie(k): v for k, v in int_flows.items()}
+        mef_flows = {utils.get_id_from_cookie(k): v for k, v in mef_flows.items()}
+
+        response = defaultdict(list)
+        for evc in evcs.values():
+            evc_id = evc["id"]
+            if (
+                "telemetry" not in evc["metadata"]
+                and evc_id in int_flows
+                and int_flows[evc_id]
+            ):
+                response[evc_id].append("metadata_deleted")
+
+            if (
+                utils.has_int_enabled(evc)
+                and evc_id in mef_flows
+                and mef_flows["id"]
+                and (
+                    evc_id not in int_flows
+                    or len(int_flows.get(evc_id, [])) < len(mef_flows["id"])
+                )
+            ):
+                response[evc_id].append("missing_some_int_flows")
+
+            if (
+                "telemetry" in evc["metadata"]
+                and "enabled" in evc["metadata"]["telemetry"]
+                and not evc["metadata"]["telemetry"]["enabled"]
+                and evc_id in int_flows
+                and int_flows[evc_id]
+            ):
+                response[evc_id].append("leaked_int_flows")
+        return JSONResponse(response)
 
     @alisten_to("kytos/mef_eline.evcs_loaded")
     async def on_mef_eline_evcs_loaded(self, event: KytosEvent) -> None:
