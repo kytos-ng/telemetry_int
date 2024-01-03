@@ -253,11 +253,6 @@ class Main(KytosNApp):
         the minimum expected number of flows. A dict of EVCs will get returned
         with the outcome of the comparision, only inconsistent/incoherent EVCs
         will be returned with the reasons why.
-
-        Cases:
-        - Has INT flows but not telemetry metadata -> metadata_deleted
-        - No INT enabled metadata but has INT flows -> leaked_int_flows
-        - No INT flows but has mef flows and enabled metadata -> missing_some_int_flows
         """
 
         try:
@@ -285,38 +280,7 @@ class Main(KytosNApp):
             log.error(exc_error)
             raise HTTPException(500, detail=exc_error)
 
-        int_flows = {utils.get_id_from_cookie(k): v for k, v in int_flows.items()}
-        mef_flows = {utils.get_id_from_cookie(k): v for k, v in mef_flows.items()}
-
-        response = defaultdict(list)
-        for evc in evcs.values():
-            evc_id = evc["id"]
-            if (
-                "telemetry" not in evc["metadata"]
-                and evc_id in int_flows
-                and int_flows[evc_id]
-            ):
-                response[evc_id].append("metadata_deleted")
-
-            if (
-                utils.has_int_enabled(evc)
-                and evc_id in mef_flows
-                and mef_flows["id"]
-                and (
-                    evc_id not in int_flows
-                    or len(int_flows.get(evc_id, [])) < len(mef_flows["id"])
-                )
-            ):
-                response[evc_id].append("missing_some_int_flows")
-
-            if (
-                "telemetry" in evc["metadata"]
-                and "enabled" in evc["metadata"]["telemetry"]
-                and not evc["metadata"]["telemetry"]["enabled"]
-                and evc_id in int_flows
-                and int_flows[evc_id]
-            ):
-                response[evc_id].append("leaked_int_flows")
+        response = self.int_manager.evc_compare(int_flows, mef_flows, evcs)
         return JSONResponse(response)
 
     @alisten_to("kytos/mef_eline.evcs_loaded")
