@@ -512,7 +512,7 @@ class INTManager:
             if (
                 utils.has_int_enabled(evc)
                 and evc_id in mef_flows
-                and mef_flows["id"]
+                and mef_flows[evc_id]
                 and (
                     evc_id not in int_flows
                     or len(int_flows.get(evc_id, [])) < len(mef_flows["id"])
