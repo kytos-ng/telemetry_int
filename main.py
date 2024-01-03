@@ -6,7 +6,6 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 
 import asyncio
 import pathlib
-from collections import defaultdict
 from datetime import datetime
 
 import napps.kytos.telemetry_int.kytos_api_helper as api
@@ -259,14 +258,18 @@ class Main(KytosNApp):
             int_flows, mef_flows, evcs = await asyncio.gather(
                 api.get_stored_flows(
                     [
-                        settings.INT_COOKIE_PREFIX << 56,
-                        settings.INT_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                        (
+                            settings.INT_COOKIE_PREFIX << 56,
+                            settings.INT_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                        ),
                     ]
                 ),
                 api.get_stored_flows(
                     [
-                        settings.MEF_COOKIE_PREFIX << 56,
-                        settings.MEF_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                        (
+                            settings.MEF_COOKIE_PREFIX << 56,
+                            settings.MEF_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                        ),
                     ]
                 ),
                 api.get_evcs(),
