@@ -3,6 +3,7 @@ other kytos napps' APIs """
 
 
 from collections import defaultdict
+from typing import Union
 
 import httpx
 from napps.kytos.telemetry_int import settings
@@ -76,17 +77,23 @@ async def get_evc(evc_id: str, exclude_archived=True) -> dict:
     retry=retry_if_exception_type(httpx.RequestError),
 )
 async def get_stored_flows(
-    cookies: list[int] = None,
+    cookies: list[Union[int, tuple[int, int]]] = None,
 ) -> dict[int, list[dict]]:
     """Get flow_manager stored_flows grouped by cookies given a list of cookies."""
     cookies = cookies or []
 
     cookie_range_args = []
     for cookie in cookies:
-        # gte cookie
-        cookie_range_args.append(cookie)
-        # lte cookie
-        cookie_range_args.append(cookie)
+        if isinstance(cookie, int):
+            # gte cookie
+            cookie_range_args.append(cookie)
+            # lte cookie
+            cookie_range_args.append(cookie)
+        elif isinstance(cookie, tuple) and len(cookie) == 2:
+            # gte cookie
+            cookie_range_args.append(cookie[0])
+            # lte cookie
+            cookie_range_args.append(cookie[1])
 
     endpoint = "stored_flows?state=installed&state=pending"
     async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:

@@ -244,20 +244,51 @@ class Main(KytosNApp):
 
         return JSONResponse(list(evcs.keys()), status_code=201)
 
-    @rest("v1/sync")
-    def sync_flows(self, _request: Request) -> JSONResponse:
-        """Endpoint to force the telemetry napp to search for INT flows and delete them
-        accordingly to the evc metadata."""
+    @rest("v1/evc/compare")
+    async def evc_compare(self, _request: Request) -> JSONResponse:
+        """List and compare which INT EVCs have flows installed comparing with
+        mef_eline flows and telemetry metadata. You should use this endpoint
+        to confirm if both the telemetry metadata is still coherent and also
+        the minimum expected number of flows. A list of EVCs will get returned
+        with the inconsistent INT EVCs. If you encounter any inconsistent
+        EVC you need to analyze the situation and then decide if you'd
+        like to force enable or disable INT.
+        """
 
-        # TODO
-        # for evc_id in get_evcs_ids():
-        return JSONResponse("TBD")
+        try:
+            int_flows, mef_flows, evcs = await asyncio.gather(
+                api.get_stored_flows(
+                    [
+                        (
+                            settings.INT_COOKIE_PREFIX << 56,
+                            settings.INT_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                        ),
+                    ]
+                ),
+                api.get_stored_flows(
+                    [
+                        (
+                            settings.MEF_COOKIE_PREFIX << 56,
+                            settings.MEF_COOKIE_PREFIX << 56 | 0xFFFFFFFFFFFFFF,
+                        ),
+                    ]
+                ),
+                api.get_evcs(),
+            )
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
 
-    @rest("v1/evc/update")
-    def update_evc(self, _request: Request) -> JSONResponse:
-        """If an EVC changed from unidirectional to bidirectional telemetry,
-        make the change."""
-        return JSONResponse({})
+        response = [
+            {"id": k, "name": evcs[k]["name"], "compare_reason": v}
+            for k, v in self.int_manager.evc_compare(int_flows, mef_flows, evcs).items()
+        ]
+        return JSONResponse(response)
 
     @alisten_to("kytos/mef_eline.evcs_loaded")
     async def on_mef_eline_evcs_loaded(self, event: KytosEvent) -> None:

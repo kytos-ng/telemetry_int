@@ -307,10 +307,7 @@ class INTManager:
         log.info(f"Redeploying INT on EVC ids: {list(evcs.keys())}, force: True")
 
         stored_flows = await api.get_stored_flows(
-            [
-                utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
-                for evc_id in evcs
-            ]
+            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
         )
         await self._remove_int_flows(stored_flows)
 
@@ -484,6 +481,49 @@ class INTManager:
             pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
             pp_a.evc_ids.discard(evc_id)
             pp_z.evc_ids.discard(evc_id)
+
+    def evc_compare(
+        self, stored_int_flows: dict, stored_mef_flows: dict, evcs: dict
+    ) -> dict[str, list]:
+        """EVC compare.
+
+        Cases:
+        - No INT enabled but has INT flows -> wrong_metadata_has_int_flows
+        - INT enabled but has less flows than mef flows -> missing_some_int_flows
+
+        """
+        int_flows = {
+            utils.get_id_from_cookie(k): v for k, v in stored_int_flows.items()
+        }
+        mef_flows = {
+            utils.get_id_from_cookie(k): v for k, v in stored_mef_flows.items()
+        }
+
+        results = defaultdict(list)
+        for evc in evcs.values():
+            evc_id = evc["id"]
+
+            if (
+                not utils.has_int_enabled(evc)
+                and evc_id in int_flows
+                and int_flows[evc_id]
+            ):
+                results[evc_id].append("wrong_metadata_has_int_flows")
+
+            if (
+                utils.has_int_enabled(evc)
+                and evc_id in mef_flows
+                and mef_flows[evc_id]
+                and (
+                    evc_id not in int_flows
+                    or (
+                        evc_id in int_flows
+                        and len(int_flows[evc_id]) < len(mef_flows[evc_id])
+                    )
+                )
+            ):
+                results[evc_id].append("missing_some_int_flows")
+        return results
 
     async def _remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
         """Delete int flows given a prefiltered stored_flows.
