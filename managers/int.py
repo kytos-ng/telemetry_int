@@ -230,6 +230,57 @@ class INTManager:
             }
             await self.remove_int_flows(to_deactivate, metadata)
 
+    async def handle_pp_metadata_added(self, intf: Interface) -> None:
+        """Handle proxy port metadata added.
+
+        If an existing ProxyPort gets its proxy_port meadata updated
+        and has associated EVCs then it'll remove and install the flows accordingly.
+
+        """
+        if "proxy_port" not in intf.metadata:
+            return
+        try:
+            pp = self.srcs_pp[self.unis_src[intf.id]]
+            if not pp.evc_ids:
+                return
+        except KeyError:
+            return
+
+        cur_source_intf = intf.switch.get_interface_by_port_no(
+            intf.metadata.get("proxy_port")
+        )
+        if cur_source_intf == pp.source:
+            return
+
+        async with self._intf_meta_lock:
+            pp.source = cur_source_intf
+
+            evcs = await api.get_evcs(
+                **{
+                    "metadata.telemetry.enabled": "true",
+                }
+            )
+            affected_evcs = {
+                evc_id: evc for evc_id, evc in evcs.items() if evc_id in pp.evc_ids
+            }
+            if not affected_evcs:
+                return
+
+            log.info(
+                f"Handling interface metadata updated on {intf}. It'll disable the "
+                "EVCs to be safe, and then try to enable again with the updated "
+                f" proxy port {pp}, EVC ids: {list(affected_evcs)}"
+            )
+            await self.disable_int(affected_evcs, force=True)
+            try:
+                await self.enable_int(affected_evcs, force=True)
+            except ProxyPortSameSourceIntraEVC as exc:
+                msg = (
+                    f"Validation error when updating interface {intf} proxy port {pp}"
+                    f" EVC ids: {list(affected_evcs)}, exception {str(exc)}"
+                )
+                log.error(msg)
+
     async def disable_int(self, evcs: dict[str, dict], force=False) -> None:
         """Disable INT on EVCs.
 
