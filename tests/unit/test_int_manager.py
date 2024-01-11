@@ -262,9 +262,7 @@ class TestINTManager:
         await int_manager.handle_pp_metadata_added(intf_mock)
         assert api_mock.get_evcs.call_count == 1
         assert api_mock.get_evcs.call_count == 1
-        assert api_mock.get_evcs.call_args[1] == {
-            "metadata.telemetry.enabled": "true"
-        }
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
         assert int_manager.disable_int.call_count == 1
         assert int_manager.enable_int.call_count == 1
 
@@ -322,8 +320,8 @@ class TestINTManager:
         assert api_mock.get_evcs.call_args[1] == {
             "metadata.telemetry.enabled": "true",
         }
-        assert not int_manager.disable_int.call_count == 1
-        assert not int_manager.enable_int.call_count == 1
+        assert not int_manager.disable_int.call_count
+        assert not int_manager.enable_int.call_count
 
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
@@ -425,3 +423,12 @@ class TestINTManager:
         pp_a.source, pp_z.source = source, source
         with pytest.raises(ProxyPortSameSourceIntraEVC):
             int_manager._validate_intra_evc_different_proxy_ports(evc)
+
+    async def test__remove_int_flows(self, inter_evc_evpl_flows_data) -> None:
+        """test _remove_int_flows."""
+        controller = get_controller_mock()
+        controller._buffers.app.aput = AsyncMock()
+        int_manager = INTManager(controller)
+        assert len(inter_evc_evpl_flows_data) == 3
+        await int_manager._remove_int_flows(inter_evc_evpl_flows_data)
+        assert controller._buffers.app.aput.call_count == 3
