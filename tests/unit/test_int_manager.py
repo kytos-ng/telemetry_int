@@ -262,9 +262,7 @@ class TestINTManager:
         await int_manager.handle_pp_metadata_added(intf_mock)
         assert api_mock.get_evcs.call_count == 1
         assert api_mock.get_evcs.call_count == 1
-        assert api_mock.get_evcs.call_args[1] == {
-            "metadata.telemetry.enabled": "true"
-        }
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
         assert int_manager.disable_int.call_count == 1
         assert int_manager.enable_int.call_count == 1
 
@@ -322,8 +320,8 @@ class TestINTManager:
         assert api_mock.get_evcs.call_args[1] == {
             "metadata.telemetry.enabled": "true",
         }
-        assert not int_manager.disable_int.call_count == 1
-        assert not int_manager.enable_int.call_count == 1
+        assert not int_manager.disable_int.call_count
+        assert not int_manager.enable_int.call_count
 
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
