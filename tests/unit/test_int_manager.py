@@ -241,6 +241,88 @@ class TestINTManager:
         assert telemetry["status_reason"] == ["proxy_port_metadata_removed"]
         assert "status_updated_at" in telemetry
 
+    async def test_handle_pp_metadata_added(self, monkeypatch):
+        """Test handle_pp_metadata_added."""
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        source_id, source_port = "some_source_id", 2
+        intf_mock.metadata = {"proxy_port": source_port}
+        evc_id = "3766c105686748"
+        int_manager.unis_src[intf_mock.id] = source_id
+        int_manager.srcs_pp[source_id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        assert "proxy_port" in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {evc_id: {}}
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock()
+
+        await int_manager.handle_pp_metadata_added(intf_mock)
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
+        assert int_manager.disable_int.call_count == 1
+        assert int_manager.enable_int.call_count == 1
+
+    async def test_handle_pp_metadata_added_no_change(self, monkeypatch):
+        """Test handle_pp_metadata_added no change."""
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        source_id, source_port = "some_source_id", 2
+        source_intf = MagicMock()
+        intf_mock.metadata = {"proxy_port": source_port}
+        evc_id = "3766c105686748"
+        int_manager.unis_src[intf_mock.id] = source_id
+        int_manager.srcs_pp[source_id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        # Simulating that the current and new proxy_port source are the same
+        pp_mock.source = source_intf
+        intf_mock.switch.get_interface_by_port_no.return_value = source_intf
+
+        assert "proxy_port" in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {evc_id: {}}
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock()
+
+        await int_manager.handle_pp_metadata_added(intf_mock)
+        assert not api_mock.get_evcs.call_count
+        assert not int_manager.disable_int.call_count
+        assert not int_manager.enable_int.call_count
+
+    async def test_handle_pp_metadata_added_no_affected(self, monkeypatch):
+        """Test handle_pp_metadata_added no affected evcs."""
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        source_id, source_port = "some_source_id", 2
+        intf_mock.metadata = {"proxy_port": source_port}
+        evc_id = "3766c105686748"
+        int_manager.unis_src[intf_mock.id] = source_id
+        int_manager.srcs_pp[source_id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        assert "proxy_port" in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        # Simulating returning no EVCs that were enabled and UP
+        api_mock.get_evcs.return_value = {}
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock()
+
+        await int_manager.handle_pp_metadata_added(intf_mock)
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {
+            "metadata.telemetry.enabled": "true",
+        }
+        assert not int_manager.disable_int.call_count
+        assert not int_manager.enable_int.call_count
+
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
         controller = MagicMock()
