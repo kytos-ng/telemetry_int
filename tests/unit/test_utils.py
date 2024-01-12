@@ -1,6 +1,9 @@
 """Test utils."""
 import pytest
+from httpx import Response
+from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int import utils
+from napps.kytos.telemetry_int.exceptions import FlowsNotFound, PriorityOverflow
 
 
 @pytest.mark.parametrize(
@@ -206,3 +209,54 @@ def test_set_owner() -> None:
 def test_modify_actions(actions, actions_to_change, remove, expected_actions) -> None:
     """test modify_actions."""
     assert utils.modify_actions(actions, actions_to_change, remove) == expected_actions
+
+
+async def test_get_found_stored_flows(monkeypatch, intra_evc_evpl_flows_data) -> None:
+    """test get_found_stored_flows."""
+    evc_data = intra_evc_evpl_flows_data
+    dpid = "00:00:00:00:00:00:00:01"
+    cookies = [evc_data[dpid][0]["flow"]["cookie"]]
+    # taking the opportunity to also cover the cookie tuple input filter
+    cookies = [(c, c) for c in cookies]
+    assert cookies
+
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.request.return_value = Response(
+        200, json=intra_evc_evpl_flows_data, request=MagicMock()
+    )
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+
+    resp = await utils.get_found_stored_flows(cookies)
+    assert resp
+    for cookie, _cookie in cookies:
+        assert cookie in resp
+
+
+async def test_get_found_stored_flows_exc(monkeypatch) -> None:
+    """test get_found_stored_flows exc."""
+    mock = AsyncMock()
+    mock.return_value = {1: []}
+    monkeypatch.setattr("napps.kytos.telemetry_int.utils._get_stored_flows", mock)
+    with pytest.raises(FlowsNotFound):
+        await utils.get_found_stored_flows()
+
+
+@pytest.mark.parametrize(
+    "flow,expected_prio",
+    [
+        ({"flow": {"priority": 1}}, 101),
+        ({"flow": {"priority": 2**16 - 50}}, 2**16 - 49),
+    ],
+)
+def test_set_priority(flow, expected_prio) -> None:
+    """test set priority."""
+    resp = utils.set_priority(flow, "some_id")
+    assert resp["flow"]["priority"] == expected_prio
+
+
+def test_set_priority_exc() -> None:
+    """test set priority exc."""
+    flow = {"flow": {"priority": 2**16}}
+    with pytest.raises(PriorityOverflow):
+        utils.set_priority(flow, "some_id")
