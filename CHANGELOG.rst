@@ -7,6 +7,10 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
-Added
-=====
-- Initial iteration in-progress (this will be updated later)
+[2023.2.0] - 2024-02-16
+***********************
+
+General Information
+===================
+
+- Initial iteration of this NApp implementing EP031. Enabling, disabling and reploying EVCs are supported. The rest of network convergence events will be shipped in a next release.
