@@ -1,4 +1,5 @@
 """Test INTManager"""
+
 import pytest
 
 from unittest.mock import AsyncMock, MagicMock
@@ -15,7 +16,6 @@ from kytos.lib.helpers import (
 
 
 class TestINTManager:
-
     """TestINTManager."""
 
     def test_get_proxy_port_or_raise(self) -> None:
@@ -432,3 +432,63 @@ class TestINTManager:
         assert len(inter_evc_evpl_flows_data) == 3
         await int_manager._remove_int_flows(inter_evc_evpl_flows_data)
         assert controller._buffers.app.aput.call_count == 3
+
+    async def test__install_int_flows(self, inter_evc_evpl_flows_data, monkeypatch):
+        """test__install_int_flows."""
+        sleep_mock = AsyncMock()
+        monkeypatch.setattr("asyncio.sleep", sleep_mock)
+        controller = get_controller_mock()
+        controller._buffers.app.aput = AsyncMock()
+        int_manager = INTManager(controller)
+        assert len(inter_evc_evpl_flows_data) == 3
+        await int_manager._install_int_flows(inter_evc_evpl_flows_data)
+        assert controller._buffers.app.aput.call_count == 3
+        assert sleep_mock.call_count == 0
+
+    def test__add_pps_evc_ids(self):
+        """test_add_pps_evc_ids."""
+        dpid_a = "00:00:00:00:00:00:00:01"
+        intf_id_a = f"{dpid_a}:1"
+        intf_id_z = f"{dpid_a}:2"
+        evc_id = "3766c105686749"
+        evcs = {
+            evc_id: {
+                "metadata": {"telemetry": {"enabled": True}},
+                "uni_a": {"interface_id": intf_id_a},
+                "uni_z": {"interface_id": intf_id_z},
+            }
+        }
+        controller = get_controller_mock()
+        int_manager = INTManager(controller)
+        pp = MagicMock()
+        mock = MagicMock()
+        int_manager.get_proxy_port_or_raise = mock
+        mock.return_value = pp
+        int_manager._add_pps_evc_ids(evcs)
+        assert int_manager.get_proxy_port_or_raise.call_count == 2
+        assert pp.evc_ids.add.call_count == 2
+        pp.evc_ids.add.assert_called_with(evc_id)
+
+    def test__discard_pps_evc_ids(self):
+        """test_discard_pps_evc_ids."""
+        dpid_a = "00:00:00:00:00:00:00:01"
+        intf_id_a = f"{dpid_a}:1"
+        intf_id_z = f"{dpid_a}:2"
+        evc_id = "3766c105686749"
+        evcs = {
+            evc_id: {
+                "metadata": {"telemetry": {"enabled": True}},
+                "uni_a": {"interface_id": intf_id_a},
+                "uni_z": {"interface_id": intf_id_z},
+            }
+        }
+        controller = get_controller_mock()
+        int_manager = INTManager(controller)
+        pp = MagicMock()
+        mock = MagicMock()
+        int_manager.get_proxy_port_or_raise = mock
+        mock.return_value = pp
+        int_manager._discard_pps_evc_ids(evcs)
+        assert int_manager.get_proxy_port_or_raise.call_count == 2
+        assert pp.evc_ids.discard.call_count == 2
+        pp.evc_ids.discard.assert_called_with(evc_id)

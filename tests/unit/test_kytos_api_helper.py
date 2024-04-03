@@ -1,7 +1,9 @@
 """Test kytos_api_helper.py"""
+
 from httpx import Response
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.kytos_api_helper import (
+    add_evcs_metadata,
     get_evc,
     get_stored_flows,
     get_evcs,
@@ -86,3 +88,20 @@ async def test_get_stored_flows_no_cookies_filter(
     for flows in data.values():
         for flow in flows:
             assert flow["switch"] == dpid
+
+
+async def test_add_evcs_metadata(monkeypatch):
+    """test add_evcs_metadata."""
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    resp = "Operation successful"
+    aclient_mock.post.return_value = Response(201, json=resp, request=MagicMock())
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+
+    data = await add_evcs_metadata({}, {"some_key": "some_val"})
+    assert not data
+
+    data = await add_evcs_metadata(
+        {"some_id": {"id": "some_id"}}, {"some_key": "some_val"}
+    )
+    assert data == resp
