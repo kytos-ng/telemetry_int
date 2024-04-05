@@ -1,4 +1,5 @@
 """Test Main methods."""
+
 import pytest
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -221,6 +222,32 @@ class TestMain:
         assert self.napp.int_manager.flow_builder.table_group == {"evpl": 22, "epl": 33}
         assert self.napp.controller.buffers.app.aput.call_count == 1
 
+    async def test_on_table_enabled_no_group(self) -> None:
+        """Test on_table_enabled no group."""
+        await self.napp.on_table_enabled(
+            KytosEvent(content={"mef_eline": {"evpl": 22, "epl": 33}})
+        )
+        assert not self.napp.controller.buffers.app.aput.call_count
+
+    async def test_on_evc_deleted(self) -> None:
+        """Test on_evc_deleted."""
+        content = {"metadata": {"telemetry": {"enabled": True}}, "evc_id": "some_id"}
+        self.napp.int_manager.disable_int = AsyncMock()
+        await self.napp.on_evc_deleted(KytosEvent(content=content))
+        assert self.napp.int_manager.disable_int.call_count == 1
+
+    async def test_on_link_down(self) -> None:
+        """Test on link_down."""
+        self.napp.int_manager.handle_pp_link_down = AsyncMock()
+        await self.napp.on_link_down(KytosEvent(content={"link": MagicMock()}))
+        assert self.napp.int_manager.handle_pp_link_down.call_count == 1
+
+    async def test_on_link_up(self) -> None:
+        """Test on link_up."""
+        self.napp.int_manager.handle_pp_link_up = AsyncMock()
+        await self.napp.on_link_up(KytosEvent(content={"link": MagicMock()}))
+        assert self.napp.int_manager.handle_pp_link_up.call_count == 1
+
     async def test_on_table_enabled_error(self, monkeypatch) -> None:
         """Test on_table_enabled error case."""
         assert self.napp.int_manager.flow_builder.table_group == {"evpl": 2, "epl": 3}
@@ -275,3 +302,11 @@ class TestMain:
         self.napp.int_manager = MagicMock()
         await self.napp.on_intf_metadata_removed(event)
         self.napp.int_manager.handle_pp_metadata_removed.assert_called_with(intf)
+
+    async def test_on_intf_metadata_added(self):
+        """Test on_intf_metadata_added."""
+        intf = MagicMock()
+        event = KytosEvent(content={"interface": intf})
+        self.napp.int_manager = MagicMock()
+        await self.napp.on_intf_metadata_added(event)
+        self.napp.int_manager.handle_pp_metadata_added.assert_called_with(intf)

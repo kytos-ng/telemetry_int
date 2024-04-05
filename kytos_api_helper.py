@@ -1,7 +1,6 @@
 """ This module was created to be the main interface between the telemetry napp and all
 other kytos napps' APIs """
 
-
 from collections import defaultdict
 from typing import Union
 

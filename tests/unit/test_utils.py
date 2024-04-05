@@ -1,4 +1,5 @@
 """Test utils."""
+
 import pytest
 from httpx import Response
 from unittest.mock import AsyncMock, MagicMock

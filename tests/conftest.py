@@ -1,4 +1,5 @@
 """Conftest."""
+
 import json
 import pytest
 
