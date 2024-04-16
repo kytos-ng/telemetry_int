@@ -324,7 +324,7 @@ class Main(KytosNApp):
             and content["metadata"]["telemetry"]["enabled"]
         ):
             evc_id = content["evc_id"]
-            log.info(f"Event mef_eline.deleted on EVC id: {evc_id}")
+            log.info(f"Handling mef_eline.deleted on EVC id: {evc_id}")
             await self.int_manager.disable_int({evc_id: content}, force=True)
 
     @alisten_to("kytos/mef_eline.undeployed")
@@ -347,7 +347,9 @@ class Main(KytosNApp):
                     ),
                 }
             }
-            evcs = {content["evc_id"]: content}
+            evc_id = content["evc_id"]
+            evcs = {evc_id: content}
+            log.info(f"Handling mef_eline.undeployed on EVC id: {evc_id}")
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
     @alisten_to("kytos/topology.link_down")
