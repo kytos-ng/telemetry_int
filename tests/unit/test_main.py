@@ -251,6 +251,36 @@ class TestMain:
         await self.napp.on_evc_undeployed(KytosEvent(content=content))
         assert self.napp.int_manager.remove_int_flows.call_count == 1
 
+    async def test_on_evc_redeployed_link(self) -> None:
+        """Test on redeployed_link_down|redeployed_link_up."""
+        content = {
+            "enabled": True,
+            "metadata": {"telemetry": {"enabled": False}},
+            "evc_id": "some_id",
+        }
+        self.napp.int_manager.redeploy_int = AsyncMock()
+        await self.napp.on_evc_redeployed_link(KytosEvent(content=content))
+        assert self.napp.int_manager.redeploy_int.call_count == 0
+
+        content["metadata"]["telemetry"]["enabled"] = True
+        await self.napp.on_evc_redeployed_link(KytosEvent(content=content))
+        assert self.napp.int_manager.redeploy_int.call_count == 1
+
+    async def test_on_evc_error_redeployed_link_down(self) -> None:
+        """Test error_redeployed_link_down."""
+        content = {
+            "enabled": True,
+            "metadata": {"telemetry": {"enabled": False}},
+            "evc_id": "some_id",
+        }
+        self.napp.int_manager.remove_int_flows = AsyncMock()
+        await self.napp.on_evc_error_redeployed_link_down(KytosEvent(content=content))
+        assert self.napp.int_manager.remove_int_flows.call_count == 0
+
+        content["metadata"]["telemetry"]["enabled"] = True
+        await self.napp.on_evc_error_redeployed_link_down(KytosEvent(content=content))
+        assert self.napp.int_manager.remove_int_flows.call_count == 1
+
     async def test_on_link_down(self) -> None:
         """Test on link_down."""
         self.napp.int_manager.handle_pp_link_down = AsyncMock()
