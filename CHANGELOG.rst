@@ -10,6 +10,8 @@ file.
 Added
 =====
 - Handled ``kytos/mef_eline.undeployed`` event.
+- Handled ``kytos/mef_eline.(redeployed_link_down|redeployed_link_up)`` event.
+- Handled ``kytos/mef_eline.error_redeploy_link_down`` event.
 
 [2023.2.0] - 2024-02-16
 ***********************
