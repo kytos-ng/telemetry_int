@@ -359,12 +359,18 @@ class TestINTManager:
 
         int_manager = INTManager(controller)
         int_manager.remove_int_flows = AsyncMock()
-        await int_manager.enable_int({}, False)
+        evcs = {"3766c105686749": {"active": True}}
+        int_manager._validate_map_enable_evcs = MagicMock()
+        int_manager._validate_map_enable_evcs.return_value = evcs
+        int_manager.flow_builder.build_int_flows = MagicMock()
+        int_manager.flow_builder.build_int_flows.return_value = {}
+        int_manager._add_pps_evc_ids = MagicMock()
+
+        await int_manager.enable_int(evcs, False)
 
         assert stored_flows_mock.call_count == 1
-        assert api_mock.add_evcs_metadata.call_count == 1
+        assert api_mock.add_evcs_metadata.call_count == 2
         args = api_mock.add_evcs_metadata.call_args[0]
-        assert args[0] == {}
         assert "telemetry" in args[1]
         telemetry_dict = args[1]["telemetry"]
         expected_keys = ["enabled", "status", "status_reason", "status_updated_at"]

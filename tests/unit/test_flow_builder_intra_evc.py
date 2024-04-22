@@ -1,6 +1,10 @@
 """Test flow_builder."""
 
+import pytest
+
+from collections import defaultdict
 from unittest.mock import MagicMock
+from napps.kytos.telemetry_int.exceptions import FlowsNotFound
 from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from napps.kytos.telemetry_int.managers.int import INTManager
 from napps.kytos.telemetry_int.utils import get_cookie
@@ -640,3 +644,93 @@ def test_build_int_flows_intra_epl(evcs_data, intra_evc_epl_flows_data) -> None:
 
     for i, flow in enumerate(flows):
         assert (i, flow["flow"]) == (i, expected_flows[i]["flow"])
+
+
+def test_build_int_flows_intra_epl_inactive(evcs_data) -> None:
+    """Test build INT flows intra EPL inactive.
+
+                            +--------+
+                            |        |
+                         10 |      11|
+                   +--------+--------v--+
+                   |                    | 20
+                1  |                    +-----+
+     --------------+                    |     |
+                   |                    |     |
+                   |      sw1           |     |
+               2   |                    |21   |
+    ---------------+                    <-----+
+                   |                    |
+                   +--------------------+
+    """
+    controller = get_controller_mock()
+    int_manager = INTManager(controller)
+    get_proxy_port_or_raise = MagicMock()
+    int_manager.get_proxy_port_or_raise = get_proxy_port_or_raise
+
+    evc_id = "3766c105686749"
+    dpid_a = "00:00:00:00:00:00:00:01"
+    mock_switch_a = get_switch_mock(dpid_a, 0x04)
+    mock_interface_a1 = get_interface_mock("s1-eth1", 1, mock_switch_a)
+    mock_interface_a1.id = f"{dpid_a}:{mock_interface_a1.port_number}"
+    mock_interface_a10 = get_interface_mock("s1-eth10", 10, mock_switch_a)
+    mock_interface_a1.metadata = {"proxy_port": mock_interface_a10.port_number}
+    mock_interface_a10.status = EntityStatus.UP
+    mock_interface_a11 = get_interface_mock("s1-eth11", 11, mock_switch_a)
+    mock_interface_a11.status = EntityStatus.UP
+    mock_interface_a10.metadata = {
+        "looped": {
+            "port_numbers": [
+                mock_interface_a10.port_number,
+                mock_interface_a11.port_number,
+            ]
+        }
+    }
+
+    mock_interface_z1 = get_interface_mock("s1-eth2", 1, mock_switch_a)
+    mock_interface_z1.status = EntityStatus.UP
+    mock_interface_z1.id = f"{dpid_a}:{mock_interface_a1.port_number}"
+    mock_interface_z20 = get_interface_mock("s1-eth20", 20, mock_switch_a)
+    mock_interface_z1.metadata = {"proxy_port": mock_interface_z20.port_number}
+    mock_interface_z20.status = EntityStatus.UP
+    mock_interface_z21 = get_interface_mock("s1-eth21", 21, mock_switch_a)
+    mock_interface_z21.status = EntityStatus.UP
+    mock_interface_z20.metadata = {
+        "looped": {
+            "port_numbers": [
+                mock_interface_z20.port_number,
+                mock_interface_z21.port_number,
+            ]
+        }
+    }
+
+    mock_switch_a.get_interface_by_port_no = lambda port_no: {
+        mock_interface_a10.port_number: mock_interface_a10,
+        mock_interface_a11.port_number: mock_interface_a11,
+        mock_interface_z20.port_number: mock_interface_z20,
+        mock_interface_z21.port_number: mock_interface_z21,
+    }[port_no]
+
+    pp_a = ProxyPort(controller, source=mock_interface_a10)
+    assert pp_a.source == mock_interface_a10
+    assert pp_a.destination == mock_interface_a11
+    pp_z = ProxyPort(controller, source=mock_interface_z20)
+    assert pp_z.source == mock_interface_z20
+    assert pp_z.destination == mock_interface_z21
+
+    get_proxy_port_or_raise.side_effect = [pp_a, pp_z]
+    evcs_data = {evc_id: evcs_data[evc_id]}
+
+    # if it's an inactive EVC it shouldn't return any flows for this intra EPL
+    evcs_data[evc_id]["active"] = False
+    evcs_data = int_manager._validate_map_enable_evcs(evcs_data)
+    stored_flows = defaultdict(list)
+    cookie = get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+    flows = FlowBuilder().build_int_flows(evcs_data, stored_flows)[cookie]
+    assert not flows
+
+    # if it's active but there's no flows then it should raise FlowsNotFound
+    evcs_data[evc_id]["active"] = True
+    cookie = get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+    with pytest.raises(FlowsNotFound):
+        FlowBuilder().build_int_flows(evcs_data, stored_flows)
