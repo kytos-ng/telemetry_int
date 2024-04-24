@@ -12,6 +12,7 @@ Added
 - Handled ``kytos/mef_eline.undeployed`` event.
 - Handled ``kytos/mef_eline.(redeployed_link_down|redeployed_link_up)`` event.
 - Handled ``kytos/mef_eline.error_redeploy_link_down`` event.
+- Handled ``kytos/mef_eline.uni_active_updated`` event.
 
 Changed
 =======
