@@ -17,6 +17,7 @@ from kytos.core.helpers import alisten_to, avalidate_openapi_request, load_spec
 from kytos.core.rest_api import HTTPException, JSONResponse, Request, aget_json_or_400
 
 from .exceptions import (
+    EVCError,
     EVCHasINT,
     EVCHasNoINT,
     EVCNotFound,
@@ -350,6 +351,56 @@ class Main(KytosNApp):
             evc_id = content["evc_id"]
             evcs = {evc_id: content}
             log.info(f"Handling mef_eline.undeployed on EVC id: {evc_id}")
+            await self.int_manager.remove_int_flows(evcs, metadata, force=True)
+
+    @alisten_to("kytos/mef_eline.(redeployed_link_down|redeployed_link_up)")
+    async def on_evc_redeployed_link(self, event: KytosEvent) -> None:
+        """On EVC redeployed_link_down|redeployed_link_up."""
+        content = event.content
+        if (
+            content["enabled"]
+            and "metadata" in content
+            and "telemetry" in content["metadata"]
+            and content["metadata"]["telemetry"]["enabled"]
+        ):
+            evc_id = content["evc_id"]
+            content["id"] = evc_id
+            evcs = {evc_id: content}
+            log.info(f"Handling {event.name}, EVC id: {evc_id}")
+            try:
+                await self.int_manager.redeploy_int(evcs)
+            except EVCError as exc:
+                log.error(
+                    f"Failed to redeploy: {exc}. "
+                    f"Analyze the error and you'll need to redeploy EVC {evc_id} later"
+                )
+
+    @alisten_to("kytos/mef_eline.error_redeploy_link_down")
+    async def on_evc_error_redeployed_link_down(self, event: KytosEvent) -> None:
+        """On EVC error_redeploy_link_down, this is supposed to happen when
+        a path isn't when mef_eline handles a link down."""
+        content = event.content
+        if (
+            content["enabled"]
+            and "metadata" in content
+            and "telemetry" in content["metadata"]
+            and content["metadata"]["telemetry"]["enabled"]
+        ):
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "DOWN",
+                    "status_reason": ["redeployed_link_down_no_path"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            evc_id = content["evc_id"]
+            evcs = {evc_id: content}
+            log.info(
+                f"Handling mef_eline.redeployed_link_down_no_path on EVC id: {evc_id}"
+            )
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
     @alisten_to("kytos/topology.link_down")
