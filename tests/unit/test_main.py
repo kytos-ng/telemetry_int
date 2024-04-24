@@ -236,6 +236,21 @@ class TestMain:
         await self.napp.on_evc_deleted(KytosEvent(content=content))
         assert self.napp.int_manager.disable_int.call_count == 1
 
+    async def test_on_evc_undeployed(self) -> None:
+        """Test on_evc_undeployed."""
+        content = {
+            "enabled": False,
+            "metadata": {"telemetry": {"enabled": False}},
+            "evc_id": "some_id",
+        }
+        self.napp.int_manager.remove_int_flows = AsyncMock()
+        await self.napp.on_evc_undeployed(KytosEvent(content=content))
+        assert self.napp.int_manager.remove_int_flows.call_count == 0
+
+        content["metadata"]["telemetry"]["enabled"] = True
+        await self.napp.on_evc_undeployed(KytosEvent(content=content))
+        assert self.napp.int_manager.remove_int_flows.call_count == 1
+
     async def test_on_link_down(self) -> None:
         """Test on link_down."""
         self.napp.int_manager.handle_pp_link_down = AsyncMock()
