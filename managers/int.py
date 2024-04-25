@@ -1,5 +1,7 @@
 """INTManager module."""
+
 import asyncio
+import copy
 from collections import defaultdict
 from datetime import datetime
 
@@ -32,7 +34,6 @@ from napps.kytos.telemetry_int.exceptions import (
 
 
 class INTManager:
-
     """INTManager encapsulates and aggregates telemetry-related functionalities."""
 
     def __init__(self, controller: Controller) -> None:
@@ -350,7 +351,7 @@ class INTManager:
         self._add_pps_evc_ids(evcs)
 
     async def redeploy_int(self, evcs: dict[str, dict]) -> None:
-        """Redeploy INT on EVCs. It'll only delete and install the flows again.
+        """Redeploy INT on EVCs. It'll remove, install and update metadata.
 
         evcs is a dict of prefetched EVCs from mef_eline based on evc_ids.
         """
@@ -361,19 +362,19 @@ class INTManager:
             [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
         )
         await self._remove_int_flows(stored_flows)
+        metadata = {
+            "telemetry": {
+                "enabled": True,
+                "status": "UP",
+                "status_reason": [],
+                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+        }
+        await self.install_int_flows(evcs, metadata, force=True)
 
-        found_stored_flows = self.flow_builder.build_int_flows(
-            evcs,
-            await utils.get_found_stored_flows(
-                [
-                    utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
-                    for evc_id in evcs
-                ]
-            ),
-        )
-        await self._install_int_flows(found_stored_flows)
-
-    async def install_int_flows(self, evcs: dict[str, dict], metadata: dict) -> None:
+    async def install_int_flows(
+        self, evcs: dict[str, dict], metadata: dict, force=False
+    ) -> None:
         """Install INT flows and set metadata on EVCs."""
         stored_flows = self.flow_builder.build_int_flows(
             evcs,
@@ -384,9 +385,17 @@ class INTManager:
                 ]
             ),
         )
+
+        active_evcs = {k: v for k, v in evcs.items() if v["active"]}
+        inactive_evcs = {k: v for k, v in evcs.items() if not v["active"]}
+        inactive_metadata = copy.deepcopy(metadata)
+        inactive_metadata["telemetry"]["status"] = "DOWN"
+        inactive_metadata["telemetry"]["status_reason"] = ["no_flows"]
+
         await asyncio.gather(
             self._install_int_flows(stored_flows),
-            api.add_evcs_metadata(evcs, metadata),
+            api.add_evcs_metadata(inactive_evcs, inactive_metadata, force),
+            api.add_evcs_metadata(active_evcs, metadata, force),
         )
 
     def get_proxy_port_or_raise(self, intf_id: str, evc_id: str) -> ProxyPort:
