@@ -229,6 +229,20 @@ class TestMain:
         )
         assert not self.napp.controller.buffers.app.aput.call_count
 
+    async def test_on_evc_deployed(self) -> None:
+        """Test on_evc_deployed."""
+        content = {"metadata": {"telemetry_request": {}}, "evc_id": "some_id"}
+        self.napp.int_manager.redeploy_int = AsyncMock()
+        self.napp.int_manager.enable_int = AsyncMock()
+        await self.napp.on_evc_deployed(KytosEvent(content=content))
+        assert self.napp.int_manager.enable_int.call_count == 1
+        assert self.napp.int_manager.redeploy_int.call_count == 0
+
+        content = {"metadata": {"telemetry": {"enabled": True}}, "evc_id": "some_id"}
+        await self.napp.on_evc_deployed(KytosEvent(content=content))
+        assert self.napp.int_manager.enable_int.call_count == 1
+        assert self.napp.int_manager.redeploy_int.call_count == 1
+
     async def test_on_evc_deleted(self) -> None:
         """Test on_evc_deleted."""
         content = {"metadata": {"telemetry": {"enabled": True}}, "evc_id": "some_id"}
