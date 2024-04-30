@@ -386,15 +386,29 @@ class INTManager:
             ),
         )
 
-        active_evcs = {k: v for k, v in evcs.items() if v["active"]}
-        inactive_evcs = {k: v for k, v in evcs.items() if not v["active"]}
+        active_evcs, inactive_evcs, pp_down_evcs = {}, {}, {}
+        for evc_id, evc in evcs.items():
+            if not evc["active"]:
+                inactive_evcs[evc_id] = evc
+                continue
+            if any((
+                evc["uni_a"]["proxy_port"].status != EntityStatus.UP,
+                evc["uni_z"]["proxy_port"].status != EntityStatus.UP,
+            )):
+                pp_down_evcs[evc_id] = evc
+                continue
+            active_evcs[evc_id] = evc
+
         inactive_metadata = copy.deepcopy(metadata)
         inactive_metadata["telemetry"]["status"] = "DOWN"
+        pp_down_metadata = copy.deepcopy(inactive_metadata)
         inactive_metadata["telemetry"]["status_reason"] = ["no_flows"]
+        pp_down_metadata["telemetry"]["status_reason"] = ["proxy_port_down"]
 
         await asyncio.gather(
             self._install_int_flows(stored_flows),
             api.add_evcs_metadata(inactive_evcs, inactive_metadata, force),
+            api.add_evcs_metadata(pp_down_evcs, pp_down_metadata, force),
             api.add_evcs_metadata(active_evcs, metadata, force),
         )
 
