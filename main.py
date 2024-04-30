@@ -333,6 +333,7 @@ class Main(KytosNApp):
         """On EVC deployed."""
         content = event.content
         evc_id = content["evc_id"]
+        content["id"] = evc_id
         evcs = {evc_id: content}
         try:
             if (
