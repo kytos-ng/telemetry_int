@@ -232,7 +232,7 @@ class Main(KytosNApp):
             await self.int_manager.redeploy_int(evcs)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
-        except ProxyPortSameSourceIntraEVC as exc:
+        except (EVCHasNoINT, ProxyPortSameSourceIntraEVC) as exc:
             raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())

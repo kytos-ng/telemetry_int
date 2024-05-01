@@ -355,6 +355,7 @@ class INTManager:
 
         evcs is a dict of prefetched EVCs from mef_eline based on evc_ids.
         """
+        self._validate_has_int(evcs)
         evcs = self._validate_map_enable_evcs(evcs, force=True)
         log.info(f"Redeploying INT on EVC ids: {list(evcs.keys())}, force: True")
 
@@ -529,6 +530,11 @@ class INTManager:
 
             self._validate_intra_evc_different_proxy_ports(evc)
         return evcs
+
+    def _validate_has_int(self, evcs: dict[str, dict]):
+        for evc_id, evc in evcs.items():
+            if not utils.has_int_enabled(evc):
+                raise EVCHasNoINT(evc_id)
 
     def _add_pps_evc_ids(self, evcs: dict[str, dict]):
         """Add proxy ports evc_ids.
