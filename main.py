@@ -413,6 +413,33 @@ class Main(KytosNApp):
         """Handle topology.link_up."""
         await self.int_manager.handle_pp_link_up(event.content["link"])
 
+    @alisten_to("kytos/mef_eline.uni_active_updated")
+    async def on_uni_active_updated(self, event: KytosEvent) -> None:
+        """On mef_eline UNI active updated."""
+        content = event.content
+        if (
+            "metadata" in content
+            and "telemetry" in content["metadata"]
+            and content["metadata"]["telemetry"]["enabled"]
+        ):
+            evc_id, active = content["evc_id"], content["active"]
+            log.info(
+                f"Handling mef_eline.uni_active_updated active {active} "
+                f"on EVC id: {evc_id}"
+            )
+
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "UP" if active else "DOWN",
+                    "status_reason": [] if active else ["uni_down"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            await api.add_evcs_metadata({evc_id: content}, metadata)
+
     @alisten_to("kytos/flow_manager.flow.error")
     async def on_flow_mod_error(self, event: KytosEvent):
         """On flow mod errors.

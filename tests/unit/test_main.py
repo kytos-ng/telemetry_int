@@ -236,6 +236,29 @@ class TestMain:
         await self.napp.on_evc_deleted(KytosEvent(content=content))
         assert self.napp.int_manager.disable_int.call_count == 1
 
+    async def test_on_uni_active_updated(self, monkeypatch) -> None:
+        """Test on UNI active updated."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        content = {
+            "metadata": {"telemetry": {"enabled": True}},
+            "evc_id": "some_id",
+            "active": True,
+        }
+        await self.napp.on_uni_active_updated(KytosEvent(content=content))
+        assert api_mock.add_evcs_metadata.call_count == 1
+        args = api_mock.add_evcs_metadata.call_args[0][1]
+        assert args["telemetry"]["status"] == "UP"
+
+        content["active"] = False
+        await self.napp.on_uni_active_updated(KytosEvent(content=content))
+        assert api_mock.add_evcs_metadata.call_count == 2
+        args = api_mock.add_evcs_metadata.call_args[0][1]
+        assert args["telemetry"]["status"] == "DOWN"
+
     async def test_on_evc_undeployed(self) -> None:
         """Test on_evc_undeployed."""
         content = {

@@ -36,6 +36,10 @@ Subscribed
 - ``kytos/of_multi_table.enable_table``
 - ``kytos/mef_eline.deleted``
 - ``kytos/flow_manager.flow.error``
+- ``kytos/mef_eline.undeployed``
+- ``kytos/mef_eline.(redeployed_link_down|redeployed_link_up)``
+- ``kytos/mef_eline.error_redeploy_link_down``
+- ``kytos/mef_eline.uni_active_updated``
 
 Published
 ---------
