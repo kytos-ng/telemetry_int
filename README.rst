@@ -40,6 +40,7 @@ Subscribed
 - ``kytos/mef_eline.(redeployed_link_down|redeployed_link_up)``
 - ``kytos/mef_eline.error_redeploy_link_down``
 - ``kytos/mef_eline.uni_active_updated``
+- ``kytos/mef_eline.deployed``
 
 Published
 ---------

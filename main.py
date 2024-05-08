@@ -328,6 +328,34 @@ class Main(KytosNApp):
             log.info(f"Handling mef_eline.deleted on EVC id: {evc_id}")
             await self.int_manager.disable_int({evc_id: content}, force=True)
 
+    @alisten_to("kytos/mef_eline.deployed")
+    async def on_evc_deployed(self, event: KytosEvent) -> None:
+        """On EVC deployed."""
+        content = event.content
+        evc_id = content["evc_id"]
+        content["id"] = evc_id
+        evcs = {evc_id: content}
+        try:
+            if (
+                "metadata" in content
+                and "telemetry" in content["metadata"]
+                and content["metadata"]["telemetry"]["enabled"]
+            ):
+                log.info(f"Handling mef_eline.deployed on EVC id: {evc_id}")
+                await self.int_manager.redeploy_int(evcs)
+            elif (
+                "metadata" in content
+                and "telemetry_request" in content["metadata"]
+                and "telemetry" not in content["metadata"]
+            ):
+                log.info(f"Handling mef_eline.deployed on EVC id: {evc_id}")
+                await self.int_manager.enable_int(evcs, force=True)
+        except EVCError as exc:
+            log.error(
+                f"Failed when handling mef_eline.deployed: {exc}. Analyze the error "
+                f"and you'll need to enable or redeploy EVC {evc_id} later"
+            )
+
     @alisten_to("kytos/mef_eline.undeployed")
     async def on_evc_undeployed(self, event: KytosEvent) -> None:
         """On EVC undeployed."""
