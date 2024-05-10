@@ -19,6 +19,10 @@ Changed
 =======
 - Only raise ``FlowsNotFound`` when an EVC is active and flows aren't found. Update status and status_reason accordingly too when installing flows.
 
+Fixed
+=====
+- Only redeploy if INT has been enabled before
+
 [2023.2.0] - 2024-02-16
 ***********************
 

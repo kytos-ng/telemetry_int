@@ -44,8 +44,8 @@ class TestMain:
         assert response.status_code == 201
         assert response.json() == [evc_id]
 
-    async def test_redeploy_telemetry(self, monkeypatch) -> None:
-        """Test redeploy telemetry."""
+    async def test_redeploy_telemetry_enabled(self, monkeypatch) -> None:
+        """Test redeploy telemetry enabled."""
         api_mock, flow = AsyncMock(), MagicMock()
         flow.cookie = 0xA800000000000001
         monkeypatch.setattr(
@@ -54,8 +54,8 @@ class TestMain:
         )
 
         evc_id = utils.get_id_from_cookie(flow.cookie)
-        api_mock.get_evcs.return_value = {
-            evc_id: {"metadata": {"telemetry": {"enabled": False}}}
+        api_mock.get_evc.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": True}}}
         }
 
         self.napp.int_manager = AsyncMock()
@@ -65,6 +65,32 @@ class TestMain:
         assert self.napp.int_manager.redeploy_int.call_count == 1
         assert response.status_code == 201
         assert response.json() == [evc_id]
+
+    async def test_redeploy_telemetry_not_enabled(self, monkeypatch) -> None:
+        """Test redeploy telemetry not enabled."""
+        api_mock, flow, api_mngr_mock = AsyncMock(), MagicMock(), AsyncMock()
+        flow.cookie = 0xA800000000000001
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.managers.int.api",
+            api_mngr_mock,
+        )
+
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evc.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": False}}}
+        }
+
+        self.napp.int_manager._validate_map_enable_evcs = MagicMock()
+        self.napp.int_manager._remove_int_flows = AsyncMock()
+        self.napp.int_manager.install_int_flows = AsyncMock()
+        endpoint = f"{self.base_endpoint}/evc/redeploy"
+        response = await self.api_client.patch(endpoint, json={"evc_ids": [evc_id]})
+        assert response.status_code == 409
+        assert "isn't enabled" in response.json()["description"]
 
     @pytest.mark.parametrize("route", ["/evc/enable", "/evc/disable"])
     async def test_en_dis_openapi_validation(self, route: str) -> None:
