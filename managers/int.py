@@ -485,6 +485,53 @@ class INTManager:
             evc["id"], "intra EVC UNIs must use different proxy ports"
         )
 
+    async def handle_failover_link_down(self, evcs_content: dict[str, dict]) -> None:
+        """Handle failover link down.
+
+        When handling this event if a given proxy port has an unexpected
+        state INT will be removed falling back to mef_eline flows.
+        """
+        evcs, to_remove = {}, {}
+        new_flows: dict[int, list[dict]] = defaultdict(list)
+        for evc_id, evc in evcs_content.items():
+            if not utils.has_int_enabled(evc):
+                continue
+            try:
+                uni_a, uni_z = utils.get_evc_unis(evc)
+                pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
+                pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
+                uni_a["proxy_port"], uni_z["proxy_port"] = pp_a, pp_z
+                evc["id"] = evc_id
+                evc["uni_a"], evc["uni_z"] = uni_a, uni_z
+            except ProxyPortError as e:
+                log.warning(f"Unexpected proxy port state: {str(e)}."
+                            f"INT will be removed on evc id {evc_id}")
+                to_remove[evc_id] = evc
+                continue
+
+            for dpid, flows in evc["flows"].items():
+                for flow in flows:
+                    new_flows[flow["cookie"]].append({"flow": flow, "switch": dpid})
+
+            evc.pop("flows")
+            evcs[evc_id] = evc
+
+        await self._install_int_flows(
+            self.flow_builder.build_int_flows(evcs, new_flows)
+        )
+        if to_remove:
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "DOWN",
+                    "status_reason": ["proxy_port_error"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            await self.remove_int_flows(evcs, metadata, force=True)
+
     def _validate_map_enable_evcs(
         self,
         evcs: dict[str, dict],

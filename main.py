@@ -429,6 +429,11 @@ class Main(KytosNApp):
             )
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
+    @alisten_to("kytos/mef_eline.failover_link_down")
+    async def on_failover_link_down(self, event: KytosEvent):
+        log.info(f"Handling ev {event}; {event.content}")
+        await self.int_manager.handle_failover_link_down(event.content)
+
     @alisten_to("kytos/topology.link_down")
     async def on_link_down(self, event):
         """Handle topology.link_down."""
