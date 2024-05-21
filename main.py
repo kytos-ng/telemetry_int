@@ -324,7 +324,7 @@ class Main(KytosNApp):
             and "telemetry" in content["metadata"]
             and content["metadata"]["telemetry"]["enabled"]
         ):
-            evc_id = content["evc_id"]
+            evc_id = content["id"]
             log.info(f"Handling mef_eline.deleted on EVC id: {evc_id}")
             await self.int_manager.disable_int({evc_id: content}, force=True)
 
@@ -332,8 +332,7 @@ class Main(KytosNApp):
     async def on_evc_deployed(self, event: KytosEvent) -> None:
         """On EVC deployed."""
         content = event.content
-        evc_id = content["evc_id"]
-        content["id"] = evc_id
+        evc_id = content["id"]
         evcs = {evc_id: content}
         try:
             if (
@@ -376,7 +375,7 @@ class Main(KytosNApp):
                     ),
                 }
             }
-            evc_id = content["evc_id"]
+            evc_id = content["id"]
             evcs = {evc_id: content}
             log.info(f"Handling mef_eline.undeployed on EVC id: {evc_id}")
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
@@ -391,8 +390,7 @@ class Main(KytosNApp):
             and "telemetry" in content["metadata"]
             and content["metadata"]["telemetry"]["enabled"]
         ):
-            evc_id = content["evc_id"]
-            content["id"] = evc_id
+            evc_id = content["id"]
             evcs = {evc_id: content}
             log.info(f"Handling {event.name}, EVC id: {evc_id}")
             try:
@@ -424,7 +422,7 @@ class Main(KytosNApp):
                     ),
                 }
             }
-            evc_id = content["evc_id"]
+            evc_id = content["id"]
             evcs = {evc_id: content}
             log.info(
                 f"Handling mef_eline.redeployed_link_down_no_path on EVC id: {evc_id}"
@@ -450,7 +448,7 @@ class Main(KytosNApp):
             and "telemetry" in content["metadata"]
             and content["metadata"]["telemetry"]["enabled"]
         ):
-            evc_id, active = content["evc_id"], content["active"]
+            evc_id, active = content["id"], content["active"]
             log.info(
                 f"Handling mef_eline.uni_active_updated active {active} "
                 f"on EVC id: {evc_id}"
