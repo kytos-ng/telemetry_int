@@ -7,7 +7,6 @@ import itertools
 from typing import Literal
 
 from napps.kytos.telemetry_int import utils
-from napps.kytos.telemetry_int.exceptions import FlowsNotFound
 from napps.kytos.telemetry_int import settings
 
 
@@ -73,9 +72,7 @@ class FlowBuilder:
                 break
 
         if not new_int_flow_tbl_0_tcp:
-            if not evc["active"]:
-                return []
-            raise FlowsNotFound(evc["id"])
+            return []
 
         utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
         utils.set_new_cookie(new_int_flow_tbl_0_tcp)
@@ -224,9 +221,7 @@ class FlowBuilder:
             new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
 
             if not new_int_flow_tbl_0_tcp:
-                if not evc["active"]:
-                    return []
-                raise FlowsNotFound(evc["id"])
+                continue
 
             utils.set_new_cookie(new_int_flow_tbl_0_tcp)
             utils.set_owner(new_int_flow_tbl_0_tcp)
