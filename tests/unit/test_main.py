@@ -40,7 +40,7 @@ class TestMain:
         endpoint = f"{self.base_endpoint}/evc/enable"
         response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
         assert self.napp.int_manager.enable_int.call_count == 1
-        assert self.napp.int_manager._remove_int_flows.call_count == 1
+        assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
         assert response.status_code == 201
         assert response.json() == [evc_id]
 
@@ -85,7 +85,7 @@ class TestMain:
         }
 
         self.napp.int_manager._validate_map_enable_evcs = MagicMock()
-        self.napp.int_manager._remove_int_flows = AsyncMock()
+        self.napp.int_manager._remove_int_flows_by_cookies = AsyncMock()
         self.napp.int_manager.install_int_flows = AsyncMock()
         endpoint = f"{self.base_endpoint}/evc/redeploy"
         response = await self.api_client.patch(endpoint, json={"evc_ids": [evc_id]})
@@ -385,7 +385,7 @@ class TestMain:
             cookie: {"metadata": {"telemetry": {"enabled": True}}}
         }
         api_mock_int.get_stored_flows.return_value = {cookie: [MagicMock()]}
-        self.napp.int_manager._remove_int_flows = AsyncMock()
+        self.napp.int_manager._remove_int_flows_by_cookies = AsyncMock()
 
         event = KytosEvent(content={"flow": flow, "error_command": "add"})
         await self.napp.on_flow_mod_error(event)
@@ -393,7 +393,7 @@ class TestMain:
         assert api_mock_main.get_evc.call_count == 1
         assert api_mock_int.get_stored_flows.call_count == 1
         assert api_mock_int.add_evcs_metadata.call_count == 1
-        assert self.napp.int_manager._remove_int_flows.call_count == 1
+        assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
 
     async def test_on_mef_eline_evcs_loaded(self):
         """Test on_mef_eline_evcs_loaded."""
