@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import itertools
 from collections import defaultdict
 from datetime import datetime
 from typing import Literal
@@ -540,7 +541,13 @@ class INTManager:
 
             for dpid, flows in evc.get(old_flows_key, {}).items():
                 for flow in flows:
-                    new_flows[flow["cookie"]].append({"flow": flow, "switch": dpid})
+                    # set priority and table_group just so INT flows can be built
+                    # the priority doesn't matter for deletion
+                    flow["priority"] = 21000
+                    flow["table_group"] = (
+                        "evpl" if "dl_vlan" in flow.get("match", {}) else "epl"
+                    )
+                    old_flows[flow["cookie"]].append({"flow": flow, "switch": dpid})
 
             if evc.get(new_flows_key):
                 to_install[evc_id] = evc
@@ -553,8 +560,9 @@ class INTManager:
             log.info(
                 f"Handling {event_name} flows remove on EVC ids: {to_remove.keys()}"
             )
-            built = self._build_failover_to_remove_flows(to_remove, old_flows)
-            await self._remove_int_flows(built)
+            await self._remove_int_flows(
+                self._build_failover_old_flows(to_remove, old_flows)
+            )
         if to_remove_with_err:
             log.error(
                 f"Handling {event_name} proxy_port_error falling back "
@@ -579,7 +587,7 @@ class INTManager:
                 self.flow_builder.build_int_flows(to_install, new_flows)
             )
 
-    def _build_failover_to_remove_flows(
+    def _build_failover_old_flows(
         self, evcs: dict[str, list[dict]], old_flows: dict[int, list[dict]]
     ) -> dict[int, list[dict]]:
         """Build (old path) failover related to remove flows.
@@ -589,26 +597,64 @@ class INTManager:
         value the deletion uses flow mod OFPFC_DELETE, so no need to include the
         additional INT keys in the match like nw_proto for deletion.
         """
-        # TODO implement diff checking per EVC...
-        diff_svlans = True
-        if diff_svlans:
-            for cookie, flows in old_flows.items():
-                for flow in flows:
-                    flow["flow"]["priority"] = 2100
-                    flow["flow"]["table_group"] = (
-                        "evpl" if "dl_vlan" in flow.get("match", {}) else "epl"
-                    )
-            return self.flow_builder.build_int_flows(evcs, old_flows)
 
-        cookie_mask = int(0xFFFFFFFFFFFFFFFF)
-        for cookie, flows in old_flows.items():
-            int_cookie = hex(
-                settings.INT_COOKIE_PREFIX << 56 | (cookie & 0xFFFFFFFFFFFFFF)
+        removed_flows = defaultdict(list)
+        for evc_id, evc in evcs.items():
+            dpid_a, dpid_z = evc["uni_a"]["switch"], evc["uni_z"]["switch"]
+
+            cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+            int_cookie = settings.INT_COOKIE_PREFIX << 56 | (cookie & 0xFFFFFFFFFFFFFF)
+            cur_sink_a_svlan, cur_sink_z_svlan = None, None
+            sink_a_flows: list[dict] = []
+            sink_z_flows: list[dict] = []
+
+            for link in evc["current_path"]:
+                if cur_sink_a_svlan is None and (
+                    svlan := utils.get_svlan_dpid_link(link, dpid_a)
+                ):
+                    cur_sink_a_svlan = svlan
+                if cur_sink_z_svlan is None and (
+                    svlan := utils.get_svlan_dpid_link(link, dpid_z)
+                ):
+                    cur_sink_z_svlan = svlan
+                if cur_sink_a_svlan is not None and cur_sink_z_svlan is not None:
+                    break
+
+            log.info(
+                f"bar sink_a_svlan {cur_sink_a_svlan}, sink_z_svlan {cur_sink_z_svlan}"
             )
-            for flow in flows:
-                flow["flow"]["cookie"] = int_cookie
-                flow["flow"]["cookie_mask"] = cookie_mask
-        return old_flows
+
+            for flow in old_flows[cookie]:
+                if not sink_a_flows and flow["switch"] == dpid_a:
+                    if (
+                        flow["flow"]["match"]["dl_vlan"] != cur_sink_a_svlan
+                        and cur_sink_a_svlan
+                    ):
+                        sink_a_flows = self.flow_builder._build_int_sink_flows(
+                            "uni_a", evc, old_flows
+                        )
+                    else:
+                        flow["flow"]["cookie"] = int_cookie
+                        sink_a_flows = [flow]
+                elif not sink_z_flows and flow["switch"] == dpid_z:
+                    if (
+                        flow["flow"]["match"]["dl_vlan"] != cur_sink_z_svlan
+                        and cur_sink_z_svlan
+                    ):
+                        sink_z_flows = self.flow_builder._build_int_sink_flows(
+                            "uni_z", evc, old_flows
+                        )
+                    else:
+                        flow["flow"]["cookie"] = int_cookie
+                        sink_z_flows = [flow]
+                if sink_a_flows and sink_z_flows:
+                    break
+
+            hop_flows = self.flow_builder._build_int_hop_flows(evc, old_flows)
+            removed_flows[cookie] = list(
+                itertools.chain(sink_a_flows, hop_flows, sink_z_flows)
+            )
+        return removed_flows
 
     def _validate_map_enable_evcs(
         self,
