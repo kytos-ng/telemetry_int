@@ -1,7 +1,8 @@
 """ Support function for main.py """
 
-from napps.kytos.telemetry_int import settings
 from typing import Optional
+
+from napps.kytos.telemetry_int import settings
 
 from .exceptions import FlowsNotFound, PriorityOverflow
 from .kytos_api_helper import get_stored_flows as _get_stored_flows
