@@ -708,7 +708,7 @@ class INTManager:
 
     async def _remove_int_flows_by_cookies(
         self, stored_flows: dict[int, list[dict]]
-    ) -> None:
+    ) -> dict[str, list[dict]]:
         """Delete int flows given a prefiltered stored_flows by cookies.
         You should use this type of removal when you need to remove all
         flows associated with a cookie, if you need to include all keys in the match
@@ -734,8 +734,11 @@ class INTManager:
                     }
                 )
         await self._send_flows(switch_flows, "delete")
+        return switch_flows
 
-    async def _remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
+    async def _remove_int_flows(
+        self, stored_flows: dict[int, list[dict]]
+    ) -> dict[str, list[dict]]:
         """Delete int flows given a prefiltered stored_flows. This method is meant
         to be used when you need to match all the flow match keys, so, typically when
         you're removing just a subset of INT flows.
@@ -748,14 +751,18 @@ class INTManager:
             for flow in flows:
                 switch_flows[flow["switch"]].append(flow["flow"])
         await self._send_flows(switch_flows, "delete")
+        return switch_flows
 
-    async def _install_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
+    async def _install_int_flows(
+        self, stored_flows: dict[int, list[dict]]
+    ) -> dict[str, list[dict]]:
         """Install INT flow mods."""
         switch_flows = defaultdict(list)
         for flows in stored_flows.values():
             for flow in flows:
                 switch_flows[flow["switch"]].append(flow["flow"])
         await self._send_flows(switch_flows, "install")
+        return switch_flows
 
     async def _send_flows(
         self, switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]

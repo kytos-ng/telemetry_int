@@ -440,13 +440,31 @@ class TestINTManager:
         with pytest.raises(ProxyPortSameSourceIntraEVC):
             int_manager._validate_intra_evc_different_proxy_ports(evc)
 
+    async def test__remove_int_flows_by_cookies(
+        self, inter_evc_evpl_flows_data
+    ) -> None:
+        """test _remove_int_flows_by_cookies."""
+        controller = get_controller_mock()
+        controller._buffers.app.aput = AsyncMock()
+        int_manager = INTManager(controller)
+        assert len(inter_evc_evpl_flows_data) == 3
+        res = await int_manager._remove_int_flows_by_cookies(inter_evc_evpl_flows_data)
+        assert len(res) == 3
+        for flows in res.values():
+            for flow in flows:
+                assert "cookie_mask" in flow
+                assert flow["cookie_mask"] == int(0xFFFFFFFFFFFFFFFF)
+                assert flow["table_id"] == 0xFF
+        assert controller._buffers.app.aput.call_count == 3
+
     async def test__remove_int_flows(self, inter_evc_evpl_flows_data) -> None:
         """test _remove_int_flows."""
         controller = get_controller_mock()
         controller._buffers.app.aput = AsyncMock()
         int_manager = INTManager(controller)
         assert len(inter_evc_evpl_flows_data) == 3
-        await int_manager._remove_int_flows_by_cookies(inter_evc_evpl_flows_data)
+        res = await int_manager._remove_int_flows(inter_evc_evpl_flows_data)
+        assert len(res) == 3
         assert controller._buffers.app.aput.call_count == 3
 
     async def test__install_int_flows(self, inter_evc_evpl_flows_data, monkeypatch):
@@ -457,7 +475,8 @@ class TestINTManager:
         controller._buffers.app.aput = AsyncMock()
         int_manager = INTManager(controller)
         assert len(inter_evc_evpl_flows_data) == 3
-        await int_manager._install_int_flows(inter_evc_evpl_flows_data)
+        res = await int_manager._install_int_flows(inter_evc_evpl_flows_data)
+        assert len(res) == 3
         assert controller._buffers.app.aput.call_count == 3
         assert sleep_mock.call_count == 0
 
