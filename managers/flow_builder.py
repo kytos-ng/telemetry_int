@@ -42,7 +42,7 @@ class FlowBuilder:
         return flows_per_cookie
 
     def build_failover_old_flows(
-        self, evcs: dict[str, list[dict]], old_flows: dict[int, list[dict]]
+        self, evcs: dict[str, dict], old_flows: dict[int, list[dict]]
     ) -> dict[int, list[dict]]:
         """Build (old path) failover related to remove flows.
 

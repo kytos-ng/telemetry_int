@@ -418,3 +418,24 @@ class TestMain:
         self.napp.int_manager = MagicMock()
         await self.napp.on_intf_metadata_added(event)
         self.napp.int_manager.handle_pp_metadata_added.assert_called_with(intf)
+
+    async def test_on_failover_deployed(self):
+        """Test on_failover_deployed."""
+        event = KytosEvent(content={})
+        self.napp.int_manager = MagicMock()
+        await self.napp.on_failover_deployed(event)
+        self.napp.int_manager.handle_failover_flows.assert_called()
+
+    async def test_on_failover_link_down(self):
+        """Test on_failover_link_down."""
+        event = KytosEvent(content={})
+        self.napp.int_manager = MagicMock()
+        await self.napp.on_failover_link_down(event)
+        self.napp.int_manager.handle_failover_flows.assert_called()
+
+    async def test_on_failover_old_path(self):
+        """Test on_failover_old_path."""
+        event = KytosEvent(content={})
+        self.napp.int_manager = MagicMock()
+        await self.napp.on_failover_old_path(event)
+        self.napp.int_manager.handle_failover_flows.assert_called()
