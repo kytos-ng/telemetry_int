@@ -1,3 +1,4 @@
+"""Test flowbuilder failover flows."""
 import json
 
 from unittest.mock import AsyncMock, MagicMock
@@ -390,7 +391,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
             },
             "current_path": [
                 {
-                    "id": "78282c4d5b579265f04ebadc4405ca1b49628eb1d684bb45e5d0607fa8b713d0",
+                    "id": "78282c4d5",
                     "endpoint_a": {
                         "id": "00: 00:00:00:00:00:00:01:3",
                         "name": "s1-eth3",
@@ -407,7 +408,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason": [],
-                        "link": "78282c4d5b579265f04ebadc4405ca1b49628eb1d684bb45e5d0607fa8b713d0",
+                        "link": "78282c4d5",
                     },
                     "endpoint_b": {
                         "id": "00:00:00:00:00:00:00:02:2",
@@ -425,7 +426,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason": [],
-                        "link": "78282c4d5b579265f04ebadc4405ca1b4 9628eb1d684bb45e5d0607fa8b713d0",
+                        "link": "78282c4d5",
                     },
                     "metadata": {"s_vlan": {"tag_type": "vlan", "value": 1}},
                     "active": True,
@@ -434,7 +435,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
                     "status_reason": [],
                 },
                 {
-                    "id": "4d42dc0852278accac7d9df15418f6d921db160b13d674029a87cef1b5f67f30",
+                    "id": "4d42dc085",
                     "endpoint_a": {
                         "id": "00:00:00:00:00:00:00:02:3",
                         "name": "s2-eth3",
@@ -451,7 +452,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason ": [],
-                        "link": "4d42dc0852278accac7d9df15418f6d921db160b13d674029a87cef1b5f67f30",
+                        "link": "4d42dc085",
                     },
                     "endpoint_b": {
                         "id": "00:00:00:00:00:00:00:03:2",
@@ -469,7 +470,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason": [],
-                        "link": "4d42dc0852278accac7d9df15418f6d921db160b13d674029a87cef1b5f67f30",
+                        "link": "4d42dc085",
                     },
                     "metadata": {"s_vlan": {"tag_type": "vlan", "value": 1}},
                     "active": True,
@@ -541,6 +542,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
     assert json.dumps(int_manager._remove_int_flows.call_args[0][0]) == serd
 
 
+# pylint: disable=too-many-statements
 async def test_handle_failover_old_path_diff_svlan() -> None:
     """Test handle failover_old_path_diff_svlan.
 
@@ -642,7 +644,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
             },
             "current_path": [
                 {
-                    "id": "78282c4d5b579265f04ebadc4405ca1b49628eb1d684bb45e5d0607fa8b713d0",
+                    "id": "78282c4d5",
                     "endpoint_a": {
                         "id": "00:00:00:00:00:00:00:01:3",
                         "name": "s1-eth3",
@@ -659,7 +661,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason": [],
-                        "link": "78282c4d5b579265f04ebadc4405ca1b49628eb1d684bb45e5d0607fa8b713d0",
+                        "link": "78282c4d5",
                     },
                     "endpoint_b": {
                         "id": "00:00:00:00:00:00:00:02:2",
@@ -677,7 +679,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason": [],
-                        "link": "78282c4d5b579265f04ebadc4405ca1b4 9628eb1d684bb45e5d0607fa8b713d0",
+                        "link": "78282c4d5",
                     },
                     "metadata": {"s_vlan": {"tag_type": "vlan", "value": 1}},
                     "active": True,
@@ -686,7 +688,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                     "status_reason": [],
                 },
                 {
-                    "id": "4d42dc0852278accac7d9df15418f6d921db160b13d674029a87cef1b5f67f30",
+                    "id": "4d42dc085",
                     "endpoint_a": {
                         "id": "00:00:00:00:00:00:00:02:3",
                         "name": "s2-eth3",
@@ -703,7 +705,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason ": [],
-                        "link": "4d42dc0852278accac7d9df15418f6d921db160b13d674029a87cef1b5f67f30",
+                        "link": "4d42dc085",
                     },
                     "endpoint_b": {
                         "id": "00:00:00:00:00:00:00:03:2",
@@ -721,7 +723,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                         "enabled": True,
                         "status": "UP",
                         "status_reason": [],
-                        "link": "4d42dc0852278accac7d9df15418f6d921db160b13d674029a87cef1b5f67f30",
+                        "link": "4d42dc085",
                     },
                     "metadata": {"s_vlan": {"tag_type": "vlan", "value": 1}},
                     "active": True,
