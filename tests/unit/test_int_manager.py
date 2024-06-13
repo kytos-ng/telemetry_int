@@ -550,3 +550,16 @@ class TestINTManager:
 
         evcs["3766c105686749"]["active"] = False
         int_manager._validate_evcs_stored_flows(evcs, {})
+
+    async def test__send_flows(self) -> None:
+        """Test _send_flows."""
+        controller = get_controller_mock()
+        controller._buffers.app.aput = AsyncMock()
+        int_manager = INTManager(controller)
+        switch_flows = {"dpid": []}
+        await int_manager._send_flows(switch_flows, "install")
+        controller._buffers.app.aput.assert_not_called()
+
+        switch_flows = {"dpid": [MagicMock()]}
+        await int_manager._send_flows(switch_flows, "install")
+        controller._buffers.app.aput.assert_called()

@@ -778,11 +778,14 @@ class INTManager:
                 batch_size = len(flows)
 
             for i in range(0, len(flows), batch_size):
+                flows = flows[i : i + batch_size]
+                if not flows:
+                    continue
+
                 if i > 0:
                     await asyncio.sleep(settings.BATCH_INTERVAL)
-                flows = flows[i : i + batch_size]
                 event = KytosEvent(
-                    f"kytos.flow_manager.flows.{cmd}",
+                    f"kytos.flow_manager.flows.single.{cmd}",
                     content={
                         "dpid": dpid,
                         "force": True,
