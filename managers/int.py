@@ -4,6 +4,7 @@ import asyncio
 import copy
 from collections import defaultdict
 from datetime import datetime
+from typing import Literal
 
 from pyof.v0x04.controller2switch.table_mod import Table
 
@@ -320,7 +321,7 @@ class INTManager:
             [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
         )
         await asyncio.gather(
-            self._remove_int_flows(stored_flows),
+            self._remove_int_flows_by_cookies(stored_flows),
             api.add_evcs_metadata(evcs, metadata, force),
         )
 
@@ -362,7 +363,7 @@ class INTManager:
         stored_flows = await api.get_stored_flows(
             [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
         )
-        await self._remove_int_flows(stored_flows)
+        await self._remove_int_flows_by_cookies(stored_flows)
         metadata = {
             "telemetry": {
                 "enabled": True,
@@ -386,16 +387,19 @@ class INTManager:
                 ]
             ),
         )
+        self._validate_evcs_stored_flows(evcs, stored_flows)
 
         active_evcs, inactive_evcs, pp_down_evcs = {}, {}, {}
         for evc_id, evc in evcs.items():
             if not evc["active"]:
                 inactive_evcs[evc_id] = evc
                 continue
-            if any((
-                evc["uni_a"]["proxy_port"].status != EntityStatus.UP,
-                evc["uni_z"]["proxy_port"].status != EntityStatus.UP,
-            )):
+            if any(
+                (
+                    evc["uni_a"]["proxy_port"].status != EntityStatus.UP,
+                    evc["uni_z"]["proxy_port"].status != EntityStatus.UP,
+                )
+            ):
                 pp_down_evcs[evc_id] = evc
                 continue
             active_evcs[evc_id] = evc
@@ -460,6 +464,16 @@ class INTManager:
             if not utils.has_int_enabled(evc) and not force:
                 raise EVCHasNoINT(evc_id)
 
+    def _validate_evcs_stored_flows(
+        self, evcs: dict[str, dict], stored_flows: dict[int, list[dict]]
+    ) -> None:
+        """Validate that each active EVC has corresponding flows."""
+        for evc_id, evc in evcs.items():
+            if evc["active"] and not stored_flows.get(
+                utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+            ):
+                raise FlowsNotFound(evc_id)
+
     def _validate_intra_evc_different_proxy_ports(self, evc: dict) -> None:
         """Validate that an intra EVC is using different proxy ports.
 
@@ -484,6 +498,93 @@ class INTManager:
         raise ProxyPortSameSourceIntraEVC(
             evc["id"], "intra EVC UNIs must use different proxy ports"
         )
+
+    async def handle_failover_flows(
+        self, evcs_content: dict[str, dict], event_name: str
+    ) -> None:
+        """Handle failover flows. This method will generate the subset
+        of INT flows. EVCs with 'flows' key will be installed, and
+        'old_flows' will be removed.
+
+        If a given proxy port has an unexpected state INT will be
+        removed falling back to mef_eline flows.
+        """
+        to_install, to_remove, to_remove_with_err = {}, {}, {}
+        new_flows: dict[int, list[dict]] = defaultdict(list)
+        old_flows: dict[int, list[dict]] = defaultdict(list)
+
+        old_flows_key = "removed_flows"
+        new_flows_key = "flows"
+
+        for evc_id, evc in evcs_content.items():
+            if not utils.has_int_enabled(evc):
+                continue
+            try:
+                uni_a, uni_z = utils.get_evc_unis(evc)
+                pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
+                pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
+                uni_a["proxy_port"], uni_z["proxy_port"] = pp_a, pp_z
+                evc["id"] = evc_id
+                evc["uni_a"], evc["uni_z"] = uni_a, uni_z
+            except ProxyPortError as e:
+                log.error(
+                    f"Unexpected proxy port state: {str(e)}."
+                    f"INT will be removed on evc id {evc_id}"
+                )
+                to_remove_with_err[evc_id] = evc
+                continue
+
+            for dpid, flows in evc.get(new_flows_key, {}).items():
+                for flow in flows:
+                    new_flows[flow["cookie"]].append({"flow": flow, "switch": dpid})
+
+            for dpid, flows in evc.get(old_flows_key, {}).items():
+                for flow in flows:
+                    # set priority and table_group just so INT flows can be built
+                    # the priority doesn't matter for deletion
+                    flow["priority"] = 21000
+                    flow["table_group"] = (
+                        "evpl" if "dl_vlan" in flow.get("match", {}) else "epl"
+                    )
+                    old_flows[flow["cookie"]].append({"flow": flow, "switch": dpid})
+
+            if evc.get(new_flows_key):
+                to_install[evc_id] = evc
+                evc.pop(new_flows_key)
+            if evc.get(old_flows_key):
+                to_remove[evc_id] = evc
+                evc.pop(old_flows_key, None)
+
+        if to_remove:
+            log.info(
+                f"Handling {event_name} flows remove on EVC ids: {to_remove.keys()}"
+            )
+            await self._remove_int_flows(
+                self.flow_builder.build_failover_old_flows(to_remove, old_flows)
+            )
+        if to_remove_with_err:
+            log.error(
+                f"Handling {event_name} proxy_port_error falling back "
+                f"to mef_eline, EVC ids: {list(to_remove_with_err.keys())}"
+            )
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "DOWN",
+                    "status_reason": ["proxy_port_error"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            await self.remove_int_flows(to_remove_with_err, metadata, force=True)
+        if to_install:
+            log.info(
+                f"Handling {event_name} flows install on EVC ids: {to_install.keys()}"
+            )
+            await self._install_int_flows(
+                self.flow_builder.build_int_flows(to_install, new_flows)
+            )
 
     def _validate_map_enable_evcs(
         self,
@@ -605,73 +706,86 @@ class INTManager:
                 results[evc_id].append("missing_some_int_flows")
         return results
 
-    async def _remove_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
-        """Delete int flows given a prefiltered stored_flows.
+    async def _remove_int_flows_by_cookies(
+        self, stored_flows: dict[int, list[dict]]
+    ) -> dict[str, list[dict]]:
+        """Delete int flows given a prefiltered stored_flows by cookies.
+        You should use this type of removal when you need to remove all
+        flows associated with a cookie, if you need to include all keys in the match
+        to remove only a subset use `_remove_int_flows(stored_flows)` method instead.
 
         Removal is driven by the stored flows instead of EVC ids and dpids to also
         be able to handle the force mode when an EVC no longer exists. It also follows
         the same pattern that mef_eline currently uses.
-
-        The flows will be batched per dpid based on settings.BATCH_SIZE and will wait
-        for settings.BATCH_INTERVAL per batch iteration.
-
         """
-        switch_flows = defaultdict(set)
+        switch_flows_cookies = defaultdict(set)
         for flows in stored_flows.values():
             for flow in flows:
-                switch_flows[flow["switch"]].add(flow["flow"]["cookie"])
+                switch_flows_cookies[flow["switch"]].add(flow["flow"]["cookie"])
 
-        for dpid, cookies in switch_flows.items():
-            cookie_vals = list(cookies)
-            batch_size = settings.BATCH_SIZE
-            if batch_size <= 0:
-                batch_size = len(cookie_vals)
-
-            for i in range(0, len(cookie_vals), batch_size):
-                if i > 0:
-                    await asyncio.sleep(settings.BATCH_INTERVAL)
-                flows = [
+        switch_flows = defaultdict(list)
+        for dpid, cookies in switch_flows_cookies.items():
+            for cookie in cookies:
+                switch_flows[dpid].append(
                     {
                         "cookie": cookie,
                         "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
                         "table_id": Table.OFPTT_ALL.value,
                     }
-                    for cookie in cookie_vals[i : i + batch_size]
-                ]
-                event = KytosEvent(
-                    "kytos.flow_manager.flows.delete",
-                    content={
-                        "dpid": dpid,
-                        "force": True,
-                        "flow_dict": {"flows": flows},
-                    },
                 )
-                await self.controller.buffers.app.aput(event)
+        await self._send_flows(switch_flows, "delete")
+        return switch_flows
 
-    async def _install_int_flows(self, stored_flows: dict[int, list[dict]]) -> None:
-        """Install INT flow mods.
+    async def _remove_int_flows(
+        self, stored_flows: dict[int, list[dict]]
+    ) -> dict[str, list[dict]]:
+        """Delete int flows given a prefiltered stored_flows. This method is meant
+        to be used when you need to match all the flow match keys, so, typically when
+        you're removing just a subset of INT flows.
 
-        The flows will be batched per dpid based on settings.BATCH_SIZE and will wait
-        for settings.BATCH_INTERVAL per batch iteration.
-        """
-
+        Removal is driven by the stored flows instead of EVC ids and dpids to also
+        be able to handle the force mode when an EVC no longer exists. It also follows
+        the same pattern that mef_eline currently uses."""
         switch_flows = defaultdict(list)
         for flows in stored_flows.values():
             for flow in flows:
                 switch_flows[flow["switch"]].append(flow["flow"])
+        await self._send_flows(switch_flows, "delete")
+        return switch_flows
 
+    async def _install_int_flows(
+        self, stored_flows: dict[int, list[dict]]
+    ) -> dict[str, list[dict]]:
+        """Install INT flow mods."""
+        switch_flows = defaultdict(list)
+        for flows in stored_flows.values():
+            for flow in flows:
+                switch_flows[flow["switch"]].append(flow["flow"])
+        await self._send_flows(switch_flows, "install")
+        return switch_flows
+
+    async def _send_flows(
+        self, switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]
+    ):
+        """Send batched flows by dpid to flow_manager.
+
+        The flows will be batched per dpid based on settings.BATCH_SIZE and will wait
+        for settings.BATCH_INTERVAL per batch iteration.
+        """
         for dpid, flows in switch_flows.items():
-            flow_vals = list(flows)
             batch_size = settings.BATCH_SIZE
             if batch_size <= 0:
-                batch_size = len(flow_vals)
+                batch_size = len(flows)
 
-            for i in range(0, len(flow_vals), batch_size):
+            for i in range(0, len(flows), batch_size):
+                flows = flows[i : i + batch_size]
+                if not flows:
+                    continue
+
                 if i > 0:
                     await asyncio.sleep(settings.BATCH_INTERVAL)
-                flows = flow_vals[i : i + batch_size]
                 event = KytosEvent(
-                    "kytos.flow_manager.flows.install",
+                    f"kytos.flow_manager.flows.single.{cmd}",
                     content={
                         "dpid": dpid,
                         "force": True,

@@ -261,3 +261,49 @@ def test_set_priority_exc() -> None:
     flow = {"flow": {"priority": 2**16}}
     with pytest.raises(PriorityOverflow):
         utils.set_priority(flow, "some_id")
+
+
+@pytest.mark.parametrize(
+    "link,dpid,expected_vlan",
+    [
+        (
+            {
+                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
+                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
+                "metadata": {"s_vlan": {"tag_type": "vlan", "value": 2}},
+            },
+            "00:00:00:00:00:00:00:01",
+            2,
+        ),
+        (
+            {
+                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
+                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
+                "metadata": {"s_vlan": {"tag_type": "vlan", "value": 2}},
+            },
+            "00:00:00:00:00:00:00:02",
+            2,
+        ),
+        (
+            {
+                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
+                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
+                "metadata": {"s_vlan": {"tag_type": "vlan", "value": 2}},
+            },
+            "00:00:00:00:00:00:00:03",
+            None,
+        ),
+        (
+            {
+                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
+                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
+                "metadata": {},
+            },
+            "00:00:00:00:00:00:00:02",
+            None,
+        ),
+    ],
+)
+def test_get_svlan_dpid_link(link, dpid, expected_vlan) -> None:
+    """Test get_svlan_dpid_link."""
+    assert utils.get_svlan_dpid_link(link, dpid) == expected_vlan

@@ -330,7 +330,7 @@ class TestINTManager:
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
 
         int_manager = INTManager(controller)
-        int_manager._remove_int_flows = AsyncMock()
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
         await int_manager.disable_int({}, False)
 
         assert api_mock.add_evcs_metadata.call_count == 1
@@ -369,8 +369,11 @@ class TestINTManager:
         int_manager._validate_map_enable_evcs = MagicMock()
         int_manager._validate_map_enable_evcs.return_value = evcs
         int_manager.flow_builder.build_int_flows = MagicMock()
-        int_manager.flow_builder.build_int_flows.return_value = {}
+        int_manager.flow_builder.build_int_flows.return_value = {
+            0xAA3766C105686749: [MagicMock()]
+        }
         int_manager._add_pps_evc_ids = MagicMock()
+        int_manager._send_flows = AsyncMock()
 
         await int_manager.enable_int(evcs, False)
 
@@ -381,6 +384,7 @@ class TestINTManager:
         telemetry_dict = args[1]["telemetry"]
         expected_keys = ["enabled", "status", "status_reason", "status_updated_at"]
         assert sorted(list(telemetry_dict.keys())) == sorted(expected_keys)
+        assert int_manager._send_flows.call_count == 1
 
         assert telemetry_dict["enabled"] is True
         assert telemetry_dict["status"] == "UP"
@@ -397,7 +401,7 @@ class TestINTManager:
         )
 
         int_manager = INTManager(controller)
-        int_manager._remove_int_flows = AsyncMock()
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
         int_manager._install_int_flows = AsyncMock()
 
         dpid_a = "00:00:00:00:00:00:00:01"
@@ -415,7 +419,7 @@ class TestINTManager:
         await int_manager.redeploy_int(evcs)
 
         assert stored_flows_mock.call_count == 1
-        assert int_manager._remove_int_flows.call_count == 1
+        assert int_manager._remove_int_flows_by_cookies.call_count == 1
         assert api_mock.get_stored_flows.call_count == 1
         assert int_manager._install_int_flows.call_count == 1
 
@@ -436,13 +440,31 @@ class TestINTManager:
         with pytest.raises(ProxyPortSameSourceIntraEVC):
             int_manager._validate_intra_evc_different_proxy_ports(evc)
 
+    async def test__remove_int_flows_by_cookies(
+        self, inter_evc_evpl_flows_data
+    ) -> None:
+        """test _remove_int_flows_by_cookies."""
+        controller = get_controller_mock()
+        controller._buffers.app.aput = AsyncMock()
+        int_manager = INTManager(controller)
+        assert len(inter_evc_evpl_flows_data) == 3
+        res = await int_manager._remove_int_flows_by_cookies(inter_evc_evpl_flows_data)
+        assert len(res) == 3
+        for flows in res.values():
+            for flow in flows:
+                assert "cookie_mask" in flow
+                assert flow["cookie_mask"] == int(0xFFFFFFFFFFFFFFFF)
+                assert flow["table_id"] == 0xFF
+        assert controller._buffers.app.aput.call_count == 3
+
     async def test__remove_int_flows(self, inter_evc_evpl_flows_data) -> None:
         """test _remove_int_flows."""
         controller = get_controller_mock()
         controller._buffers.app.aput = AsyncMock()
         int_manager = INTManager(controller)
         assert len(inter_evc_evpl_flows_data) == 3
-        await int_manager._remove_int_flows(inter_evc_evpl_flows_data)
+        res = await int_manager._remove_int_flows(inter_evc_evpl_flows_data)
+        assert len(res) == 3
         assert controller._buffers.app.aput.call_count == 3
 
     async def test__install_int_flows(self, inter_evc_evpl_flows_data, monkeypatch):
@@ -453,7 +475,8 @@ class TestINTManager:
         controller._buffers.app.aput = AsyncMock()
         int_manager = INTManager(controller)
         assert len(inter_evc_evpl_flows_data) == 3
-        await int_manager._install_int_flows(inter_evc_evpl_flows_data)
+        res = await int_manager._install_int_flows(inter_evc_evpl_flows_data)
+        assert len(res) == 3
         assert controller._buffers.app.aput.call_count == 3
         assert sleep_mock.call_count == 0
 
@@ -504,3 +527,39 @@ class TestINTManager:
         assert int_manager.get_proxy_port_or_raise.call_count == 2
         assert pp.evc_ids.discard.call_count == 2
         pp.evc_ids.discard.assert_called_with(evc_id)
+
+    def test_validate_evc_stored_flows(self) -> None:
+        """Test validate evc stored flows."""
+        controller = MagicMock()
+        int_manager = INTManager(controller)
+        evcs = {
+            "3766c105686749": {
+                "active": True,
+                "uni_a": MagicMock(),
+                "uni_z": MagicMock(),
+            }
+        }
+        stored_flows = {0xAA3766C105686749: [MagicMock()]}
+        int_manager._validate_evcs_stored_flows(evcs, stored_flows)
+
+        with pytest.raises(exceptions.FlowsNotFound):
+            int_manager._validate_evcs_stored_flows(evcs, {0xAA3766C105686749: []})
+
+        with pytest.raises(exceptions.FlowsNotFound):
+            int_manager._validate_evcs_stored_flows(evcs, {})
+
+        evcs["3766c105686749"]["active"] = False
+        int_manager._validate_evcs_stored_flows(evcs, {})
+
+    async def test__send_flows(self) -> None:
+        """Test _send_flows."""
+        controller = get_controller_mock()
+        controller._buffers.app.aput = AsyncMock()
+        int_manager = INTManager(controller)
+        switch_flows = {"dpid": []}
+        await int_manager._send_flows(switch_flows, "install")
+        controller._buffers.app.aput.assert_not_called()
+
+        switch_flows = {"dpid": [MagicMock()]}
+        await int_manager._send_flows(switch_flows, "install")
+        controller._buffers.app.aput.assert_called()

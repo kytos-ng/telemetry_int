@@ -733,4 +733,6 @@ def test_build_int_flows_intra_epl_inactive(evcs_data) -> None:
     evcs_data[evc_id]["active"] = True
     cookie = get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
     with pytest.raises(FlowsNotFound):
-        FlowBuilder().build_int_flows(evcs_data, stored_flows)
+        int_manager._validate_evcs_stored_flows(
+            evcs_data, FlowBuilder().build_int_flows(evcs_data, stored_flows)
+        )

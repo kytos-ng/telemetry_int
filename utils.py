@@ -1,5 +1,7 @@
 """ Support function for main.py """
 
+from typing import Optional
+
 from napps.kytos.telemetry_int import settings
 
 from .exceptions import FlowsNotFound, PriorityOverflow
@@ -146,3 +148,15 @@ def set_instructions_from_actions(flow: dict) -> dict:
     flow["flow"].pop("actions", None)
     flow["flow"]["instructions"] = instructions
     return flow
+
+
+def get_svlan_dpid_link(link: dict, dpid: str) -> Optional[int]:
+    """Try to get svlan of a link if a dpid matches one of the endpoints."""
+    if any(
+        (
+            link["endpoint_a"]["switch"] == dpid and "s_vlan" in link["metadata"],
+            link["endpoint_b"]["switch"] == dpid and "s_vlan" in link["metadata"],
+        )
+    ):
+        return link["metadata"]["s_vlan"]["value"]
+    return None
