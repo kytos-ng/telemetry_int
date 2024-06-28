@@ -2,7 +2,6 @@
     <div class="telemetryINT_container">
         <k-accordion>
             <k-accordion-item title="EVC Telemetry Info">
-                <!-- <k-context-panel v-if="is_empty" title="Empty Result" icon="gear"></k-context-panel> -->
                 <k-accordion-item title="Options">
                     <k-button-group>
                         <k-button icon="comment" title="Enable Selected" tooltip="Enable INT on selected EVCs" @click="enableSelectedEVCs()"></k-button>
@@ -17,7 +16,7 @@
                             <thead>
                                 <tr>
                                     <th rowspan="2" colspan="1"></th>
-                                    <th rowspan="2" colspan="1">ID</th> 
+                                    <th rowspan="2" colspan="1">ID</th>
                                     <th rowspan="2" colspan="1">Name</th>
                                     <th rowspan="2" colspan="1">Active</th>
                                     <th rowspan="1" colspan="4">Telemetry</th>
@@ -26,7 +25,7 @@
                                     <th>Enabled</th>
                                     <th>Status</th>
                                     <th>Status Reason</th>
-                                    <th>Status Updated At</th>                   
+                                    <th>Status Updated At</th>
                                 </tr>
                                 <tr>
                                     <th>
@@ -63,9 +62,9 @@
                                     <td>{{item.enabled}}</td>
                                     <td :class="statusColor(item)">{{item.status}}</td>
                                     <td>{{item.status_reason}}</td>
-                                    <td>{{item.status_updated_at}}</td>                  
+                                    <td>{{item.status_updated_at}}</td>
                                 </tr>
-                            </tbody>             
+                            </tbody>
                         </table>
                     </div>
                 </k-accordion-item>
@@ -188,9 +187,6 @@
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
-            },
-            refresh() {
-
             }
         },
         computed: {

@@ -53,7 +53,6 @@ module.exports = {
                     this.telemetryINT_Data[EVC]["status_reason"] = "N/A"
                     this.telemetryINT_Data[EVC]["status_updated_at"] = "N/A"
                 }
-
             }
         },
         display_InfoPanel() {
@@ -70,9 +69,6 @@ module.exports = {
         splitStatusReasons(statusReasons) {
             return statusReasons.toString()
         }
-    },
-    computed: {
-
     }
 }
 </script>
