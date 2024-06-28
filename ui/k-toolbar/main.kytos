@@ -24,11 +24,10 @@ module.exports = {
                             url: this.$kytos_server_api + "kytos/mef_eline/v2/evc/",
                             async: true});
             request.done(function(data) {
-                console.log(data)
-                this.extract_TelemetryINTData(data)
+                self.extract_TelemetryINTData(data)
+                self.display_InfoPanel()
             });
             request.fail(function(data) {
-                console.log("failure")
                 let notification = {
                     icon: 'cog',
                     title: 'Could not retrieve EVCs',
@@ -39,7 +38,22 @@ module.exports = {
         },
         extract_TelemetryINTData(EVC_Data) {
             for (let EVC in EVC_Data) {
-                console.log(EVC)
+                this.telemetryINT_Data[EVC] = {}
+                this.telemetryINT_Data[EVC]["active"] = EVC_Data[EVC].active
+                this.telemetryINT_Data[EVC]["id"] = EVC_Data[EVC].id
+                this.telemetryINT_Data[EVC]["name"] = EVC_Data[EVC].name
+                if (EVC_Data[EVC].metadata?.telemetry) {
+                    this.telemetryINT_Data[EVC]["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled
+                    this.telemetryINT_Data[EVC]["status"] = EVC_Data[EVC].metadata.telemetry.status
+                    this.telemetryINT_Data[EVC]["status_reason"] = this.splitStatusReasons(EVC_Data[EVC].metadata.telemetry.status_reason)
+                    this.telemetryINT_Data[EVC]["status_updated_at"] = EVC_Data[EVC].metadata.telemetry.status_updated_at
+                } else {
+                    this.telemetryINT_Data[EVC]["enabled"] = "N/A"
+                    this.telemetryINT_Data[EVC]["status"] = "N/A"
+                    this.telemetryINT_Data[EVC]["status_reason"] = "N/A"
+                    this.telemetryINT_Data[EVC]["status_updated_at"] = "N/A"
+                }
+
             }
         },
         display_InfoPanel() {
@@ -50,8 +64,12 @@ module.exports = {
                           "title": "View Telemetry INT Data",
                           "subtitle": "by kytos/telemetry_int"
                           }
-            this.$kytos.$emit("showInfoPanel", content)
+            this.$kytos.eventBus.$emit("showInfoPanel", content)
         },
+        //Formats status reason data for table
+        splitStatusReasons(statusReasons) {
+            return statusReasons.toString()
+        }
     },
     computed: {
 

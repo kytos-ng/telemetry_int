@@ -1,7 +1,282 @@
 <template>
+    <div class="telemetryINT_container">
+        <k-accordion>
+            <k-accordion-item title="EVC Telemetry Info">
+                <!-- <k-context-panel v-if="is_empty" title="Empty Result" icon="gear"></k-context-panel> -->
+                <k-accordion-item title="Options">
+                    <k-button-group>
+                        <k-button icon="comment" title="Enable Selected" tooltip="Enable INT on selected EVCs" @click="enableSelectedEVCs()"></k-button>
+                        <k-button icon="comment-slash" title="Disable Selected" tooltip="Disable INT on selected EVCs" @click="disableSelectedEVCs()"></k-button>
+                        <k-button icon="truck-moving" title="Redeploy Selected" tooltip="Redeploy INT on selected EVCs" @click="redeploySelectedEVCs()"></k-button>
+                    <k-button-group>
+                    <k-checkbox title="Force" v-model:model="forceOption" :value="true"></k-checkbox>
+                </k-accordion-item>
+                <k-accordion-item title="Table">
+                    <div class="data_table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" colspan="1"></th>
+                                    <th rowspan="2" colspan="1">ID</th> 
+                                    <th rowspan="2" colspan="1">Name</th>
+                                    <th rowspan="2" colspan="1">Active</th>
+                                    <th rowspan="1" colspan="4">Telemetry</th>
+                                </tr>
+                                <tr>
+                                    <th>Enabled</th>
+                                    <th>Status</th>
+                                    <th>Status Reason</th>
+                                    <th>Status Updated At</th>                   
+                                </tr>
+                                <tr>
+                                    <th>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[0][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[1][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[2][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[3][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[4][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[5][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[6][1]"></input>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(item, index) in filtered_EVCData">
+                                    <td><k-checkbox v-model:model="selectedEVCs" :value="item.id"></k-checkbox></td>
+                                    <td>{{item.id}}</td>
+                                    <td>{{item.name}}</td>
+                                    <td>{{item.active}}</td>
+                                    <td>{{item.enabled}}</td>
+                                    <td :class="statusColor(item)">{{item.status}}</td>
+                                    <td>{{item.status_reason}}</td>
+                                    <td>{{item.status_updated_at}}</td>                  
+                                </tr>
+                            </tbody>             
+                        </table>
+                    </div>
+                </k-accordion-item>
+            </k-accordion-item>
+        </k-accordion>
+    </div>
 </template>
 <script>
     module.exports = {
         props: ["content"],
+        data: function() {
+            return {
+                EVCTextFilter: [
+                    ["id", ""],
+                    ["name", ""],
+                    ["active", ""],
+                    ["enabled", ""],
+                    ["status", ""],
+                    ["status_reason", ""],
+                    ["status_updated_at", ""]
+                ],
+                selectedEVCs: [],
+                forceOption: []
+            }
+        },
+        methods: {
+            statusColor(data) {
+            /**
+             * @param {Object} data - The normal table row object containing:
+             * @param {string} data.status - The status of the device the Object references.
+             * @param {string} data.status_reason - The status_reason of the device the Object references.
+             * @param {boolean} data.enabled - State of the device the Object references. Enabled or Disabled.
+             * @returns {string} Returns a string that acts as the class for current HTML element.
+             * @description Sets color for current status table cell.
+             */
+                switch(true) {
+                    case (data.status == "UP"):
+                        return "green";
+                    case (data.status == "DOWN"):
+                        return "red";
+                }
+            },
+            enableSelectedEVCs() {
+                var self = this
+                let evc_id = []
+                for (const EVC in this.content) {
+                    evc_id.push(EVC.toString())
+                }
+                let payload = {evc_ids: this.selectedEVCs}
+                if (this.forceOption[0]) {
+                    payload["force"] = true
+                }
+                let request = $.ajax({
+                                type:"POST",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
+                                async: true});
+                request.done(function(data) {
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not enable INT on EVCs',
+                        description: data.status.toString()
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            disableSelectedEVCs() {
+                var self = this
+                let evc_id = []
+                for (const EVC in this.content) {
+                    evc_id.push(EVC.toString())
+                }
+                let payload = {evc_ids: this.selectedEVCs}
+                if (this.forceOption[0]) {
+                    payload["force"] = true
+                }
+                let request = $.ajax({
+                                type:"POST",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/disable",
+                                async: true});
+                request.done(function(data) {
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not disable INT on EVCs',
+                        description: data.status.toString()
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            redeploySelectedEVCs() {
+                var self = this
+                let evc_id = []
+                for (const EVC in this.content) {
+                    evc_id.push(EVC.toString())
+                }
+                let payload = {evc_ids: this.selectedEVCs}
+                let request = $.ajax({
+                                type:"PATCH",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/redeploy",
+                                async: true});
+                request.done(function(data) {
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not redeploy INT on EVCs',
+                        description: data.status.toString()
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            refresh() {
+
+            }
+        },
+        computed: {
+            filtered_EVCData: function() {
+                let current_data = structuredClone(this.$kytos.toRaw(this.content))
+                for (const tableColumn of this.EVCTextFilter) {
+                    if (tableColumn[1] != "") {
+                        for (const EVC in current_data) {
+                            var separatedFilter = tableColumn[1].toString()
+                            var separatedProperty = current_data[EVC][tableColumn[0]].toString()
+                            if (!(separatedProperty.includes(separatedFilter) || separatedFilter.includes(separatedProperty))) {
+                                delete current_data[EVC]
+                            }
+                        }
+                    }
+                }
+                return current_data
+            }
+        },
+        mounted() {
+            // Make the panel fill the screen except the left menu width
+            if (JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'))) {
+                this.EVCTextFilter = JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'));
+            }
+        },
+        watch: {
+            EVCTextFilter: {
+                handler: function() {
+                    localStorage.setItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter', JSON.stringify(this.EVCTextFilter))
+                },
+                deep: true
+            }
+        }
     }
 </script>
+<style>
+    .data_table {
+      color: #ccc;
+      max-height: 250px;
+      text-align: center;
+      margin: 0 auto;
+      display: block;
+      padding: 0.5em 0 1em 0.3em;
+      font-size: 0.8em;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    .data_table table{
+      display: table;
+      width: 100%;
+    }
+    .data_table thead{
+      font-weight: bold;
+      background: #554077;
+    }
+    .data_table th{
+      padding: 0.6em 0 0.6em 0;
+      vertical-align: middle;
+      border: 1px solid;
+    }
+    .data_table td{
+      vertical-align: middle;
+      padding: 0.45em 0 0.45em 0;
+      word-break: break-all;
+      border: 1px solid;
+    }
+    .data_table tbody tr:nth-child(even) {
+      background: #313131;
+    }
+    .data_table tbody tr:hover {
+        color: #eee;
+        background-color: #666;
+    }
+    .green {
+        background-color: #8bc34a;
+        color: #222;
+    }
+    .red {
+        background-color: #dd2c00;
+        color: #222;
+    }
+    .k-info-panel:has(.telemetryINT_container) {
+        width: calc(100% - 305px) !important; /* overrides the width of the parent panel if it loads the mef_eline container */
+    }
+    .k-checkbox-wrap {
+        background: none;
+        margin-left: 1em;
+    }
+</style>
