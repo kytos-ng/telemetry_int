@@ -14,6 +14,7 @@ Added
 - Handled ``kytos/mef_eline.error_redeploy_link_down`` event.
 - Handled ``kytos/mef_eline.uni_active_updated`` event.
 - Handled ``kytos/mef_eline.deployed`` event.
+- Handled ``kytos/mef_eline.(failover_link_down|failover_old_path|failover_deployed)`` events.
 - Added UI for telemetry_int.
 
 Changed

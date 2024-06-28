@@ -111,7 +111,7 @@ class Main(KytosNApp):
                     for evc_id in evcs
                 ]
             )
-            await self.int_manager._remove_int_flows(stored_flows)
+            await self.int_manager._remove_int_flows_by_cookies(stored_flows)
             await self.int_manager.enable_int(evcs, force)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
@@ -428,6 +428,27 @@ class Main(KytosNApp):
                 f"Handling mef_eline.redeployed_link_down_no_path on EVC id: {evc_id}"
             )
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
+
+    @alisten_to("kytos/mef_eline.failover_link_down")
+    async def on_failover_link_down(self, event: KytosEvent):
+        """Handle kytos/mef_eline.failover_link_down."""
+        await self.int_manager.handle_failover_flows(
+            event.content, event_name="failover_link_down"
+        )
+
+    @alisten_to("kytos/mef_eline.failover_old_path")
+    async def on_failover_old_path(self, event: KytosEvent):
+        """Handle kytos/mef_eline.failover_old_path."""
+        await self.int_manager.handle_failover_flows(
+            event.content, event_name="failover_old_path"
+        )
+
+    @alisten_to("kytos/mef_eline.failover_deployed")
+    async def on_failover_deployed(self, event: KytosEvent):
+        """Handle kytos/mef_eline.failover_deployed."""
+        await self.int_manager.handle_failover_flows(
+            event.content, event_name="failover_deployed"
+        )
 
     @alisten_to("kytos/topology.link_down")
     async def on_link_down(self, event):
