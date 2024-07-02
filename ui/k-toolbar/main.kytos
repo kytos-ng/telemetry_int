@@ -37,6 +37,7 @@ module.exports = {
             });
         },
         extract_TelemetryINTData(EVC_Data) {
+            this.telemetryINT_Data = {}
             for (let EVC in EVC_Data) {
                 this.telemetryINT_Data[EVC] = {}
                 this.telemetryINT_Data[EVC]["active"] = EVC_Data[EVC].active

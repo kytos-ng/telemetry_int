@@ -180,7 +180,6 @@
                 request.done(function(data) {
                 });
                 request.fail(function(data) {
-                    console.log(data)
                     let notification = {
                         icon: 'cog',
                         title: 'Could not redeploy INT on EVCs',
