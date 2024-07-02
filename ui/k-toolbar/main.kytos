@@ -1,6 +1,7 @@
 <template>
     <k-toolbar-item icon="chart-line" tooltip="Telemetry INT">
         <k-accordion>
+            <!-- Button for displaying info panel with telemetry_int data -->
             <k-accordion-item title="List EVCs">
                 <k-button icon="plug" title="List Installed EVCs" @click="get_EVCs">
                 </k-button>
@@ -16,6 +17,7 @@ module.exports = {
         }
     },
     methods: {
+        //API request for EVC data
         get_EVCs() {
             var self = this
             let request = $.ajax({
@@ -36,6 +38,10 @@ module.exports = {
                 self.$kytos.eventBus.$emit("setNotification", notification)
             });
         },
+        /**
+         * @param {Object} EVC_Data - The EVC data from mef_eline.
+         * @description Extracts only the required information for the telemetry_int table from the mef_eline EVC data.
+         */
         extract_TelemetryINTData(EVC_Data) {
             this.telemetryINT_Data = {}
             for (let EVC in EVC_Data) {
@@ -56,6 +62,11 @@ module.exports = {
                 }
             }
         },
+        /**
+         * @event showInfoPanel
+         * @param {Object} telemetryINT_Data - Data specific to telemetry_int extracted from mef_eline EVC data.
+         * @description Displays info panel when the "List Installed EVCs" button is clicked.
+         */
         display_InfoPanel() {
             var content = {
                           "component": 'kytos-telemetry_int-k-info-panel-show_telemetry_int_data',

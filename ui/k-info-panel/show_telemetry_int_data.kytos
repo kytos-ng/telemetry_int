@@ -2,6 +2,7 @@
     <div class="telemetryINT_container">
         <k-accordion>
             <k-accordion-item title="EVC Telemetry Info">
+                <!-- Buttons for utilizing the given action/request on the selected EVCs -->
                 <k-accordion-item title="Options">
                     <k-button-group>
                         <k-button icon="comment" title="Enable Selected" tooltip="Enable INT on selected EVCs" @click="enableSelectedEVCs()"></k-button>
@@ -10,6 +11,11 @@
                     <k-button-group>
                     <k-checkbox title="Force" v-model:model="forceOption" :value="true"></k-checkbox>
                 </k-accordion-item>
+                <!--
+                    Sections/Tables:
+                    Each follow the same structure as seen below
+                    here are three sections: Switches, Links, and Interfaces
+                -->
                 <k-accordion-item title="Table">
                     <div class="data_table">
                         <table>
@@ -107,6 +113,7 @@
                         return "red";
                 }
             },
+            //API request to enable EVCs selected within UI
             enableSelectedEVCs() {
                 var self = this
                 let evc_id = []
@@ -135,6 +142,7 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
             },
+            //API request to disable EVCs selected within UI
             disableSelectedEVCs() {
                 var self = this
                 let evc_id = []
@@ -163,6 +171,7 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
             },
+            //API request to redeploy EVCs selected within UI
             redeploySelectedEVCs() {
                 var self = this
                 let evc_id = []
@@ -190,6 +199,7 @@
             }
         },
         computed: {
+            //Filters the content obtained via the prop from main.kytos based on the textFilters/searchColumns
             filtered_EVCData: function() {
                 let current_data = structuredClone(this.$kytos.toRaw(this.content))
                 for (const tableColumn of this.EVCTextFilter) {
@@ -206,12 +216,14 @@
                 return current_data
             }
         },
+        //Extracts data from localStorage (if available) when first mounted.
         mounted() {
             // Make the panel fill the screen except the left menu width
             if (JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'))) {
                 this.EVCTextFilter = JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'));
             }
         },
+        //Watches to see if data is changed to then store it within localStorage.
         watch: {
             EVCTextFilter: {
                 handler: function() {
