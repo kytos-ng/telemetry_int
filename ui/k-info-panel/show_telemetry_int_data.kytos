@@ -130,7 +130,7 @@
                     let notification = {
                         icon: 'cog',
                         title: 'Could not enable INT on EVCs',
-                        description: data.status.toString()
+                        description: data.status.toString() + ": " + data.responseJSON.description
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
@@ -158,7 +158,7 @@
                     let notification = {
                         icon: 'cog',
                         title: 'Could not disable INT on EVCs',
-                        description: data.status.toString()
+                        description: data.status.toString() + ": " + data.responseJSON.description
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
@@ -180,10 +180,11 @@
                 request.done(function(data) {
                 });
                 request.fail(function(data) {
+                    console.log(data)
                     let notification = {
                         icon: 'cog',
                         title: 'Could not redeploy INT on EVCs',
-                        description: data.status.toString()
+                        description: data.status.toString() + ": " + data.responseJSON.description
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });

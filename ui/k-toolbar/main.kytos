@@ -31,7 +31,7 @@ module.exports = {
                 let notification = {
                     icon: 'cog',
                     title: 'Could not retrieve EVCs',
-                    description: data.status.toString()
+                    description: data.status.toString() + ": " + data.responseJSON.description
                 }
                 self.$kytos.eventBus.$emit("setNotification", notification)
             });
