@@ -13,7 +13,7 @@
 module.exports = {
     data: function() {
         return {
-            telemetryINT_Data: {},
+            telemetryINT_Data: [],
         }
     },
     methods: {
@@ -43,23 +43,24 @@ module.exports = {
          * @description Extracts only the required information for the telemetry_int table from the mef_eline EVC data.
          */
         extract_TelemetryINTData(EVC_Data) {
-            this.telemetryINT_Data = {}
+            this.telemetryINT_Data = []
             for (let EVC in EVC_Data) {
-                this.telemetryINT_Data[EVC] = {}
-                this.telemetryINT_Data[EVC]["active"] = EVC_Data[EVC].active
-                this.telemetryINT_Data[EVC]["id"] = EVC_Data[EVC].id
-                this.telemetryINT_Data[EVC]["name"] = EVC_Data[EVC].name
+                let EVC_Obj = {}
+                EVC_Obj["active"] = EVC_Data[EVC].active
+                EVC_Obj["id"] = EVC_Data[EVC].id
+                EVC_Obj["name"] = EVC_Data[EVC].name
                 if (EVC_Data[EVC].metadata?.telemetry) {
-                    this.telemetryINT_Data[EVC]["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled
-                    this.telemetryINT_Data[EVC]["status"] = EVC_Data[EVC].metadata.telemetry.status
-                    this.telemetryINT_Data[EVC]["status_reason"] = this.splitStatusReasons(EVC_Data[EVC].metadata.telemetry.status_reason)
-                    this.telemetryINT_Data[EVC]["status_updated_at"] = EVC_Data[EVC].metadata.telemetry.status_updated_at
+                    EVC_Obj["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled.toString()
+                    EVC_Obj["status"] = EVC_Data[EVC].metadata.telemetry.status
+                    EVC_Obj["status_reason"] = this.splitStatusReasons(EVC_Data[EVC].metadata.telemetry.status_reason)
+                    EVC_Obj["status_updated_at"] = EVC_Data[EVC].metadata.telemetry.status_updated_at
                 } else {
-                    this.telemetryINT_Data[EVC]["enabled"] = "N/A"
-                    this.telemetryINT_Data[EVC]["status"] = "N/A"
-                    this.telemetryINT_Data[EVC]["status_reason"] = "N/A"
-                    this.telemetryINT_Data[EVC]["status_updated_at"] = "N/A"
+                    EVC_Obj["enabled"] = "N/A"
+                    EVC_Obj["status"] = "N/A"
+                    EVC_Obj["status_reason"] = "N/A"
+                    EVC_Obj["status_updated_at"] = "N/A"
                 }
+                this.telemetryINT_Data.push(EVC_Obj)
             }
         },
         /**
