@@ -21,17 +21,17 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th rowspan="2" colspan="1"></th>
-                                    <th rowspan="2" colspan="1" @click="changeSortedColumn('ID')">ID</th>
-                                    <th rowspan="2" colspan="1" @click="changeSortedColumn('NAME')">Name</th>
-                                    <th rowspan="2" colspan="1" @click="changeSortedColumn('ACTIVE')">Active</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1"></th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('ID')">ID &nbsp;{{sortIdentifier[0]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('NAME')">Name &nbsp;{{sortIdentifier[1]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('ACTIVE')">Active &nbsp;{{sortIdentifier[2]}}</th>
                                     <th rowspan="1" colspan="4">Telemetry</th>
                                 </tr>
                                 <tr>
-                                    <th @click="changeSortedColumn('ENABLED')">Enabled</th>
-                                    <th @click="changeSortedColumn('STATUS')">Status</th>
-                                    <th @click="changeSortedColumn('STATUS_REASON')">Status Reason</th>
-                                    <th @click="changeSortedColumn('STATUS_UPDATED_AT')">Status Updated At</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('ENABLED')">Enabled &nbsp;{{sortIdentifier[3]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('STATUS')">Status &nbsp;{{sortIdentifier[4]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('STATUS_REASON')">Status Reason &nbsp;{{sortIdentifier[5]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('STATUS_UPDATED_AT')">Status Updated At &nbsp;{{sortIdentifier[6]}}</th>
                                 </tr>
                                 <tr>
                                     <th>
@@ -94,7 +94,8 @@
                 ],
                 selectedEVCs: [],
                 forceOption: [],
-                sortedColumnName: ["", 0]
+                sortedColumnName: ["", 0],
+                sortIdentifier: ["", "", "", "", "", "", ""]
             }
         },
         methods: {
@@ -118,6 +119,60 @@
                     this.sortedColumnName[1] = 1
                 } else {
                     this.sortedColumnName = [name, 0]
+                }
+                switch(name) {
+                    case "ID":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["▼", "", "", "", "", "", ""]
+                        } else {
+                            this.sortIdentifier = ["▲", "", "", "", "", "", ""]
+                        }
+                        break;
+                    case "NAME":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["", "▼", "", "", "", "", ""]
+                        } else {
+                            this.sortIdentifier = ["", "▲", "", "", "", "", ""]
+                        }
+                        break;
+                    case "ACTIVE":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["", "", "▼", "", "", "", ""]
+                        } else {
+                            this.sortIdentifier = ["", "", "▲", "", "", "", ""]
+                        }
+                        break;
+                    case "ENABLED":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["", "", "", "▼", "", "", ""]
+                        } else {
+                            this.sortIdentifier = ["", "", "", "▲", "", "", ""]
+                        }
+                        break;
+                    case "STATUS":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["", "", "", "", "▼", "", ""]
+                        } else {
+                            this.sortIdentifier = ["", "", "", "", "▲", "", ""]
+                        }
+                        break;
+                    case "STATUS_REASON":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["", "", "", "", "", "▼", ""]
+                        } else {
+                            this.sortIdentifier = ["", "", "", "", "", "▲", ""]
+                        }
+                        break;
+                    case "STATUS_UPDATED_AT":
+                        if (this.sortedColumnName[1]) {
+                            this.sortIdentifier = ["", "", "", "", "", "", "▼"]
+                        } else {
+                            this.sortIdentifier = ["", "", "", "", "", "", "▲"]
+                        }
+                        break;
+                    default:
+                        this.sortIdentifier = ["", "", "", "", "", "", ""]
+                        break;
                 }
             },
             //API request to enable EVCs selected within UI
@@ -459,5 +514,9 @@
     .k-checkbox-wrap {
         background: none;
         margin-left: 1em;
+    }
+    .sortable-column:hover {
+        color: #eee;
+        background-color: #322c5d;
     }
 </style>
