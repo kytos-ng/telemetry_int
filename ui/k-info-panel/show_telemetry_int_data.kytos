@@ -194,6 +194,7 @@
                                 url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
                                 async: true});
                 request.done(function(data) {
+                    get_EVCs()
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -223,6 +224,7 @@
                                 url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/disable",
                                 async: true});
                 request.done(function(data) {
+                    get_EVCs()
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -249,6 +251,7 @@
                                 url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/redeploy",
                                 async: true});
                 request.done(function(data) {
+                    get_EVCs()
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -258,6 +261,51 @@
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
+            },
+            //API request for EVC data
+            get_EVCs() {
+                var self = this
+                let request = $.ajax({
+                                type:"GET",
+                                dataType: "json",
+                                url: this.$kytos_server_api + "kytos/mef_eline/v2/evc/",
+                                async: true});
+                request.done(function(data) {
+                    self.extract_TelemetryINTData(data)
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not retrieve EVCs',
+                        description: data.status.toString() + ": " + data.responseJSON.description
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            /**
+             * @param {Object} EVC_Data - The EVC data from mef_eline.
+             * @description Extracts only the required information for the telemetry_int table from the mef_eline EVC data.
+             */
+            extract_TelemetryINTData(EVC_Data) {
+                this.content = []
+                for (let EVC in EVC_Data) {
+                    let EVC_Obj = {}
+                    EVC_Obj["active"] = EVC_Data[EVC].active
+                    EVC_Obj["id"] = EVC_Data[EVC].id
+                    EVC_Obj["name"] = EVC_Data[EVC].name
+                    if (EVC_Data[EVC].metadata?.telemetry) {
+                        EVC_Obj["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled.toString()
+                        EVC_Obj["status"] = EVC_Data[EVC].metadata.telemetry.status
+                        EVC_Obj["status_reason"] = this.splitStatusReasons(EVC_Data[EVC].metadata.telemetry.status_reason)
+                        EVC_Obj["status_updated_at"] = EVC_Data[EVC].metadata.telemetry.status_updated_at
+                    } else {
+                        EVC_Obj["enabled"] = "N/A"
+                        EVC_Obj["status"] = "N/A"
+                        EVC_Obj["status_reason"] = "N/A"
+                        EVC_Obj["status_updated_at"] = "N/A"
+                    }
+                    this.content.push(EVC_Obj)
+                }
             }
         },
         computed: {
