@@ -22,16 +22,16 @@
                             <thead>
                                 <tr>
                                     <th class="sortable-column" rowspan="2" colspan="1"></th>
-                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('ID')">ID &nbsp;{{sortIdentifier[0]}}</th>
-                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('NAME')">Name &nbsp;{{sortIdentifier[1]}}</th>
-                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('ACTIVE')">Active &nbsp;{{sortIdentifier[2]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('id')">ID &nbsp;{{sortIdentifierList[0]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('name')">Name &nbsp;{{sortIdentifierList[1]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('active')">Active &nbsp;{{sortIdentifierList[2]}}</th>
                                     <th rowspan="1" colspan="4">Telemetry</th>
                                 </tr>
                                 <tr>
-                                    <th class="sortable-column" @click="changeSortedColumn('ENABLED')">Enabled &nbsp;{{sortIdentifier[3]}}</th>
-                                    <th class="sortable-column" @click="changeSortedColumn('STATUS')">Status &nbsp;{{sortIdentifier[4]}}</th>
-                                    <th class="sortable-column" @click="changeSortedColumn('STATUS_REASON')">Status Reason &nbsp;{{sortIdentifier[5]}}</th>
-                                    <th class="sortable-column" @click="changeSortedColumn('STATUS_UPDATED_AT')">Status Updated At &nbsp;{{sortIdentifier[6]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('enabled')">Enabled &nbsp;{{sortIdentifierList[3]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status')">Status &nbsp;{{sortIdentifierList[4]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status_reason')">Status Reason &nbsp;{{sortIdentifierList[5]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status_updated_at')">Status Updated At &nbsp;{{sortIdentifierList[6]}}</th>
                                 </tr>
                                 <tr>
                                     <th>
@@ -95,7 +95,9 @@
                 selectedEVCs: [],
                 forceOption: [],
                 sortedColumnName: ["", 0],
-                sortIdentifier: ["", "", "", "", "", "", ""]
+                sortIdentifier: {id: 0, name: 1, active: 2, enabled: 3, status: 4, status_reason: 5, status_updated_at: 6},
+                sortSymbols: ["▲", "▼"],
+                sortIdentifierList: ["", "", "", "", "", "", ""]
             }
         },
         methods: {
@@ -120,60 +122,11 @@
                 } else {
                     this.sortedColumnName = [name, 0]
                 }
-                switch(name) {
-                    case "ID":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["▼", "", "", "", "", "", ""]
-                        } else {
-                            this.sortIdentifier = ["▲", "", "", "", "", "", ""]
-                        }
-                        break;
-                    case "NAME":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["", "▼", "", "", "", "", ""]
-                        } else {
-                            this.sortIdentifier = ["", "▲", "", "", "", "", ""]
-                        }
-                        break;
-                    case "ACTIVE":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["", "", "▼", "", "", "", ""]
-                        } else {
-                            this.sortIdentifier = ["", "", "▲", "", "", "", ""]
-                        }
-                        break;
-                    case "ENABLED":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["", "", "", "▼", "", "", ""]
-                        } else {
-                            this.sortIdentifier = ["", "", "", "▲", "", "", ""]
-                        }
-                        break;
-                    case "STATUS":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["", "", "", "", "▼", "", ""]
-                        } else {
-                            this.sortIdentifier = ["", "", "", "", "▲", "", ""]
-                        }
-                        break;
-                    case "STATUS_REASON":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["", "", "", "", "", "▼", ""]
-                        } else {
-                            this.sortIdentifier = ["", "", "", "", "", "▲", ""]
-                        }
-                        break;
-                    case "STATUS_UPDATED_AT":
-                        if (this.sortedColumnName[1]) {
-                            this.sortIdentifier = ["", "", "", "", "", "", "▼"]
-                        } else {
-                            this.sortIdentifier = ["", "", "", "", "", "", "▲"]
-                        }
-                        break;
-                    default:
-                        this.sortIdentifier = ["", "", "", "", "", "", ""]
-                        break;
-                }
+                this.setSortedColumn()
+            },
+            setSortedColumn() {
+                this.sortIdentifierList = ["", "", "", "", "", "", ""]
+                this.sortIdentifierList[this.sortIdentifier[this.sortedColumnName[0]]] = this.sortSymbols[this.sortedColumnName[1]]
             },
             //API request to enable EVCs selected within UI
             enableSelectedEVCs() {
@@ -325,170 +278,28 @@
                         return true
                     })
                     current_data = filtered_data
-                }
-                //Sort by ascending or descending order
-                switch(this.sortedColumnName[0]) {
-                    case "ID":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.id > b.id) {
-                                    return -1;
-                                }
-                                if (a.id < b.id) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.id < b.id) {
-                                    return -1;
-                                }
-                                if (a.id > b.id) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
-                    case "NAME":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.name > b.name) {
-                                    return -1;
-                                }
-                                if (a.name < b.name) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.name < b.name) {
-                                    return -1;
-                                }
-                                if (a.name > b.name) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
-                    case "ACTIVE":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.active > b.active) {
-                                    return -1;
-                                }
-                                if (a.active < b.active) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.active < b.active) {
-                                    return -1;
-                                }
-                                if (a.active > b.active) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
-                    case "ENABLED":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.enabled > b.enabled) {
-                                    return -1;
-                                }
-                                if (a.enabled < b.enabled) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.enabled < b.enabled) {
-                                    return -1;
-                                }
-                                if (a.enabled > b.enabled) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
-                    case "STATUS":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.status > b.status) {
-                                    return -1;
-                                }
-                                if (a.status < b.status) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.status < b.status) {
-                                    return -1;
-                                }
-                                if (a.status > b.status) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
-                    case "STATUS_REASON":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.status_reason > b.status_reason) {
-                                    return -1;
-                                }
-                                if (a.status_reason < b.status_reason) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.status_reason < b.status_reason) {
-                                    return -1;
-                                }
-                                if (a.status_reason > b.status_reason) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
-                    case "STATUS_UPDATED_AT":
-                        if(this.sortedColumnName[1]) {
-                            current_data.sort((a, b) => {
-                                if (a.status_updated_at > b.status_updated_at) {
-                                    return -1;
-                                }
-                                if (a.status_updated_at < b.status_updated_at) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        } else {
-                            current_data.sort((a, b) => {
-                                if (a.status_updated_at < b.status_updated_at) {
-                                    return -1;
-                                }
-                                if (a.status_updated_at > b.status_updated_at) {
-                                    return 1;
-                                }
-                                return 0;
-                            });
-                        }
-                        break;
+                    //Sort by ascending or descending order
+                    if(this.sortedColumnName[1]) {
+                        current_data.sort((a, b) => {
+                            if (a[this.sortedColumnName[0]] > b[this.sortedColumnName[0]]) {
+                                return -1;
+                            }
+                            if (a[this.sortedColumnName[0]] < b[this.sortedColumnName[0]]) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                    } else {
+                        current_data.sort((a, b) => {
+                            if (a[this.sortedColumnName[0]] < b[this.sortedColumnName[0]]) {
+                                return -1;
+                            }
+                            if (a[this.sortedColumnName[0]] > b[this.sortedColumnName[0]]) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                    }
                 }
                 return current_data
             }
