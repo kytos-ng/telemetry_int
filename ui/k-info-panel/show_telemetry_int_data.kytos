@@ -6,7 +6,7 @@
                 <k-accordion-item title="Options">
                     <k-button-group>
                         <k-button icon="comment" title="Enable Selected" tooltip="Enable INT on selected EVCs" @click="enableSelectedEVCs()"></k-button>
-                        <k-button icon="comment-slash" title="Disable Selected" tooltip="Disable INT on selected EVCs" @click="disableSelectedEVCs()"></k-button>
+                        <k-button icon="comment-slash" title="Disable Selected" tooltip="Disable INT on selected EVCs" @click="displayModal()"></k-button>
                         <k-button icon="truck-moving" title="Redeploy Selected" tooltip="Redeploy INT on selected EVCs" @click="redeploySelectedEVCs()"></k-button>
                     <k-button-group>
                     <k-checkbox title="Force" v-model:model="forceOption" :value="true"></k-checkbox>
@@ -76,6 +76,31 @@
                 </k-accordion-item>
             </k-accordion-item>
         </k-accordion>
+        <template v-if="showDelModal">
+            <div class="modal-mask">
+              <div class="modal-wrapper">
+                <div class="modal-container">
+                  <div class="modal-header">
+                    <slot name="header">
+                    </slot>
+                  </div>
+                  <div class="modal-body">
+                    <slot name="body">
+                        Disable Telemetry INT on selected EVCs? 
+                    </slot>
+                  </div>
+                  <div class="modal-footer">
+                    <slot name="footer">
+                      <k-button tooltip="Cancel" title="Cancel" @click="modalClose">
+                      </k-button>
+                      <k-button id="modalOK" tooltip="Delete" title="Delete" @click="modalOK">
+                      </k-button>
+                    </slot>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </template>
     </div>
 </template>
 <script>
@@ -97,7 +122,8 @@
                 sortedColumnName: ["", 0],
                 sortIdentifier: {id: 0, name: 1, active: 2, enabled: 3, status: 4, status_reason: 5, status_updated_at: 6},
                 sortSymbols: ["▲", "▼"],
-                sortIdentifierList: ["", "", "", "", "", "", ""]
+                sortIdentifierList: ["", "", "", "", "", "", ""],
+                showDelModal: false
             }
         },
         methods: {
@@ -124,6 +150,7 @@
                 }
                 this.setSortedColumn()
             },
+            //Sets table sort symbol
             setSortedColumn() {
                 this.sortIdentifierList = ["", "", "", "", "", "", ""]
                 this.sortIdentifierList[this.sortIdentifier[this.sortedColumnName[0]]] = this.sortSymbols[this.sortedColumnName[1]]
@@ -259,6 +286,23 @@
                     }
                     this.content.push(EVC_Obj)
                 }
+            },
+            //Displays modal
+            displayModal() {
+                this.showDelModal = true
+            },
+            modalClose() {
+                /**
+                 * Modal window - Close (X) buttom
+                 */
+                this.showDelModal = false
+            },
+            modalOK() {
+                /**
+                 * Modal window - OK buttom
+                 */
+                this.showDelModal = false
+                this.disableSelectedEVCs()
             }
         },
         computed: {
@@ -377,5 +421,56 @@
     .sortable-column:hover {
         color: #eee;
         background-color: #322c5d;
+    }
+    /* Modal windows */
+    .modal-mask {
+        position: fixed;
+        z-index: 9998;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: table;
+        transition: opacity 0.3s ease;
+    }
+    .modal-wrapper {
+        display: table-cell;
+        vertical-align: middle;
+    }
+    .modal-container {
+        width: 300px;
+        margin: 0px auto;
+        padding: 10px 10px 10px 20px;;
+        background-color: #e8e8e8;
+        border-radius: 2px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
+        transition: all 0.3s ease;
+        font-family: Helvetica, Arial, sans-serif;
+    }
+    .modal-body {
+        margin: 20px 0;
+    }
+    .modal-default-button {
+        float: right;
+    }
+    .modal-enter {
+        opacity: 0;
+    }
+    .modal-leave-active {
+        opacity: 0;
+    }
+    .modal-enter .modal-container,
+    .modal-leave-active .modal-container {
+        -webkit-transform: scale(1.1);
+        transform: scale(1.1);
+    }
+    .modal-footer {
+        justify-content: end; 
+        display: flex;
+    }
+    #modalOK {
+        color: #ffc5c5;
+        background: #be0000;
     }
 </style>
