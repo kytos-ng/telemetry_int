@@ -189,6 +189,7 @@
                         description: data.status.toString() + ": " + data.responseJSON.description
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
+                    self.get_EVCs()
                 });
             },
             //API request to disable EVCs selected within UI
@@ -225,6 +226,7 @@
                         description: data.status.toString() + ": " + data.responseJSON.description
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
+                    self.get_EVCs()
                 });
             },
             //API request to redeploy EVCs selected within UI
@@ -258,6 +260,7 @@
                         description: data.status.toString() + ": " + data.responseJSON.description
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
+                    self.get_EVCs()
                 });
             },
             //API request for EVC data
