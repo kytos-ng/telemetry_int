@@ -123,7 +123,8 @@
                 sortIdentifier: {id: 0, name: 1, active: 2, enabled: 3, status: 4, status_reason: 5, status_updated_at: 6},
                 sortSymbols: ["▲", "▼"],
                 sortIdentifierList: ["", "", "", "", "", "", ""],
-                showDelModal: false
+                showDelModal: false,
+                currentTableData: []
             }
         },
         methods: {
@@ -179,8 +180,8 @@
                         title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
                         description: ''
                     }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
                     self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -188,8 +189,8 @@
                         title: 'Could not enable INT on EVCs',
                         description: data.status.toString() + ": " + data.responseJSON.description
                     }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
                     self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
                 });
             },
             //API request to disable EVCs selected within UI
@@ -216,8 +217,8 @@
                         title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' disabled.',
                         description: ''
                     }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
                     self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -225,8 +226,8 @@
                         title: 'Could not disable INT on EVCs',
                         description: data.status.toString() + ": " + data.responseJSON.description
                     }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
                     self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
                 });
             },
             //API request to redeploy EVCs selected within UI
@@ -250,8 +251,8 @@
                         title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' redeployed.',
                         description: ''
                     }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
                     self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -259,8 +260,8 @@
                         title: 'Could not redeploy INT on EVCs',
                         description: data.status.toString() + ": " + data.responseJSON.description
                     }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
                     self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
                 });
             },
             //API request for EVC data
@@ -288,7 +289,7 @@
              * @description Extracts only the required information for the telemetry_int table from the mef_eline EVC data.
              */
             extract_TelemetryINTData(EVC_Data) {
-                this.content = []
+                this.currentTableData = []
                 for (let EVC in EVC_Data) {
                     let EVC_Obj = {}
                     EVC_Obj["active"] = EVC_Data[EVC].active
@@ -305,7 +306,7 @@
                         EVC_Obj["status_reason"] = "N/A"
                         EVC_Obj["status_updated_at"] = "N/A"
                     }
-                    this.content.push(EVC_Obj)
+                    this.currentTableData.push(EVC_Obj)
                 }
             },
             //Formats status reason data for table
@@ -333,7 +334,12 @@
         computed: {
             //Filters the content obtained via the prop from main.kytos based on the textFilters/searchColumns and then the column ordering
             filtered_EVCData: function() {
-                let current_data = this.$kytos.toRaw(this.content)
+                let current_data = []
+                if(this.currentTableData == undefined || this.currentTableData.length == 0) {
+                    current_data = this.$kytos.toRaw(this.content)
+                } else {
+                    current_data = this.currentTableData
+                }
                 //Filter based on the search columns
                 if (current_data) {
                     let filtered_data = current_data.filter((EVC) => {
