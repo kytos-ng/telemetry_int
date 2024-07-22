@@ -176,7 +176,7 @@
                 request.done(function(data) {
                     let notification = {
                         icon: 'check',
-                        title: 'EVCs with ID: ' + this.selectedEVCs.toString() + ' enabled.',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
                         description: ''
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -213,7 +213,7 @@
                 request.done(function(data) {
                     let notification = {
                         icon: 'check',
-                        title: 'EVCs with ID: ' + this.selectedEVCs.toString() + ' disabled.',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' disabled.',
                         description: ''
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -247,7 +247,7 @@
                 request.done(function(data) {
                     let notification = {
                         icon: 'check',
-                        title: 'EVCs with ID: ' + this.selectedEVCs.toString() + ' redeployed.',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' redeployed.',
                         description: ''
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
