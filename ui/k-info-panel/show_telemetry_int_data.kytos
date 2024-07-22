@@ -308,6 +308,10 @@
                     this.content.push(EVC_Obj)
                 }
             },
+            //Formats status reason data for table
+            splitStatusReasons(statusReasons) {
+                return statusReasons.toString()
+            },
             //Displays modal
             displayModal() {
                 this.showDelModal = true
