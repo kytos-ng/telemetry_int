@@ -334,12 +334,7 @@
         computed: {
             //Filters the content obtained via the prop from main.kytos based on the textFilters/searchColumns and then the column ordering
             filtered_EVCData: function() {
-                let current_data = []
-                if(this.currentTableData == undefined || this.currentTableData.length == 0) {
-                    current_data = this.$kytos.toRaw(this.content)
-                } else {
-                    current_data = this.currentTableData
-                }
+                let current_data = this.$kytos.toRaw(this.currentTableData)
                 //Filter based on the search columns
                 if (current_data) {
                     let filtered_data = current_data.filter((EVC) => {
@@ -381,6 +376,8 @@
         },
         //Extracts data from localStorage (if available) when first mounted.
         mounted() {
+            // Add content to table data
+            this.currentTableData = this.content
             // Make the panel fill the screen except the left menu width
             if (JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'))) {
                 this.EVCTextFilter = JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'));
@@ -391,6 +388,14 @@
             EVCTextFilter: {
                 handler: function() {
                     localStorage.setItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter', JSON.stringify(this.EVCTextFilter))
+                },
+                deep: true
+            },
+            content: {
+                handler: function() {
+                    this.currentTableData = this.content
+                    console.log(this.content)
+                    console.log(this.currentTableData)
                 },
                 deep: true
             }
