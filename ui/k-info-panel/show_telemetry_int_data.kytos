@@ -174,7 +174,7 @@
                                 url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
                                 async: true});
                 request.done(function(data) {
-                    get_EVCs()
+                    self.get_EVCs()
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -204,7 +204,7 @@
                                 url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/disable",
                                 async: true});
                 request.done(function(data) {
-                    get_EVCs()
+                    self.get_EVCs()
                 });
                 request.fail(function(data) {
                     let notification = {
@@ -231,7 +231,7 @@
                                 url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/redeploy",
                                 async: true});
                 request.done(function(data) {
-                    get_EVCs()
+                    self.get_EVCs()
                 });
                 request.fail(function(data) {
                     let notification = {
