@@ -1,0 +1,87 @@
+<template>
+    <k-toolbar-item icon="chart-line" tooltip="Telemetry INT">
+        <k-accordion>
+            <!-- Button for displaying info panel with telemetry_int data -->
+            <k-accordion-item title="List EVCs">
+                <k-button icon="plug" title="List Installed EVCs" @click="get_EVCs">
+                </k-button>
+            </k-accordion-item>
+        </k-accordion>
+    </k-toolbar-item>
+</template>
+<script>
+module.exports = {
+    data: function() {
+        return {
+            telemetryINT_Data: [],
+        }
+    },
+    methods: {
+        //API request for EVC data
+        get_EVCs() {
+            var self = this
+            let request = $.ajax({
+                            type:"GET",
+                            dataType: "json",
+                            url: this.$kytos_server_api + "kytos/mef_eline/v2/evc/",
+                            async: true});
+            request.done(function(data) {
+                self.extract_TelemetryINTData(data)
+                self.display_InfoPanel()
+            });
+            request.fail(function(data) {
+                let notification = {
+                    icon: 'cog',
+                    title: 'Could not retrieve EVCs',
+                    description: data.status.toString() + ": " + data.responseJSON.description
+                }
+                self.$kytos.eventBus.$emit("setNotification", notification)
+            });
+        },
+        /**
+         * @param {Object} EVC_Data - The EVC data from mef_eline.
+         * @description Extracts only the required information for the telemetry_int table from the mef_eline EVC data.
+         */
+        extract_TelemetryINTData(EVC_Data) {
+            this.telemetryINT_Data = []
+            for (let EVC in EVC_Data) {
+                let EVC_Obj = {}
+                EVC_Obj["active"] = EVC_Data[EVC].active
+                EVC_Obj["id"] = EVC_Data[EVC].id
+                EVC_Obj["name"] = EVC_Data[EVC].name
+                if (EVC_Data[EVC].metadata?.telemetry) {
+                    EVC_Obj["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled.toString()
+                    EVC_Obj["status"] = EVC_Data[EVC].metadata.telemetry.status
+                    EVC_Obj["status_reason"] = this.splitStatusReasons(EVC_Data[EVC].metadata.telemetry.status_reason)
+                    EVC_Obj["status_updated_at"] = EVC_Data[EVC].metadata.telemetry.status_updated_at
+                } else {
+                    EVC_Obj["enabled"] = "N/A"
+                    EVC_Obj["status"] = "N/A"
+                    EVC_Obj["status_reason"] = "N/A"
+                    EVC_Obj["status_updated_at"] = "N/A"
+                }
+                this.telemetryINT_Data.push(EVC_Obj)
+            }
+        },
+        /**
+         * @event showInfoPanel
+         * @param {Object} telemetryINT_Data - Data specific to telemetry_int extracted from mef_eline EVC data.
+         * @description Displays info panel when the "List Installed EVCs" button is clicked.
+         */
+        display_InfoPanel() {
+            var content = {
+                          "component": 'kytos-telemetry_int-k-info-panel-show_telemetry_int_data',
+                          "content": this.telemetryINT_Data,
+                          "icon": "info-circle",
+                          "title": "View Telemetry INT Data",
+                          "subtitle": "by kytos/telemetry_int"
+                          }
+            this.$kytos.eventBus.$emit("showInfoPanel", content)
+        },
+        //Formats status reason data for table
+        splitStatusReasons(statusReasons) {
+            return statusReasons.toString()
+        }
+    }
+}
+</script>

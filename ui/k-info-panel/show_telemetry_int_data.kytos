@@ -1,0 +1,512 @@
+<template>
+    <div class="telemetryINT_container">
+        <k-accordion>
+            <k-accordion-item title="EVC Telemetry Info">
+                <!-- Buttons for utilizing the given action/request on the selected EVCs -->
+                <k-accordion-item title="Options">
+                    <k-button-group>
+                        <k-button icon="comment" title="Enable Selected" tooltip="Enable INT on selected EVCs" @click="enableSelectedEVCs()"></k-button>
+                        <k-button icon="comment-slash" title="Disable Selected" tooltip="Disable INT on selected EVCs" @click="displayModal()"></k-button>
+                        <k-button icon="truck-moving" title="Redeploy Selected" tooltip="Redeploy INT on selected EVCs" @click="redeploySelectedEVCs()"></k-button>
+                    <k-button-group>
+                    <k-checkbox title="Force" v-model:model="forceOption" :value="true"></k-checkbox>
+                </k-accordion-item>
+                <!--
+                    Sections/Tables:
+                    Each follow the same structure as seen below
+                    here are three sections: Switches, Links, and Interfaces
+                -->
+                <k-accordion-item title="Table">
+                    <div class="INT_table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="sortable-column" rowspan="2" colspan="1"></th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('id')">ID &nbsp;{{sortIdentifierList[0]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('name')">Name &nbsp;{{sortIdentifierList[1]}}</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('active')">Active &nbsp;{{sortIdentifierList[2]}}</th>
+                                    <th rowspan="1" colspan="4">Telemetry</th>
+                                </tr>
+                                <tr>
+                                    <th class="sortable-column" @click="changeSortedColumn('enabled')">Enabled &nbsp;{{sortIdentifierList[3]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status')">Status &nbsp;{{sortIdentifierList[4]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status_reason')">Status Reason &nbsp;{{sortIdentifierList[5]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status_updated_at')">Status Updated At &nbsp;{{sortIdentifierList[6]}}</th>
+                                </tr>
+                                <tr>
+                                    <th>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[0][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[1][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[2][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[3][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[4][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[5][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[6][1]"></input>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(item, index) in filtered_EVCData">
+                                    <td><k-checkbox v-model:model="selectedEVCs" :value="item.id"></k-checkbox></td>
+                                    <td>{{item.id}}</td>
+                                    <td>{{item.name}}</td>
+                                    <td>{{item.active}}</td>
+                                    <td>{{item.enabled}}</td>
+                                    <td :class="statusColor(item)">{{item.status}}</td>
+                                    <td>{{item.status_reason}}</td>
+                                    <td>{{item.status_updated_at}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </k-accordion-item>
+            </k-accordion-item>
+        </k-accordion>
+        <template v-if="showDelModal">
+            <div class="modal-mask">
+              <div class="modal-wrapper">
+                <div class="modal-container">
+                  <div class="modal-header">
+                    <slot name="header">
+                    </slot>
+                  </div>
+                  <div class="modal-body">
+                    <slot name="body">
+                        Disable Telemetry INT on selected EVCs? 
+                    </slot>
+                  </div>
+                  <div class="modal-footer">
+                    <slot name="footer">
+                      <k-button tooltip="Cancel" title="Cancel" @click="modalClose">
+                      </k-button>
+                      <k-button id="modalOK" tooltip="Delete" title="Delete" @click="modalOK">
+                      </k-button>
+                    </slot>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </template>
+    </div>
+</template>
+<script>
+    module.exports = {
+        props: ["content"],
+        data: function() {
+            return {
+                EVCTextFilter: [
+                    ["id", ""],
+                    ["name", ""],
+                    ["active", ""],
+                    ["enabled", ""],
+                    ["status", ""],
+                    ["status_reason", ""],
+                    ["status_updated_at", ""]
+                ],
+                selectedEVCs: [],
+                forceOption: [],
+                sortedColumnName: ["", 0],
+                sortIdentifier: {id: 0, name: 1, active: 2, enabled: 3, status: 4, status_reason: 5, status_updated_at: 6},
+                sortSymbols: ["▲", "▼"],
+                sortIdentifierList: ["", "", "", "", "", "", ""],
+                showDelModal: false,
+                currentTableData: []
+            }
+        },
+        methods: {
+            statusColor(data) {
+            /**
+             * @param {Object} data - The normal table row object containing:
+             * @param {string} data.status - The status of the device the Object references.
+             * @returns {string} Returns a string that acts as the class for current HTML element.
+             * @description Sets color for current status table cell.
+             */
+                switch(true) {
+                    case (data.status == "UP"):
+                        return "green";
+                    case (data.status == "DOWN"):
+                        return "red";
+                }
+            },
+            //Changes the current column to sort the table by
+            changeSortedColumn(name) {
+                if (this.sortedColumnName[0] == name && this.sortedColumnName[1] == 0) {
+                    this.sortedColumnName[1] = 1
+                } else {
+                    this.sortedColumnName = [name, 0]
+                }
+                this.setSortedColumn()
+            },
+            //Sets table sort symbol
+            setSortedColumn() {
+                this.sortIdentifierList = ["", "", "", "", "", "", ""]
+                this.sortIdentifierList[this.sortIdentifier[this.sortedColumnName[0]]] = this.sortSymbols[this.sortedColumnName[1]]
+            },
+            //API request to enable EVCs selected within UI
+            enableSelectedEVCs() {
+                var self = this
+                let evc_id = []
+                for (const EVC in this.content) {
+                    evc_id.push(EVC.toString())
+                }
+                let payload = {evc_ids: this.selectedEVCs}
+                if (this.forceOption[0]) {
+                    payload["force"] = true
+                }
+                let request = $.ajax({
+                                type:"POST",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
+                                async: true});
+                request.done(function(data) {
+                    let notification = {
+                        icon: 'check',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
+                        description: ''
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not enable INT on EVCs',
+                        description: data.status.toString() + ": " + data.responseJSON.description
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            //API request to disable EVCs selected within UI
+            disableSelectedEVCs() {
+                var self = this
+                let evc_id = []
+                for (const EVC in this.content) {
+                    evc_id.push(EVC.toString())
+                }
+                let payload = {evc_ids: this.selectedEVCs}
+                if (this.forceOption[0]) {
+                    payload["force"] = true
+                }
+                let request = $.ajax({
+                                type:"POST",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/disable",
+                                async: true});
+                request.done(function(data) {
+                    let notification = {
+                        icon: 'check',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' disabled.',
+                        description: ''
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not disable INT on EVCs',
+                        description: data.status.toString() + ": " + data.responseJSON.description
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            //API request to redeploy EVCs selected within UI
+            redeploySelectedEVCs() {
+                var self = this
+                let evc_id = []
+                for (const EVC in this.content) {
+                    evc_id.push(EVC.toString())
+                }
+                let payload = {evc_ids: this.selectedEVCs}
+                let request = $.ajax({
+                                type:"PATCH",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/redeploy",
+                                async: true});
+                request.done(function(data) {
+                    let notification = {
+                        icon: 'check',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' redeployed.',
+                        description: ''
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not redeploy INT on EVCs',
+                        description: data.status.toString() + ": " + data.responseJSON.description
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            //API request for EVC data
+            get_EVCs() {
+                var self = this
+                let request = $.ajax({
+                                type:"GET",
+                                dataType: "json",
+                                url: this.$kytos_server_api + "kytos/mef_eline/v2/evc/",
+                                async: true});
+                request.done(function(data) {
+                    self.extract_TelemetryINTData(data)
+                });
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not retrieve EVCs',
+                        description: data.status.toString() + ": " + data.responseJSON.description
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+            },
+            /**
+             * @param {Object} EVC_Data - The EVC data from mef_eline.
+             * @description Extracts only the required information for the telemetry_int table from the mef_eline EVC data.
+             */
+            extract_TelemetryINTData(EVC_Data) {
+                this.currentTableData = []
+                for (let EVC in EVC_Data) {
+                    let EVC_Obj = {}
+                    EVC_Obj["active"] = EVC_Data[EVC].active
+                    EVC_Obj["id"] = EVC_Data[EVC].id
+                    EVC_Obj["name"] = EVC_Data[EVC].name
+                    if (EVC_Data[EVC].metadata?.telemetry) {
+                        EVC_Obj["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled.toString()
+                        EVC_Obj["status"] = EVC_Data[EVC].metadata.telemetry.status
+                        EVC_Obj["status_reason"] = this.splitStatusReasons(EVC_Data[EVC].metadata.telemetry.status_reason)
+                        EVC_Obj["status_updated_at"] = EVC_Data[EVC].metadata.telemetry.status_updated_at
+                    } else {
+                        EVC_Obj["enabled"] = "N/A"
+                        EVC_Obj["status"] = "N/A"
+                        EVC_Obj["status_reason"] = "N/A"
+                        EVC_Obj["status_updated_at"] = "N/A"
+                    }
+                    this.currentTableData.push(EVC_Obj)
+                }
+            },
+            //Formats status reason data for table
+            splitStatusReasons(statusReasons) {
+                return statusReasons.toString()
+            },
+            //Displays modal
+            displayModal() {
+                this.showDelModal = true
+            },
+            modalClose() {
+                /**
+                 * Modal window - Close (X) buttom
+                 */
+                this.showDelModal = false
+            },
+            modalOK() {
+                /**
+                 * Modal window - OK buttom
+                 */
+                this.showDelModal = false
+                this.disableSelectedEVCs()
+            }
+        },
+        computed: {
+            //Filters the content obtained via the prop from main.kytos based on the textFilters/searchColumns and then the column ordering
+            filtered_EVCData: function() {
+                let current_data = this.$kytos.toRaw(this.currentTableData)
+                //Filter based on the search columns
+                if (current_data) {
+                    let filtered_data = current_data.filter((EVC) => {
+                        for (const tableColumn of this.EVCTextFilter) {
+                            let separatedFilter = tableColumn[1].toString()
+                            let separatedProperty = EVC[tableColumn[0]].toString()
+                            if (!(separatedProperty.includes(separatedFilter) || separatedFilter.includes(separatedProperty))) {
+                                return false
+                            }
+                        }
+                        return true
+                    })
+                    current_data = filtered_data
+                    //Sort by ascending or descending order
+                    if(this.sortedColumnName[1]) {
+                        current_data.sort((a, b) => {
+                            if (a[this.sortedColumnName[0]] > b[this.sortedColumnName[0]]) {
+                                return -1;
+                            }
+                            if (a[this.sortedColumnName[0]] < b[this.sortedColumnName[0]]) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                    } else {
+                        current_data.sort((a, b) => {
+                            if (a[this.sortedColumnName[0]] < b[this.sortedColumnName[0]]) {
+                                return -1;
+                            }
+                            if (a[this.sortedColumnName[0]] > b[this.sortedColumnName[0]]) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                    }
+                }
+                return current_data
+            }
+        },
+        //Extracts data from localStorage (if available) when first mounted.
+        mounted() {
+            // Add content to table data
+            this.currentTableData = this.content
+            // Make the panel fill the screen except the left menu width
+            if (JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'))) {
+                this.EVCTextFilter = JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter'));
+            }
+        },
+        //Watches to see if data is changed to then store it within localStorage.
+        watch: {
+            EVCTextFilter: {
+                handler: function() {
+                    localStorage.setItem('telemetry_int/k-info-panel/show_telemetry_int_data/EVCTextFilter', JSON.stringify(this.EVCTextFilter))
+                },
+                deep: true
+            },
+            content: {
+                handler: function() {
+                    this.currentTableData = this.content
+                    console.log(this.content)
+                    console.log(this.currentTableData)
+                },
+                deep: true
+            }
+        }
+    }
+</script>
+<style>
+    .INT_table {
+      color: #ccc;
+      text-align: center;
+      margin: 0 auto;
+      display: block;
+      padding: 0.5em 0 1em 0.3em;
+      font-size: 0.8em;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    .INT_table table{
+      display: table;
+      width: 100%;
+    }
+    .INT_table thead{
+      font-weight: bold;
+      background: #554077;
+    }
+    .INT_table th{
+      padding: 0.6em 0 0.6em 0;
+      vertical-align: middle;
+      border: 1px solid;
+    }
+    .INT_table td{
+      vertical-align: middle;
+      padding: 0.45em 0 0.45em 0;
+      word-break: break-all;
+      border: 1px solid;
+    }
+    .INT_table tbody tr:nth-child(even) {
+      background: #313131;
+    }
+    .INT_table tbody tr:hover {
+        color: #eee;
+        background-color: #666;
+    }
+    .green {
+        background-color: #8bc34a;
+        color: #222;
+    }
+    .red {
+        background-color: #dd2c00;
+        color: #222;
+    }
+    .k-info-panel:has(.telemetryINT_container) {
+        width: calc(100% - 305px) !important; /* overrides the width of the parent panel if it loads the mef_eline container */
+    }
+    .k-checkbox-wrap {
+        background: none;
+        margin-left: 1em;
+    }
+    .sortable-column:hover {
+        color: #eee;
+        background-color: #322c5d;
+    }
+    /* Modal windows */
+    .modal-mask {
+        position: fixed;
+        z-index: 9998;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: table;
+        transition: opacity 0.3s ease;
+    }
+    .modal-wrapper {
+        display: table-cell;
+        vertical-align: middle;
+    }
+    .modal-container {
+        width: 300px;
+        margin: 0px auto;
+        padding: 10px 10px 10px 20px;;
+        background-color: #e8e8e8;
+        border-radius: 2px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
+        transition: all 0.3s ease;
+        font-family: Helvetica, Arial, sans-serif;
+    }
+    .modal-body {
+        margin: 20px 0;
+    }
+    .modal-default-button {
+        float: right;
+    }
+    .modal-enter {
+        opacity: 0;
+    }
+    .modal-leave-active {
+        opacity: 0;
+    }
+    .modal-enter .modal-container,
+    .modal-leave-active .modal-container {
+        -webkit-transform: scale(1.1);
+        transform: scale(1.1);
+    }
+    .modal-footer {
+        justify-content: end; 
+        display: flex;
+    }
+    #modalOK {
+        color: #ffc5c5;
+        background: #be0000;
+    }
+</style>
