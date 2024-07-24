@@ -7,6 +7,9 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+[2024.1.0] - 2024-07-23
+***********************
+
 Added
 =====
 - Handled ``kytos/mef_eline.undeployed`` event.
