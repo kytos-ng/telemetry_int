@@ -31,6 +31,7 @@ from napps.kytos.telemetry_int.exceptions import (
     ProxyPortDestNotFound,
     ProxyPortNotFound,
     ProxyPortSameSourceIntraEVC,
+    ProxyPortShared,
 )
 
 
@@ -273,17 +274,22 @@ class INTManager:
                 "EVCs to be safe, and then try to enable again with the updated "
                 f" proxy port {pp}, EVC ids: {list(affected_evcs)}"
             )
-            await self.disable_int(affected_evcs, force=True)
+            await self.disable_int(
+                affected_evcs, force=True, reason="proxy_port_metadata_added"
+            )
             try:
                 await self.enable_int(affected_evcs, force=True)
-            except ProxyPortSameSourceIntraEVC as exc:
+            except (ProxyPortSameSourceIntraEVC, ProxyPortShared) as exc:
+                # TODO update metdata
                 msg = (
-                    f"Validation error when updating interface {intf} proxy port {pp}"
+                    f"Validation error when updating interface {intf}"
                     f" EVC ids: {list(affected_evcs)}, exception {str(exc)}"
                 )
                 log.error(msg)
 
-    async def disable_int(self, evcs: dict[str, dict], force=False) -> None:
+    async def disable_int(
+        self, evcs: dict[str, dict], force=False, reason="disabled"
+    ) -> None:
         """Disable INT on EVCs.
 
         evcs is a dict of prefetched EVCs from mef_eline based on evc_ids.
@@ -302,7 +308,7 @@ class INTManager:
             "telemetry": {
                 "enabled": False,
                 "status": "DOWN",
-                "status_reason": ["disabled"],
+                "status_reason": [reason],
                 "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
             }
         }
@@ -499,6 +505,35 @@ class INTManager:
             evc["id"], "intra EVC UNIs must use different proxy ports"
         )
 
+    def _validate_dedicated_proxy_port_evcs(self, evcs: dict[str, dict]):
+        """Validate that a proxy port is dedicated for the given EVCs.
+
+        https://github.com/kytos-ng/telemetry_int/issues/110
+        """
+        seen_src_unis: dict[str, str] = {}
+        for evc in evcs.values():
+            pp_a, unia_id = evc["uni_a"]["proxy_port"], evc["uni_a"]["interface_id"]
+            pp_z, uniz_id = evc["uni_z"]["proxy_port"], evc["uni_z"]["interface_id"]
+            for cur_uni_id, cur_src_id in self.unis_src.items():
+                for uni_id, pp in zip((unia_id, uniz_id), (pp_a, pp_z)):
+                    if uni_id != cur_uni_id and cur_src_id == pp.source.id:
+                        msg = (
+                            f"UNI {uni_id} must use another dedicated proxy port. "
+                            f"UNI {cur_uni_id} is using {pp}"
+                        )
+                        raise ProxyPortShared(evc["id"], msg)
+
+            # This is needed to validate the EVCs of the current request
+            # since self.uni_src only gets updated when a EVC gets enabled
+            for uni_id, pp in zip((unia_id, uniz_id), (pp_a, pp_z)):
+                if (found := seen_src_unis.get(pp.source.id)) and found != uni_id:
+                    msg = (
+                        f"UNI {uni_id} must use another dedicated proxy port. "
+                        f"UNI {found} would use {pp}"
+                    )
+                    raise ProxyPortShared(evc["id"], msg)
+                seen_src_unis[pp_a.source.id] = uni_id
+
     async def handle_failover_flows(
         self, evcs_content: dict[str, dict], event_name: str
     ) -> None:
@@ -630,6 +665,7 @@ class INTManager:
                 )
 
             self._validate_intra_evc_different_proxy_ports(evc)
+        self._validate_dedicated_proxy_port_evcs(evcs)
         return evcs
 
     def _validate_has_int(self, evcs: dict[str, dict]):
@@ -662,6 +698,10 @@ class INTManager:
             pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
             pp_a.evc_ids.discard(evc_id)
             pp_z.evc_ids.discard(evc_id)
+            if not pp_a.evc_ids:
+                self.unis_src.pop(evc["uni_a"]["interface_id"], None)
+            if not pp_z.evc_ids:
+                self.unis_src.pop(evc["uni_z"]["interface_id"], None)
 
     def evc_compare(
         self, stored_int_flows: dict, stored_mef_flows: dict, evcs: dict

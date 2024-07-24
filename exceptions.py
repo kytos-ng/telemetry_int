@@ -53,6 +53,11 @@ class ProxyPortSameSourceIntraEVC(ProxyPortError):
     """
 
 
+class ProxyPortShared(ProxyPortError):
+    """ProxyPortShared. A shared proxy port isn't supported for now.
+    Each uni should have its own proxy port"""
+
+
 class EVCHasNoINT(EVCError):
     """Exception in case the EVC doesn't have INT enabled."""
 
