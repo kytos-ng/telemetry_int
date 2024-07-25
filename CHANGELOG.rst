@@ -20,6 +20,7 @@ Added
 Changed
 =======
 - Only raise ``FlowsNotFound`` when an EVC is active and flows aren't found. Update status and status_reason accordingly too when installing flows.
+- Validate to support only a single proxy port per UNI for now.
 
 Fixed
 =====
