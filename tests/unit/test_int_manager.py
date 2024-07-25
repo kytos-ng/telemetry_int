@@ -4,6 +4,7 @@ import pytest
 
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.exceptions import ProxyPortSameSourceIntraEVC
+from napps.kytos.telemetry_int.exceptions import ProxyPortShared
 from napps.kytos.telemetry_int.managers.int import INTManager
 from napps.kytos.telemetry_int import exceptions
 from kytos.core.common import EntityStatus
@@ -439,6 +440,37 @@ class TestINTManager:
         pp_a.source, pp_z.source = source, source
         with pytest.raises(ProxyPortSameSourceIntraEVC):
             int_manager._validate_intra_evc_different_proxy_ports(evc)
+
+    def test_validate_dedicated_proxy_port_evcs(self) -> None:
+        """Test _validate_intra_evc_different_proxy_ports."""
+        pp_a, pp_z, controller = MagicMock(), MagicMock(), MagicMock()
+        evc = {
+            "id": "some_id",
+            "uni_a": {"proxy_port": pp_a, "interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"proxy_port": pp_z, "interface_id": "00:00:00:00:00:00:00:01:2"},
+        }
+
+        int_manager = INTManager(controller)
+        int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
+
+        source = MagicMock()
+        pp_a.source, pp_z.source = source, source
+        with pytest.raises(ProxyPortShared):
+            int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
+
+    def test_validate_dedicated_proxy_port_evcs_existing(self) -> None:
+        """Test _validate_intra_evc_different_proxy_ports existing."""
+        pp_a, pp_z, controller = MagicMock(), MagicMock(), MagicMock()
+        evc = {
+            "id": "some_id",
+            "uni_a": {"proxy_port": pp_a, "interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"proxy_port": pp_z, "interface_id": "00:00:00:00:00:00:00:01:2"},
+        }
+
+        int_manager = INTManager(controller)
+        int_manager.unis_src["00:00:00:00:00:00:00:01:3"] = pp_a.source.id
+        with pytest.raises(ProxyPortShared):
+            int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
 
     async def test__remove_int_flows_by_cookies(
         self, inter_evc_evpl_flows_data
