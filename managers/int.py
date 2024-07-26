@@ -280,12 +280,22 @@ class INTManager:
             try:
                 await self.enable_int(affected_evcs, force=True)
             except (ProxyPortSameSourceIntraEVC, ProxyPortShared) as exc:
-                # TODO update metdata
                 msg = (
                     f"Validation error when updating interface {intf}"
                     f" EVC ids: {list(affected_evcs)}, exception {str(exc)}"
                 )
                 log.error(msg)
+                metadata = {
+                    "telemetry": {
+                        "enabled": False,
+                        "status": "DOWN",
+                        "status_reason": ["proxy_port_shared"],
+                        "status_updated_at": datetime.utcnow().strftime(
+                            "%Y-%m-%dT%H:%M:%S"
+                        ),
+                    }
+                }
+                api.add_evcs_metadata(affected_evcs, metadata)
 
     async def disable_int(
         self, evcs: dict[str, dict], force=False, reason="disabled"
