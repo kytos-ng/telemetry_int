@@ -295,7 +295,7 @@ class INTManager:
                         ),
                     }
                 }
-                api.add_evcs_metadata(affected_evcs, metadata)
+                await api.add_evcs_metadata(affected_evcs, metadata)
 
     async def disable_int(
         self, evcs: dict[str, dict], force=False, reason="disabled"
@@ -542,7 +542,7 @@ class INTManager:
                         f"UNI {found} would use {pp}"
                     )
                     raise ProxyPortShared(evc["id"], msg)
-                seen_src_unis[pp_a.source.id] = uni_id
+                seen_src_unis[pp.source.id] = uni_id
 
     async def handle_failover_flows(
         self, evcs_content: dict[str, dict], event_name: str
