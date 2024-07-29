@@ -25,6 +25,7 @@ Changed
 Fixed
 =====
 - Only redeploy if INT has been enabled before
+- Fixed batched flows slicing
 
 [2023.2.0] - 2024-02-16
 ***********************
