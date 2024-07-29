@@ -627,9 +627,20 @@ class INTManager:
             log.info(
                 f"Handling {event_name} flows install on EVC ids: {to_install.keys()}"
             )
-            await self._install_int_flows(
-                self.flow_builder.build_int_flows(to_install, new_flows)
-            )
+            built_flows = self.flow_builder.build_int_flows(to_install, new_flows)
+            built_flows = {
+                cookie: [
+                    flow
+                    for flow in flows
+                    if not utils.has_instruction_and_action_type(
+                        flow.get("flow", {}).get("instructions", []),
+                        "apply_actions",
+                        "push_int",
+                    )
+                ]
+                for cookie, flows in built_flows.items()
+            }
+            await self._install_int_flows(built_flows)
 
     def _validate_map_enable_evcs(
         self,
