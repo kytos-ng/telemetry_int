@@ -164,6 +164,55 @@ def test_add_to_apply_actions() -> None:
     assert instructions[0]["actions"][0] == new_instruction
 
 
+@pytest.mark.parametrize(
+    "instructions,instruction_type,action_type,expected",
+    [
+        (
+            [
+                {
+                    "instruction_type": "apply_actions",
+                    "actions": [{"action_type": "push_int"}],
+                },
+                {"instruction_type": "goto_table", "table_id": 2},
+            ],
+            "apply_actions",
+            "push_int",
+            True,
+        ),
+        (
+            [
+                {"instruction_type": "goto_table", "table_id": 2},
+            ],
+            "apply_actions",
+            "push_int",
+            False,
+        ),
+        (
+            [
+                {
+                    "instruction_type": "apply_actions",
+                    "actions": [{"action_type": "push_int"}],
+                },
+                {"instruction_type": "goto_table", "table_id": 2},
+            ],
+            "apply_actions",
+            "pop_int",
+            False,
+        ),
+    ],
+)
+def test_has_instruction_and_action_type(
+    instructions, instruction_type, action_type, expected
+) -> None:
+    """Test add to apply actions."""
+    assert (
+        utils.has_instruction_and_action_type(
+            instructions, instruction_type, action_type
+        )
+        == expected
+    )
+
+
 def test_set_owner() -> None:
     """Test set_owner."""
     flow = {
