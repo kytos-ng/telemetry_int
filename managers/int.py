@@ -828,8 +828,8 @@ class INTManager:
                 batch_size = len(flows)
 
             for i in range(0, len(flows), batch_size):
-                flows = flows[i : i + batch_size]
-                if not flows:
+                flows_batch = flows[i : i + batch_size]
+                if not flows_batch:
                     continue
 
                 if i > 0:
@@ -839,7 +839,7 @@ class INTManager:
                     content={
                         "dpid": dpid,
                         "force": True,
-                        "flow_dict": {"flows": flows},
+                        "flow_dict": {"flows": flows_batch},
                     },
                 )
                 await self.controller.buffers.app.aput(event)
