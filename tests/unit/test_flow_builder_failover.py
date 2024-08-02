@@ -156,52 +156,6 @@ async def test_handle_failover_link_down() -> None:
         "12307967605643950656": [
             {
                 "flow": {
-                    "match": {
-                        "in_port": 1,
-                        "dl_vlan": 100,
-                        "dl_type": 2048,
-                        "nw_proto": 6,
-                    },
-                    "cookie": 12163852417568094784,
-                    "owner": "telemetry_int",
-                    "table_group": "evpl",
-                    "table_id": 0,
-                    "priority": 20100,
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "push_int"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
-                    "match": {
-                        "in_port": 1,
-                        "dl_vlan": 100,
-                        "dl_type": 2048,
-                        "nw_proto": 17,
-                    },
-                    "cookie": 12163852417568094784,
-                    "owner": "telemetry_int",
-                    "table_group": "evpl",
-                    "table_id": 0,
-                    "priority": 20100,
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "push_int"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
                     "match": {"in_port": 1, "dl_vlan": 100},
                     "cookie": 12163852417568094784,
                     "owner": "telemetry_int",
@@ -221,52 +175,6 @@ async def test_handle_failover_link_down() -> None:
                     ],
                 },
                 "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
-                    "match": {
-                        "in_port": 1,
-                        "dl_vlan": 100,
-                        "dl_type": 2048,
-                        "nw_proto": 6,
-                    },
-                    "cookie": 12163852417568094784,
-                    "owner": "telemetry_int",
-                    "table_group": "evpl",
-                    "table_id": 0,
-                    "priority": 20100,
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "push_int"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:03",
-            },
-            {
-                "flow": {
-                    "match": {
-                        "in_port": 1,
-                        "dl_vlan": 100,
-                        "dl_type": 2048,
-                        "nw_proto": 17,
-                    },
-                    "cookie": 12163852417568094784,
-                    "owner": "telemetry_int",
-                    "table_group": "evpl",
-                    "table_id": 0,
-                    "priority": 20100,
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "push_int"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:03",
             },
             {
                 "flow": {
