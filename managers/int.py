@@ -4,7 +4,7 @@ import asyncio
 import copy
 from collections import defaultdict
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pyof.v0x04.controller2switch.table_mod import Table
 
@@ -433,25 +433,29 @@ class INTManager:
             api.add_evcs_metadata(active_evcs, metadata, force),
         )
 
-    def get_proxy_port_or_raise(self, intf_id: str, evc_id: str) -> ProxyPort:
-        """Return a ProxyPort assigned to a UNI or raise."""
+    def get_proxy_port_or_raise(
+        self, intf_id: str, evc_id: str, new_port_number: Optional[int] = None
+    ) -> ProxyPort:
+        """Return a ProxyPort assigned to a UNI or raise.
+
+        new_port_number can be set and used to validate a new port_number.
+        """
 
         interface = self.controller.get_interface_by_id(intf_id)
         if not interface:
             raise ProxyPortNotFound(evc_id, f"UNI interface {intf_id} not found")
 
-        if "proxy_port" not in interface.metadata:
+        if new_port_number is None and "proxy_port" not in interface.metadata:
             raise ProxyPortNotFound(
                 evc_id, f"proxy_port metadata not found in {intf_id}"
             )
 
-        source_intf = interface.switch.get_interface_by_port_no(
-            interface.metadata.get("proxy_port")
-        )
+        port_no = new_port_number or interface.metadata.get("proxy_port")
+        source_intf = interface.switch.get_interface_by_port_no(port_no)
         if not source_intf:
             raise ProxyPortNotFound(
                 evc_id,
-                f"proxy_port of {intf_id} source interface not found",
+                f"proxy_port {port_no} of {intf_id} source interface not found",
             )
 
         pp = self.srcs_pp.get(source_intf.id)
@@ -462,8 +466,8 @@ class INTManager:
         if not pp.destination:
             raise ProxyPortDestNotFound(
                 evc_id,
-                f"proxy_port of {intf_id} isn't looped or destination interface "
-                "not found",
+                f"proxy_port {port_no} of {intf_id} isn't looped or "
+                "destination interface not found",
             )
 
         return pp
