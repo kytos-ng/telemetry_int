@@ -166,3 +166,54 @@ async def add_evcs_metadata(
             f"Failed to add_evc_metadata for EVC ids {list(evcs.keys())} "
             f"status code {response.status_code}, response text: {response.text}"
         )
+
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
+    before_sleep=before_sleep,
+    retry=retry_if_exception_type(httpx.RequestError),
+)
+async def add_proxy_port_metadata(intf_id: str, port_no: int) -> dict:
+    """Add proxy_port metadata."""
+    async with httpx.AsyncClient(base_url=settings.topology_url) as client:
+        response = await client.post(
+            f"/interfaces/{intf_id}/metadata",
+            timeout=10,
+            json={"proxy_port": port_no},
+        )
+        if response.is_success:
+            return response.json()
+        if response.status_code == 404:
+            raise ValueError(f"interface_id {intf_id} not found")
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        raise UnrecoverableError(
+            f"Failed to add_proxy_port {port_no} metadata for intf_id {intf_id} "
+            f"status code {response.status_code}, response text: {response.text}"
+        )
+
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
+    before_sleep=before_sleep,
+    retry=retry_if_exception_type(httpx.RequestError),
+)
+async def delete_proxy_port_metadata(intf_id: str) -> dict:
+    """Delete proxy_port metadata."""
+    async with httpx.AsyncClient(base_url=settings.topology_url) as client:
+        response = await client.delete(
+            f"/interfaces/{intf_id}/metadata/proxy_port",
+            timeout=10,
+        )
+        if response.is_success:
+            return response.json()
+        if response.status_code == 404:
+            raise ValueError(f"interface_id {intf_id} or metadata proxy_port not found")
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        raise UnrecoverableError(
+            f"Failed to delete_proxy_port metadata for intf_id {intf_id} "
+            f"status code {response.status_code}, response text: {response.text}"
+        )
