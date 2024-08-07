@@ -195,6 +195,7 @@ class INTManager:
 
     async def handle_pp_metadata_removed(self, intf: Interface) -> None:
         """Handle proxy port metadata removed."""
+        # TODO yes, this has to disable too, then it'll be ok
         if "proxy_port" in intf.metadata:
             return
         try:
@@ -256,8 +257,6 @@ class INTManager:
             return
 
         async with self._intf_meta_lock:
-            pp.source = cur_source_intf
-
             evcs = await api.get_evcs(
                 **{
                     "metadata.telemetry.enabled": "true",
@@ -519,8 +518,29 @@ class INTManager:
             evc["id"], "intra EVC UNIs must use different proxy ports"
         )
 
+    def _validate_new_dedicated_proxy_port(
+        self, uni: Interface, new_port_no: int
+    ) -> None:
+        """This is for validating a future proxy port.
+        Only a dedicated proxy port per UNI is supported at the moment.
+
+        https://github.com/kytos-ng/telemetry_int/issues/110
+        """
+        for intf in uni.switch.interfaces.copy().values():
+            if (
+                intf != uni
+                and "proxy_port" in intf.metadata
+                and intf.metadata["proxy_port"] == new_port_no
+            ):
+                msg = (
+                    f"UNI {uni.id} must use another dedicated proxy port. "
+                    f"UNI {intf.id} is already using proxy_port number {new_port_no}"
+                )
+                raise ProxyPortShared("no_evc_id", msg)
+
     def _validate_dedicated_proxy_port_evcs(self, evcs: dict[str, dict]):
         """Validate that a proxy port is dedicated for the given EVCs.
+        Only a dedicated proxy port per UNI is supported at the moment.
 
         https://github.com/kytos-ng/telemetry_int/issues/110
         """

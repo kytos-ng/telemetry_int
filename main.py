@@ -310,7 +310,7 @@ class Main(KytosNApp):
             return JSONResponse("Operation successful")
 
         qparams = request.query_params
-        force = False if qparams.get("force", "false").lower() == "false" else True
+        force = True if qparams.get("force", "false").lower() == "true" else False
         try:
             pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id")
             if pp.evc_ids and not force:
@@ -339,27 +339,21 @@ class Main(KytosNApp):
         """Add proxy port metadata."""
         intf_id = request.path_params["interface_id"]
         port_no = request.path_params["port_number"]
+        qparams = request.query_params
+        if not (intf := self.controller.get_interface_by_id(intf_id)):
+            raise HTTPException(404, detail=f"Interface id {intf_id} not found")
         if (
-            (intf := self.controller.get_interface_by_id(intf_id))
-            and "proxy_port" in intf.metadata
+            "proxy_port" in intf.metadata
             and intf.metadata["proxy_port"] == port_no
         ):
             return JSONResponse("Operation successful")
 
-        qparams = request.query_params
-        force = False if qparams.get("force", "false").lower() == "false" else True
+        force = True if qparams.get("force", "false").lower() == "true" else False
         try:
             pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id", port_no)
             if pp.status != EntityStatus.UP and not force:
                 raise HTTPException(409, detail=f"{pp} status isn't UP")
-            self.int_manager._validate_dedicated_proxy_port_evcs(
-                {
-                    "no_evc_id": {
-                        "uni_a": {"interface_id": intf_id, "proxy_port": pp},
-                        "uni_z": {"interface_id": intf_id, "proxy_port": pp},
-                    }
-                }
-            )
+            self.int_manager._validate_new_dedicated_proxy_port(intf, port_no)
         except ProxyPortShared as exc:
             raise HTTPException(409, detail=exc.message)
         except ProxyPortError as exc:
