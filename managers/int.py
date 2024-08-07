@@ -195,7 +195,6 @@ class INTManager:
 
     async def handle_pp_metadata_removed(self, intf: Interface) -> None:
         """Handle proxy port metadata removed."""
-        # TODO yes, this has to disable too, then it'll be ok
         if "proxy_port" in intf.metadata:
             return
         try:
@@ -212,27 +211,19 @@ class INTManager:
                     "metadata.telemetry.status": "UP",
                 }
             )
-            to_deactivate = {
+            affected_evcs = {
                 evc_id: evc for evc_id, evc in evcs.items() if evc_id in pp.evc_ids
             }
-            if not to_deactivate:
+            if not affected_evcs:
                 return
 
             log.info(
-                f"Handling interface metadata removed on {intf}, removing INT flows "
-                f"falling back to mef_eline, EVC ids: {list(to_deactivate)}"
+                f"Handling interface metadata removed on {intf}, it'll disable INT "
+                f"falling back to mef_eline, EVC ids: {list(affected_evcs)}"
             )
-            metadata = {
-                "telemetry": {
-                    "enabled": True,
-                    "status": "DOWN",
-                    "status_reason": ["proxy_port_metadata_removed"],
-                    "status_updated_at": datetime.utcnow().strftime(
-                        "%Y-%m-%dT%H:%M:%S"
-                    ),
-                }
-            }
-            await self.remove_int_flows(to_deactivate, metadata)
+            await self.disable_int(
+                affected_evcs, force=True, reason="proxy_port_metadata_removed"
+            )
 
     async def handle_pp_metadata_added(self, intf: Interface) -> None:
         """Handle proxy port metadata added.
