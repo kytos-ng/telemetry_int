@@ -375,20 +375,24 @@ class Main(KytosNApp):
             for intf in switch.interfaces.copy().values():
                 if "proxy_port" in intf.metadata:
                     payload = {
-                        "interface_id": intf.id,
-                        "interface_status": intf.status.value,
-                        "interface_status_reason": sorted(intf.status_reason),
-                        "proxy_port_number": intf.metadata["proxy_port"],
-                        "proxy_port_status": "DOWN",
-                        "proxy_port_status_reason": [],
+                        "uni": {
+                            "id": intf.id,
+                            "status": intf.status.value,
+                            "status_reason": sorted(intf.status_reason)
+                        },
+                        "proxy_port": {
+                            "port_number": intf.metadata["proxy_port"],
+                            "status": "DOWN",
+                            "status_reason": []
+                        }
                     }
                     try:
                         pp = self.int_manager.get_proxy_port_or_raise(
                             intf.id, "no_evc_id"
                         )
-                        payload["proxy_port_status"] = pp.status.value
+                        payload["proxy_port"]["status"] = pp.status.value
                     except ProxyPortError as exc:
-                        payload["proxy_port_status_reason"] = [exc.message]
+                        payload["proxy_port"]["status_reason"] = [exc.message]
                     interfaces_proxy_ports.append(payload)
         return JSONResponse(interfaces_proxy_ports)
 

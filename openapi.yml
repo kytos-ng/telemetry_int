@@ -226,6 +226,7 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/uni/{interface_id}/proxy_port:
     delete:
       summary: Delete proxy port metadata on a UNI
       description: Delete proxy port metadata on a UNI. It will only delete the metadata if no INT EVCs are using this port, unless you use the force option. When metadata is removed, INT will be disabled.
@@ -237,16 +238,11 @@ paths:
           required: true
           description: The interface ID
           in: path
-        - name: port_number
-          schema:
-            type: integer
-          required: true
-          description: The proxy port number
-          in: path
         - name: force
           schema:
             type: boolean
           in: query
+          required: false
           description: Force metadata deletion even if there are INT EVCs using the proxy port
       responses:
         '200':
@@ -301,7 +297,26 @@ components:
     ProxyPortListResp: # Can be referenced via '#/components/schemas/ProxyPortListResp'
       type: object
       properties:
-        interface_id:
-          type: string
+        uni:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+            status_reason:
+              type: array
+              items:
+                type: string
         proxy_port:
-          type: integer
+          type: object
+          properties:
+            port_number:
+              type: integer
+            status:
+              type: string
+            status_reason:
+              type: array
+              items:
+                type: string
+
