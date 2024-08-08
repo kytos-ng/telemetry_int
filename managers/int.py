@@ -313,11 +313,7 @@ class INTManager:
             }
         }
         await self.remove_int_flows(evcs, metadata, force=force)
-        try:
-            self._discard_pps_evc_ids(evcs)
-        except ProxyPortError:
-            if not force:
-                raise
+        self._discard_pps_evc_ids(evcs)
 
     async def remove_int_flows(
         self, evcs: dict[str, dict], metadata: dict, force=False
@@ -730,14 +726,20 @@ class INTManager:
         """
         for evc_id, evc in evcs.items():
             uni_a, uni_z = utils.get_evc_unis(evc)
-            pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
-            pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
-            pp_a.evc_ids.discard(evc_id)
-            pp_z.evc_ids.discard(evc_id)
-            if not pp_a.evc_ids:
-                self.unis_src.pop(evc["uni_a"]["interface_id"], None)
-            if not pp_z.evc_ids:
-                self.unis_src.pop(evc["uni_z"]["interface_id"], None)
+            try:
+                pp_a = self.srcs_pp[self.unis_src[uni_a["interface_id"]]]
+                pp_a.evc_ids.discard(evc_id)
+                if not pp_a.evc_ids:
+                    self.unis_src.pop(evc["uni_a"]["interface_id"], None)
+            except KeyError:
+                pass
+            try:
+                pp_z = self.srcs_pp[self.unis_src[uni_z["interface_id"]]]
+                pp_z.evc_ids.discard(evc_id)
+                if not pp_z.evc_ids:
+                    self.unis_src.pop(evc["uni_z"]["interface_id"], None)
+            except KeyError:
+                pass
 
     def evc_compare(
         self, stored_int_flows: dict, stored_mef_flows: dict, evcs: dict
