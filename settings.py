@@ -11,15 +11,6 @@ UDP = 17
 
 TABLE_GROUP_ALLOWED = {"evpl", "epl"}
 
-# BATCH_INTERVAL: time interval between batch requests that will be sent to
-# flow_manager (in seconds) - zero enable sending all the requests in a row
-BATCH_INTERVAL = 0.2
-
-# BATCH_SIZE: size of a batch request that will be sent to flow_manager, in
-# number of FlowMod requests. Use 0 (zero) to disable BATCH mode, i.e. sends
-# everything at a glance
-BATCH_SIZE = 200
-
 # Fallback to mef_eline by removing INT flows if an external loop goes down. If
 # the loop goes UP again and the EVC is active, it'll install INT flows
 FALLBACK_TO_MEF_LOOP_DOWN = True
