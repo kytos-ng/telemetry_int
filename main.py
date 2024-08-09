@@ -32,8 +32,6 @@ from .exceptions import (
 )
 from .managers.int import INTManager
 
-# pylint: disable=fixme
-
 
 class Main(KytosNApp):
     """Main class of kytos/telemetry NApp.
@@ -304,13 +302,12 @@ class Main(KytosNApp):
         """Delete proxy port metadata."""
         intf_id = request.path_params["interface_id"]
         if (
-            (intf := self.controller.get_interface_by_id(intf_id))
-            and "proxy_port" not in intf.metadata
-        ):
+            intf := self.controller.get_interface_by_id(intf_id)
+        ) and "proxy_port" not in intf.metadata:
             return JSONResponse("Operation successful")
 
         qparams = request.query_params
-        force = True if qparams.get("force", "false").lower() == "true" else False
+        force = qparams.get("force", "false").lower() == "true"
         try:
             pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id")
             if pp.evc_ids and not force:
@@ -342,13 +339,10 @@ class Main(KytosNApp):
         qparams = request.query_params
         if not (intf := self.controller.get_interface_by_id(intf_id)):
             raise HTTPException(404, detail=f"Interface id {intf_id} not found")
-        if (
-            "proxy_port" in intf.metadata
-            and intf.metadata["proxy_port"] == port_no
-        ):
+        if "proxy_port" in intf.metadata and intf.metadata["proxy_port"] == port_no:
             return JSONResponse("Operation successful")
 
-        force = True if qparams.get("force", "false").lower() == "true" else False
+        force = qparams.get("force", "false").lower() == "true"
         try:
             pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id", port_no)
             if pp.status != EntityStatus.UP and not force:
@@ -378,13 +372,13 @@ class Main(KytosNApp):
                         "uni": {
                             "id": intf.id,
                             "status": intf.status.value,
-                            "status_reason": sorted(intf.status_reason)
+                            "status_reason": sorted(intf.status_reason),
                         },
                         "proxy_port": {
                             "port_number": intf.metadata["proxy_port"],
                             "status": "DOWN",
-                            "status_reason": []
-                        }
+                            "status_reason": [],
+                        },
                     }
                     try:
                         pp = self.int_manager.get_proxy_port_or_raise(
