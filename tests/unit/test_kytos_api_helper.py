@@ -4,6 +4,8 @@ from httpx import Response
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.kytos_api_helper import (
     add_evcs_metadata,
+    add_proxy_port_metadata,
+    delete_proxy_port_metadata,
     get_evc,
     get_stored_flows,
     get_evcs,
@@ -105,3 +107,27 @@ async def test_add_evcs_metadata(monkeypatch):
         {"some_id": {"id": "some_id"}}, {"some_key": "some_val"}
     )
     assert data == resp
+
+
+async def test_add_proxy_port_metadata(monkeypatch):
+    """test add_proxy_port_metadata."""
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    resp = "Operation successful"
+    aclient_mock.post.return_value = Response(201, json=resp, request=MagicMock())
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    intf_id, port_no = "00:00:00:00:00:00:00:01:1", 7
+    data = await add_proxy_port_metadata(intf_id, port_no)
+    assert data
+
+
+async def test_delete_proxy_port_metadata(monkeypatch):
+    """test delete_proxy_port_metadata."""
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    resp = "Operation successful"
+    aclient_mock.post.return_value = Response(201, json=resp, request=MagicMock())
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    intf_id = "00:00:00:00:00:00:00:01:1"
+    data = await delete_proxy_port_metadata(intf_id)
+    assert data

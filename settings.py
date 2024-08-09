@@ -3,6 +3,7 @@
 KYTOS_API = "http://0.0.0.0:8181/api"
 mef_eline_api = f"{KYTOS_API}/kytos/mef_eline/v2"
 flow_manager_api = f"{KYTOS_API}/kytos/flow_manager/v2"
+topology_url = f"{KYTOS_API}/kytos/topology/v3"
 INT_COOKIE_PREFIX = 0xA8
 MEF_COOKIE_PREFIX = 0xAA
 IPv4 = 2048

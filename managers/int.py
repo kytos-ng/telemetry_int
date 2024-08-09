@@ -4,7 +4,7 @@ import asyncio
 import copy
 from collections import defaultdict
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pyof.v0x04.controller2switch.table_mod import Table
 
@@ -211,27 +211,19 @@ class INTManager:
                     "metadata.telemetry.status": "UP",
                 }
             )
-            to_deactivate = {
+            affected_evcs = {
                 evc_id: evc for evc_id, evc in evcs.items() if evc_id in pp.evc_ids
             }
-            if not to_deactivate:
+            if not affected_evcs:
                 return
 
             log.info(
-                f"Handling interface metadata removed on {intf}, removing INT flows "
-                f"falling back to mef_eline, EVC ids: {list(to_deactivate)}"
+                f"Handling interface metadata removed on {intf}, it'll disable INT "
+                f"falling back to mef_eline, EVC ids: {list(affected_evcs)}"
             )
-            metadata = {
-                "telemetry": {
-                    "enabled": True,
-                    "status": "DOWN",
-                    "status_reason": ["proxy_port_metadata_removed"],
-                    "status_updated_at": datetime.utcnow().strftime(
-                        "%Y-%m-%dT%H:%M:%S"
-                    ),
-                }
-            }
-            await self.remove_int_flows(to_deactivate, metadata)
+            await self.disable_int(
+                affected_evcs, force=True, reason="proxy_port_metadata_removed"
+            )
 
     async def handle_pp_metadata_added(self, intf: Interface) -> None:
         """Handle proxy port metadata added.
@@ -256,8 +248,6 @@ class INTManager:
             return
 
         async with self._intf_meta_lock:
-            pp.source = cur_source_intf
-
             evcs = await api.get_evcs(
                 **{
                     "metadata.telemetry.enabled": "true",
@@ -323,11 +313,7 @@ class INTManager:
             }
         }
         await self.remove_int_flows(evcs, metadata, force=force)
-        try:
-            self._discard_pps_evc_ids(evcs)
-        except ProxyPortError:
-            if not force:
-                raise
+        self._discard_pps_evc_ids(evcs)
 
     async def remove_int_flows(
         self, evcs: dict[str, dict], metadata: dict, force=False
@@ -433,25 +419,29 @@ class INTManager:
             api.add_evcs_metadata(active_evcs, metadata, force),
         )
 
-    def get_proxy_port_or_raise(self, intf_id: str, evc_id: str) -> ProxyPort:
-        """Return a ProxyPort assigned to a UNI or raise."""
+    def get_proxy_port_or_raise(
+        self, intf_id: str, evc_id: str, new_port_number: Optional[int] = None
+    ) -> ProxyPort:
+        """Return a ProxyPort assigned to a UNI or raise.
+
+        new_port_number can be set and used to validate a new port_number.
+        """
 
         interface = self.controller.get_interface_by_id(intf_id)
         if not interface:
             raise ProxyPortNotFound(evc_id, f"UNI interface {intf_id} not found")
 
-        if "proxy_port" not in interface.metadata:
+        if new_port_number is None and "proxy_port" not in interface.metadata:
             raise ProxyPortNotFound(
                 evc_id, f"proxy_port metadata not found in {intf_id}"
             )
 
-        source_intf = interface.switch.get_interface_by_port_no(
-            interface.metadata.get("proxy_port")
-        )
+        port_no = new_port_number or interface.metadata.get("proxy_port")
+        source_intf = interface.switch.get_interface_by_port_no(port_no)
         if not source_intf:
             raise ProxyPortNotFound(
                 evc_id,
-                f"proxy_port of {intf_id} source interface not found",
+                f"proxy_port {port_no} of {intf_id} source interface not found",
             )
 
         pp = self.srcs_pp.get(source_intf.id)
@@ -462,8 +452,8 @@ class INTManager:
         if not pp.destination:
             raise ProxyPortDestNotFound(
                 evc_id,
-                f"proxy_port of {intf_id} isn't looped or destination interface "
-                "not found",
+                f"proxy_port {port_no} of {intf_id} isn't looped or "
+                "destination interface not found",
             )
 
         return pp
@@ -515,8 +505,29 @@ class INTManager:
             evc["id"], "intra EVC UNIs must use different proxy ports"
         )
 
+    def _validate_new_dedicated_proxy_port(
+        self, uni: Interface, new_port_no: int
+    ) -> None:
+        """This is for validating a future proxy port.
+        Only a dedicated proxy port per UNI is supported at the moment.
+
+        https://github.com/kytos-ng/telemetry_int/issues/110
+        """
+        for intf in uni.switch.interfaces.copy().values():
+            if (
+                intf != uni
+                and "proxy_port" in intf.metadata
+                and intf.metadata["proxy_port"] == new_port_no
+            ):
+                msg = (
+                    f"UNI {uni.id} must use another dedicated proxy port. "
+                    f"UNI {intf.id} is already using proxy_port number {new_port_no}"
+                )
+                raise ProxyPortShared("no_evc_id", msg)
+
     def _validate_dedicated_proxy_port_evcs(self, evcs: dict[str, dict]):
         """Validate that a proxy port is dedicated for the given EVCs.
+        Only a dedicated proxy port per UNI is supported at the moment.
 
         https://github.com/kytos-ng/telemetry_int/issues/110
         """
@@ -715,14 +726,20 @@ class INTManager:
         """
         for evc_id, evc in evcs.items():
             uni_a, uni_z = utils.get_evc_unis(evc)
-            pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
-            pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
-            pp_a.evc_ids.discard(evc_id)
-            pp_z.evc_ids.discard(evc_id)
-            if not pp_a.evc_ids:
-                self.unis_src.pop(evc["uni_a"]["interface_id"], None)
-            if not pp_z.evc_ids:
-                self.unis_src.pop(evc["uni_z"]["interface_id"], None)
+            try:
+                pp_a = self.srcs_pp[self.unis_src[uni_a["interface_id"]]]
+                pp_a.evc_ids.discard(evc_id)
+                if not pp_a.evc_ids:
+                    self.unis_src.pop(evc["uni_a"]["interface_id"], None)
+            except KeyError:
+                pass
+            try:
+                pp_z = self.srcs_pp[self.unis_src[uni_z["interface_id"]]]
+                pp_z.evc_ids.discard(evc_id)
+                if not pp_z.evc_ids:
+                    self.unis_src.pop(evc["uni_z"]["interface_id"], None)
+            except KeyError:
+                pass
 
     def evc_compare(
         self, stored_int_flows: dict, stored_mef_flows: dict, evcs: dict

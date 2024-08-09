@@ -13,6 +13,7 @@ from napps.kytos.telemetry_int import settings, utils
 from tenacity import RetryError
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
+from kytos.core.common import EntityStatus
 from kytos.core.helpers import alisten_to, avalidate_openapi_request, load_spec
 from kytos.core.rest_api import HTTPException, JSONResponse, Request, aget_json_or_400
 
@@ -22,6 +23,7 @@ from .exceptions import (
     EVCHasNoINT,
     EVCNotFound,
     FlowsNotFound,
+    ProxyPortError,
     ProxyPortNotFound,
     ProxyPortSameSourceIntraEVC,
     ProxyPortShared,
@@ -29,8 +31,6 @@ from .exceptions import (
     UnrecoverableError,
 )
 from .managers.int import INTManager
-
-# pylint: disable=fixme
 
 
 class Main(KytosNApp):
@@ -297,6 +297,99 @@ class Main(KytosNApp):
         ]
         return JSONResponse(response)
 
+    @rest("v1/uni/{interface_id}/proxy_port", methods=["DELETE"])
+    async def delete_proxy_port_metadata(self, request: Request) -> JSONResponse:
+        """Delete proxy port metadata."""
+        intf_id = request.path_params["interface_id"]
+        if (
+            intf := self.controller.get_interface_by_id(intf_id)
+        ) and "proxy_port" not in intf.metadata:
+            return JSONResponse("Operation successful")
+
+        qparams = request.query_params
+        force = qparams.get("force", "false").lower() == "true"
+        try:
+            pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id")
+            if pp.evc_ids and not force:
+                return JSONResponse(
+                    {
+                        "status_code": 409,
+                        "code": 409,
+                        "description": f"{pp} is in use on {len(pp.evc_ids)} EVCs",
+                        "evc_ids": sorted(pp.evc_ids),
+                    },
+                    status_code=409,
+                )
+        except ProxyPortError as exc:
+            raise HTTPException(404, detail=exc.message)
+
+        try:
+            await api.delete_proxy_port_metadata(intf_id)
+            return JSONResponse("Operation successful")
+        except ValueError as exc:
+            raise HTTPException(404, detail=str(exc))
+        except UnrecoverableError as exc:
+            raise HTTPException(500, detail=str(exc))
+
+    @rest("v1/uni/{interface_id}/proxy_port/{port_number:int}", methods=["POST"])
+    async def add_proxy_port_metadata(self, request: Request) -> JSONResponse:
+        """Add proxy port metadata."""
+        intf_id = request.path_params["interface_id"]
+        port_no = request.path_params["port_number"]
+        qparams = request.query_params
+        if not (intf := self.controller.get_interface_by_id(intf_id)):
+            raise HTTPException(404, detail=f"Interface id {intf_id} not found")
+        if "proxy_port" in intf.metadata and intf.metadata["proxy_port"] == port_no:
+            return JSONResponse("Operation successful")
+
+        force = qparams.get("force", "false").lower() == "true"
+        try:
+            pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id", port_no)
+            if pp.status != EntityStatus.UP and not force:
+                raise HTTPException(409, detail=f"{pp} status isn't UP")
+            self.int_manager._validate_new_dedicated_proxy_port(intf, port_no)
+        except ProxyPortShared as exc:
+            raise HTTPException(409, detail=exc.message)
+        except ProxyPortError as exc:
+            raise HTTPException(404, detail=exc.message)
+
+        try:
+            await api.add_proxy_port_metadata(intf_id, port_no)
+            return JSONResponse("Operation successful")
+        except ValueError as exc:
+            raise HTTPException(404, detail=str(exc))
+        except UnrecoverableError as exc:
+            raise HTTPException(500, detail=str(exc))
+
+    @rest("v1/uni/proxy_port")
+    async def list_uni_proxy_ports(self, _request: Request) -> JSONResponse:
+        """List configured UNI proxy ports."""
+        interfaces_proxy_ports = []
+        for switch in self.controller.switches.copy().values():
+            for intf in switch.interfaces.copy().values():
+                if "proxy_port" in intf.metadata:
+                    payload = {
+                        "uni": {
+                            "id": intf.id,
+                            "status": intf.status.value,
+                            "status_reason": sorted(intf.status_reason),
+                        },
+                        "proxy_port": {
+                            "port_number": intf.metadata["proxy_port"],
+                            "status": "DOWN",
+                            "status_reason": [],
+                        },
+                    }
+                    try:
+                        pp = self.int_manager.get_proxy_port_or_raise(
+                            intf.id, "no_evc_id"
+                        )
+                        payload["proxy_port"]["status"] = pp.status.value
+                    except ProxyPortError as exc:
+                        payload["proxy_port"]["status_reason"] = [exc.message]
+                    interfaces_proxy_ports.append(payload)
+        return JSONResponse(interfaces_proxy_ports)
+
     @alisten_to("kytos/mef_eline.evcs_loaded")
     async def on_mef_eline_evcs_loaded(self, event: KytosEvent) -> None:
         """Handle kytos/mef_eline.evcs_loaded."""
@@ -549,24 +642,3 @@ class Main(KytosNApp):
     async def on_intf_metadata_added(self, event: KytosEvent) -> None:
         """On interface metadata added."""
         await self.int_manager.handle_pp_metadata_added(event.content["interface"])
-
-    # Event-driven methods: future
-    def listen_for_new_evcs(self):
-        """Change newly created EVC to INT-enabled EVC based on the metadata field
-        (future)"""
-        pass
-
-    def listen_for_evc_change(self):
-        """Change newly created EVC to INT-enabled EVC based on the
-        metadata field (future)"""
-        pass
-
-    def listen_for_path_changes(self):
-        """Change EVC's new path to INT-enabled EVC based on the metadata field
-        when there is a path change. (future)"""
-        pass
-
-    def listen_for_topology_changes(self):
-        """If the topology changes, make sure it is not the loop ports.
-        If so, update proxy ports"""
-        pass

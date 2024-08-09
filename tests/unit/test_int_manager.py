@@ -223,7 +223,7 @@ class TestINTManager:
         assert "proxy_port" not in intf_mock.metadata
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         api_mock.get_evcs.return_value = {evc_id: {}}
-        int_manager.remove_int_flows = AsyncMock()
+        int_manager.disable_int = AsyncMock()
 
         await int_manager.handle_pp_metadata_removed(intf_mock)
         assert api_mock.get_evcs.call_count == 1
@@ -232,15 +232,9 @@ class TestINTManager:
             "metadata.telemetry.enabled": "true",
             "metadata.telemetry.status": "UP",
         }
-        assert int_manager.remove_int_flows.call_count == 1
-        args = int_manager.remove_int_flows.call_args[0]
+        assert int_manager.disable_int.call_count == 1
+        args = int_manager.disable_int.call_args[0]
         assert evc_id in args[0]
-        assert "telemetry" in args[1]
-        telemetry = args[1]["telemetry"]
-        assert telemetry["enabled"]
-        assert telemetry["status"] == "DOWN"
-        assert telemetry["status_reason"] == ["proxy_port_metadata_removed"]
-        assert "status_updated_at" in telemetry
 
     async def test_handle_pp_metadata_added(self, monkeypatch):
         """Test handle_pp_metadata_added."""
@@ -583,11 +577,11 @@ class TestINTManager:
         controller = get_controller_mock()
         int_manager = INTManager(controller)
         pp = MagicMock()
-        mock = MagicMock()
-        int_manager.get_proxy_port_or_raise = mock
-        mock.return_value = pp
+        int_manager.unis_src[intf_id_a] = "a"
+        int_manager.unis_src[intf_id_z] = "z"
+        int_manager.srcs_pp[int_manager.unis_src[intf_id_a]] = pp
+        int_manager.srcs_pp[int_manager.unis_src[intf_id_z]] = pp
         int_manager._discard_pps_evc_ids(evcs)
-        assert int_manager.get_proxy_port_or_raise.call_count == 2
         assert pp.evc_ids.discard.call_count == 2
         pp.evc_ids.discard.assert_called_with(evc_id)
 

@@ -16,6 +16,7 @@ Added
 - Handled ``kytos/mef_eline.deployed`` event.
 - Handled ``kytos/mef_eline.(failover_link_down|failover_old_path|failover_deployed)`` events.
 - Added UI for telemetry_int.
+- Included the endpoints to create, update, delete and list proxy_port metadata, and updated OpenAPI spec. These endpoints should be used to manage the proxy_port metadata instead of directly on topology endpoints since these endpoints provide extra validations.
 
 Changed
 =======

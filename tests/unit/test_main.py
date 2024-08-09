@@ -1,12 +1,15 @@
 """Test Main methods."""
 
-import pytest
-
 from unittest.mock import AsyncMock, MagicMock, patch
-from napps.kytos.telemetry_int.main import Main
+
+import pytest
 from napps.kytos.telemetry_int import utils
-from kytos.lib.helpers import get_controller_mock, get_test_client
+from napps.kytos.telemetry_int.exceptions import EVCError, ProxyPortShared
+from napps.kytos.telemetry_int.main import Main
+
+from kytos.core.common import EntityStatus
 from kytos.core.events import KytosEvent
+from kytos.lib.helpers import get_controller_mock, get_test_client
 
 
 class TestMain:
@@ -239,6 +242,224 @@ class TestMain:
         assert data[0]["compare_reason"] == ["missing_some_int_flows"]
         assert data[0]["name"] == "evc"
 
+    async def test_delete_proxy_port_metadata(self, monkeypatch) -> None:
+        """Test delete proxy_port metadata."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port"
+        self.napp.controller.get_interface_by_id = MagicMock()
+        pp = MagicMock()
+        pp.evc_ids = set()
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        intf_mock = MagicMock()
+        intf_mock.metadata = {"proxy_port": port_number}
+        self.napp.controller.get_interface_by_id = MagicMock()
+        self.napp.controller.get_interface_by_id.return_value = intf_mock
+        response = await self.api_client.delete(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert data == "Operation successful"
+        assert api_mock.delete_proxy_port_metadata.call_count == 1
+
+    async def test_delete_proxy_port_metadata_force(self, monkeypatch) -> None:
+        """Test delete proxy_port metadata force."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port"
+        self.napp.controller.get_interface_by_id = MagicMock()
+        pp = MagicMock()
+        pp.evc_ids = set(["some_id"])
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        intf_mock = MagicMock()
+        intf_mock.metadata = {"proxy_port": port_number}
+        self.napp.controller.get_interface_by_id = MagicMock()
+        self.napp.controller.get_interface_by_id.return_value = intf_mock
+        response = await self.api_client.delete(endpoint)
+        assert response.status_code == 409
+        data = response.json()["description"]
+        assert "is in use on 1" in data
+        assert not api_mock.delete_proxy_port_metadata.call_count
+
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port?force=true"
+        response = await self.api_client.delete(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert "Operation successful" in data
+        assert api_mock.delete_proxy_port_metadata.call_count == 1
+
+    async def test_delete_proxy_port_metadata_early_ret(self, monkeypatch) -> None:
+        """Test delete proxy_port metadata early ret."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id = "00:00:00:00:00:00:00:01:1"
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port"
+        self.napp.controller.get_interface_by_id = MagicMock()
+        pp = MagicMock()
+        pp.evc_ids = set(["some_id"])
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        intf_mock = MagicMock()
+        intf_mock.metadata = {}
+        self.napp.controller.get_interface_by_id = MagicMock()
+        self.napp.controller.get_interface_by_id.return_value = intf_mock
+        response = await self.api_client.delete(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert "Operation successful" in data
+        assert not api_mock.delete_proxy_port_metadata.call_count
+
+    async def test_add_proxy_port_metadata(self, monkeypatch) -> None:
+        """Test add proxy_port metadata."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port/{port_number}"
+        self.napp.controller.get_interface_by_id = MagicMock()
+        pp = MagicMock()
+        pp.status = EntityStatus.UP
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        response = await self.api_client.post(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert data == "Operation successful"
+        assert api_mock.add_proxy_port_metadata.call_count == 1
+
+    async def test_add_proxy_port_metadata_early_ret(self, monkeypatch) -> None:
+        """Test add proxy_port metadata early ret."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port/{port_number}"
+        intf_mock = MagicMock()
+        intf_mock.metadata = {"proxy_port": port_number}
+        self.napp.controller.get_interface_by_id = MagicMock()
+        self.napp.controller.get_interface_by_id.return_value = intf_mock
+        response = await self.api_client.post(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert data == "Operation successful"
+        assert not api_mock.add_proxy_port_metadata.call_count
+
+    async def test_add_proxy_port_metadata_conflict(self, monkeypatch) -> None:
+        """Test add proxy_port metadata conflict."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port/{port_number}"
+        self.napp.controller.get_interface_by_id = MagicMock()
+        pp = MagicMock()
+        pp.status = EntityStatus.UP
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.side_effect = ProxyPortShared(
+            "no_evc_id", "boom"
+        )
+        response = await self.api_client.post(endpoint)
+        assert response.status_code == 409
+
+    async def test_add_proxy_port_metadata_force(self, monkeypatch) -> None:
+        """Test add proxy_port metadata force."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        force = "true"
+        endpoint = (
+            f"{self.base_endpoint}/uni/{intf_id}/proxy_port/{port_number}?force={force}"
+        )
+        self.napp.controller.get_interface_by_id = MagicMock()
+        pp = MagicMock()
+        # despite proxy port down, with force true the request shoudl succeed
+        pp.status = EntityStatus.DOWN
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        response = await self.api_client.post(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert data == "Operation successful"
+        assert api_mock.add_proxy_port_metadata.call_count == 1
+
+        force = "false"
+        endpoint = (
+            f"{self.base_endpoint}/uni/{intf_id}/proxy_port/{port_number}?force={force}"
+        )
+        response = await self.api_client.post(endpoint)
+        assert response.status_code == 409
+        assert "isn't UP" in response.json()["description"]
+
+    async def test_list_proxy_port(self) -> None:
+        """Test list proxy port."""
+        endpoint = f"{self.base_endpoint}/uni/proxy_port"
+        response = await self.api_client.get(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        assert not data
+
+        sw1, intf_mock = MagicMock(), MagicMock()
+        intf_mock.metadata = {"proxy_port": 1}
+        intf_mock.status.value = "UP"
+        intf_mock.id = "1"
+        sw1.interfaces = {"intf1": intf_mock}
+        self.napp.controller.switches = {"sw1": sw1}
+        response = await self.api_client.get(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        expected = [
+            {
+                "proxy_port": {
+                    "port_number": 1,
+                    "status": "DOWN",
+                    "status_reason": ["UNI interface 1 not found"],
+                },
+                "uni": {"id": "1", "status": "UP", "status_reason": []},
+            }
+        ]
+        assert data == expected
+
+        pp = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
+        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        pp.status.value = "UP"
+
+        response = await self.api_client.get(endpoint)
+        assert response.status_code == 200
+        data = response.json()
+        expected = [
+            {
+                "proxy_port": {
+                    "port_number": 1,
+                    "status": "UP",
+                    "status_reason": [],
+                },
+                "uni": {"id": "1", "status": "UP", "status_reason": []},
+            }
+        ]
+        assert data == expected
+
     async def test_on_table_enabled(self) -> None:
         """Test on_table_enabled."""
         assert self.napp.int_manager.flow_builder.table_group == {"evpl": 2, "epl": 3}
@@ -268,6 +489,16 @@ class TestMain:
         await self.napp.on_evc_deployed(KytosEvent(content=content))
         assert self.napp.int_manager.enable_int.call_count == 1
         assert self.napp.int_manager.redeploy_int.call_count == 1
+
+    async def test_on_evc_deployed_error(self, monkeypatch) -> None:
+        """Test on_evc_deployed error."""
+        content = {"metadata": {"telemetry_request": {}}, "id": "some_id"}
+        self.napp.int_manager.enable_int = AsyncMock()
+        self.napp.int_manager.enable_int.side_effect = EVCError("no_id", "boom")
+        log_mock = MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
+        await self.napp.on_evc_deployed(KytosEvent(content=content))
+        assert log_mock.error.call_count == 1
 
     async def test_on_evc_deleted(self) -> None:
         """Test on_evc_deleted."""
@@ -328,6 +559,20 @@ class TestMain:
         content["metadata"]["telemetry"]["enabled"] = True
         await self.napp.on_evc_redeployed_link(KytosEvent(content=content))
         assert self.napp.int_manager.redeploy_int.call_count == 1
+
+    async def test_on_evc_redeployed_link_error(self, monkeypatch) -> None:
+        """Test on redeployed_link_down|redeployed_link_up error."""
+        content = {
+            "enabled": True,
+            "metadata": {"telemetry": {"enabled": True}},
+            "id": "some_id",
+        }
+        log_mock = MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
+        self.napp.int_manager.redeploy_int = AsyncMock()
+        self.napp.int_manager.redeploy_int.side_effect = EVCError("no_id", "boom")
+        await self.napp.on_evc_redeployed_link(KytosEvent(content=content))
+        assert log_mock.error.call_count == 1
 
     async def test_on_evc_error_redeployed_link_down(self) -> None:
         """Test error_redeployed_link_down."""

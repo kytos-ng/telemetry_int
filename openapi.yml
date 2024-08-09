@@ -170,6 +170,108 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/uni/proxy_port:
+    get:
+      summary: List the existing UNIs and the configured proxy ports
+      operationId: list_proxy_ports
+      responses:
+        '200':
+          description: List the existing configured proxy ports
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ProxyPortListResp'
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
+  /v1/uni/{interface_id}/proxy_port/{port_number}:
+    post:
+      summary: Set proxy port metadata on a UNI
+      description: Set proxy port metadata on a UNI. Each UNI should use a different proxy port. If the proxy port is being updated, INT will be redeployed. If the proxy port is being set for the first time, you will need to enable INT on EVC afterwards.
+      operationId: set_proxy_port
+      parameters:
+        - name: interface_id
+          schema:
+            type: string
+          required: true
+          description: The interface ID
+          in: path
+        - name: port_number
+          schema:
+            type: integer
+          required: true
+          description: The proxy port number
+          in: path
+        - name: force
+          schema:
+            type: boolean
+          required: false
+          description: If force is set, it will also accept a proxy_port that isn't UP
+          in: query
+      responses:
+        '200':
+          description: Operation sucessful
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Operation sucessful
+        '404':
+          description: Interface id or proxy port not found
+        '409':
+          description: Proxy port conflict
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
+  /v1/uni/{interface_id}/proxy_port:
+    delete:
+      summary: Delete proxy port metadata on a UNI
+      description: Delete proxy port metadata on a UNI. It will only delete the metadata if no INT EVCs are using this port, unless you use the force option. When metadata is removed, INT will be disabled.
+      operationId: del_proxy_port
+      parameters:
+        - name: interface_id
+          schema:
+            type: string
+          required: true
+          description: The interface ID
+          in: path
+        - name: force
+          schema:
+            type: boolean
+          in: query
+          required: false
+          description: Force metadata deletion even if there are INT EVCs using the proxy port
+      responses:
+        '200':
+          description: Operation sucessful.
+          content:
+            application/json:
+              schema:
+                type: string
+                example: Operation sucessful
+        '404':
+          description: Interface id or proxy port not found
+        '409':
+          description: Proxy port deletion conflict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  description:
+                    type: string
+                  evc_ids:
+                    type: array
+                    items:
+                      type: string
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
+
 
 
 components:
@@ -192,3 +294,29 @@ components:
           type: array
           items:
             type: string
+    ProxyPortListResp: # Can be referenced via '#/components/schemas/ProxyPortListResp'
+      type: object
+      properties:
+        uni:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+            status_reason:
+              type: array
+              items:
+                type: string
+        proxy_port:
+          type: object
+          properties:
+            port_number:
+              type: integer
+            status:
+              type: string
+            status_reason:
+              type: array
+              items:
+                type: string
+
