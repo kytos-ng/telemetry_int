@@ -577,11 +577,11 @@ class TestINTManager:
         controller = get_controller_mock()
         int_manager = INTManager(controller)
         pp = MagicMock()
-        mock = MagicMock()
-        int_manager.get_proxy_port_or_raise = mock
-        mock.return_value = pp
+        int_manager.unis_src[intf_id_a] = "a"
+        int_manager.unis_src[intf_id_z] = "z"
+        int_manager.srcs_pp[int_manager.unis_src[intf_id_a]] = pp
+        int_manager.srcs_pp[int_manager.unis_src[intf_id_z]] = pp
         int_manager._discard_pps_evc_ids(evcs)
-        assert int_manager.get_proxy_port_or_raise.call_count == 2
         assert pp.evc_ids.discard.call_count == 2
         pp.evc_ids.discard.assert_called_with(evc_id)
 
