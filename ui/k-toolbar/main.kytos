@@ -1,9 +1,12 @@
 <template>
     <k-toolbar-item icon="chart-line" tooltip="Telemetry INT">
         <k-accordion>
-            <!-- Button for displaying info panel with telemetry_int data -->
             <k-accordion-item title="List EVCs">
                 <k-button icon="plug" title="List Installed EVCs" @click="get_EVCs">
+                </k-button>
+            </k-accordion-item>
+            <k-accordion-item title="List Proxy Ports">
+                <k-button icon="plug" title="List Proxy Ports" @click="get_proxy_ports">
                 </k-button>
             </k-accordion-item>
         </k-accordion>
@@ -14,7 +17,11 @@ module.exports = {
     data: function() {
         return {
             telemetryINT_Data: [],
+            proxy_ports: [],
         }
+    },
+    mounted() {
+      this.$kytos.eventBus.$on('kytos/telemetry_int/refetch-proxy-ports', this.get_proxy_ports)
     },
     methods: {
         //API request for EVC data
@@ -37,6 +44,41 @@ module.exports = {
                 }
                 self.$kytos.eventBus.$emit("setNotification", notification)
             });
+        },
+        //API request for getting Proxy Ports
+        get_proxy_ports() {
+            const self = this
+            const request = $.ajax({
+                            type:"GET",
+                            dataType: "json",
+                            url: this.$kytos_server_api + "kytos/telemetry_int/v1/uni/proxy_port",
+                            async: true});
+            request.done(function(data) {
+                self.set_proxy_ports(data)
+                self.display_proxy_port_info_panel()
+            });
+            request.fail(function(data) {
+                let notification = {
+                    icon: 'cog',
+                    title: 'Could not retrieve proxy ports',
+                    description: data.status.toString() + ": " + data.responseJSON.description
+                }
+                self.$kytos.eventBus.$emit("setNotification", notification)
+            });
+        },
+        set_proxy_ports(data){
+            this.proxy_ports = data.map((obj) => 
+              (
+                {
+                  uni_id: obj.uni.id,
+                  uni_status: obj.uni.status,
+                  uni_status_reason: obj.uni.status_reason.join(",") || "N/A",
+                  proxy_port_port_number: obj.proxy_port.port_number,
+                  proxy_port_status: obj.proxy_port.status,
+                  proxy_port_status_reason: obj.proxy_port.status_reason.join(",") || "N/A"
+                }
+              )
+            )
         },
         /**
          * @param {Object} EVC_Data - The EVC data from mef_eline.
@@ -74,6 +116,17 @@ module.exports = {
                           "content": this.telemetryINT_Data,
                           "icon": "info-circle",
                           "title": "View Telemetry INT Data",
+                          "subtitle": "by kytos/telemetry_int"
+                          }
+            this.$kytos.eventBus.$emit("showInfoPanel", content)
+        },
+        // Display list_proxy_ports k-info-panel
+        display_proxy_port_info_panel() {
+            const content = {
+                          "component": 'kytos-telemetry_int-k-info-panel-list_proxy_ports',
+                          "content": this.proxy_ports,
+                          "icon": "info-circle",
+                          "title": "Proxy Ports",
                           "subtitle": "by kytos/telemetry_int"
                           }
             this.$kytos.eventBus.$emit("showInfoPanel", content)
