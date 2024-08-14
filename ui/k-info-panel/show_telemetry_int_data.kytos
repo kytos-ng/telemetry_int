@@ -394,8 +394,6 @@
             content: {
                 handler: function() {
                     this.currentTableData = this.content
-                    console.log(this.content)
-                    console.log(this.currentTableData)
                 },
                 deep: true
             }
