@@ -274,12 +274,13 @@ class TestMain:
             api_mock,
         )
         intf_id, port_number = "00:00:00:00:00:00:00:01:1", 7
+        src_id = "00:00:00:00:00:00:00:01:7"
         endpoint = f"{self.base_endpoint}/uni/{intf_id}/proxy_port"
         self.napp.controller.get_interface_by_id = MagicMock()
         pp = MagicMock()
         pp.evc_ids = set(["some_id"])
-        self.napp.int_manager.get_proxy_port_or_raise = MagicMock()
-        self.napp.int_manager.get_proxy_port_or_raise.return_value = pp
+        self.napp.int_manager.unis_src[intf_id] = src_id
+        self.napp.int_manager.srcs_pp[src_id] = pp
         intf_mock = MagicMock()
         intf_mock.metadata = {"proxy_port": port_number}
         self.napp.controller.get_interface_by_id = MagicMock()
