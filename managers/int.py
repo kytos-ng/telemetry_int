@@ -854,29 +854,18 @@ class INTManager:
     async def _send_flows(
         self, switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]
     ):
-        """Send batched flows by dpid to flow_manager.
-
-        The flows will be batched per dpid based on settings.BATCH_SIZE and will wait
-        for settings.BATCH_INTERVAL per batch iteration.
+        """
+        Send batched flows by dpid to flow_manager.
         """
         for dpid, flows in switch_flows.items():
-            batch_size = settings.BATCH_SIZE
-            if batch_size <= 0:
-                batch_size = len(flows)
-
-            for i in range(0, len(flows), batch_size):
-                flows_batch = flows[i : i + batch_size]
-                if not flows_batch:
-                    continue
-
-                if i > 0:
-                    await asyncio.sleep(settings.BATCH_INTERVAL)
-                event = KytosEvent(
-                    f"kytos.flow_manager.flows.single.{cmd}",
-                    content={
-                        "dpid": dpid,
-                        "force": True,
-                        "flow_dict": {"flows": flows_batch},
-                    },
+            if flows:
+                await self.controller.buffers.app.aput(
+                    KytosEvent(
+                        f"kytos.flow_manager.flows.single.{cmd}",
+                        content={
+                            "dpid": dpid,
+                            "force": True,
+                            "flow_dict": {"flows": flows},
+                        },
+                    )
                 )
-                await self.controller.buffers.app.aput(event)
