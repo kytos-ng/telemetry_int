@@ -1,0 +1,472 @@
+<template>
+    <div class="proxy_ports_container">
+        <k-accordion>
+            <k-accordion-item title="Proxy Ports Info">
+                <k-accordion-item title="Set proxy_port metadata">
+
+                    <k-input-auto class="k-input-val" id="uni_intf" v-model:value="uni_intf"
+                              title="UNI:"
+                              placeholder="UNI" icon="arrow-right"
+                              :candidates="interfaces"
+                              @focus="get_interfaces"
+                              @blur="onblur_uni_interfaces"
+                              >{{ uni_intf }}</k-input-auto>
+                    <k-input class="k-input-val-label" v-model:value="uni_name" icon="none"
+                              >{{ uni_name }}</k-input>
+
+                    <k-input-auto class="k-input-val" id="pp_intf" v-model:value="pp_intf"
+                              title="Proxy Port:"
+                              placeholder="Proxy Port" icon="arrow-right"
+                              :candidates="proxy_ports"
+                              @focus="get_interfaces"
+                              @blur="onblur_pp_interfaces"
+                              >{{ pp_intf }}</k-input-auto>
+                    <k-input class="k-input-val-label" v-model:value="pp_name" icon="none"
+                              >{{ pp_name }}</k-input>
+
+                    <k-checkbox title="force" v-model:model="force_set" :value="'set'" tooltip="It will force to enable even if the proxy port status isn't UP"></k-checkbox>
+                    <k-button icon="gear" title="Set Proxy Port" tooltip="Create or update proxy_port metadata value" @click="set_proxy_port()"></k-button>
+                </k-accordion-item>
+                <k-accordion-item title="Table">
+                    <div class="INT_table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th rowspan="1" colspan="3">UNI</th>
+                                    <th rowspan="1" colspan="3">Proxy Port</th>
+                                    <th class="sortable-column" rowspan="2" colspan="1"></th>
+                                </tr>
+                                <tr>
+                                    <th class="sortable-column" @click="change_sorted_col('uni_id')">ID &nbsp;{{sort_identifier_list[0]}}</th>
+                                    <th class="sortable-column" @click="change_sorted_col('uni_status')">Status &nbsp;{{sort_identifier_list[1]}}</th>
+                                    <th class="sortable-column" @click="change_sorted_col('uni_status_reason')">Status Reason &nbsp;{{sort_identifier_list[2]}}</th>
+                                    <th class="sortable-column" @click="change_sorted_col('proxy_port_port_number')">Port Number &nbsp;{{sort_identifier_list[3]}}</th>
+                                    <th class="sortable-column" @click="change_sorted_col('proxy_port_status')">Status &nbsp;{{sort_identifier_list[4]}}</th>
+                                    <th class="sortable-column" @click="change_sorted_col('proxy_port_status_reason')">Status Reason &nbsp;{{sort_identifier_list[5]}}</th>
+                                </tr>
+                                <tr>
+                                    <th>
+                                        <input v-model="UNIProxyPortFilter[0][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="UNIProxyPortFilter[1][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="UNIProxyPortFilter[2][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="UNIProxyPortFilter[3][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="UNIProxyPortFilter[4][1]"></input>
+                                    </th>
+                                    <th>
+                                        <input v-model="UNIProxyPortFilter[5][1]"></input>
+                                    </th>
+                                    <th>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="(item, index) in filtered_data">
+                                    <td>{{item.uni_id}}</td>
+                                    <td :class="status_color(item.uni_status)">{{item.uni_status}}</td>
+                                    <td>{{item.uni_status_reason}}</td>
+                                    <td>{{item.proxy_port_port_number}}</td>
+                                    <td :class="status_color(item.proxy_port_status)">{{item.proxy_port_status}}</td>
+                                    <td>{{item.proxy_port_status_reason}}</td>
+                                    <td><k-button icon="trash" tooltip="Delete" @click="set_del_uni_intf(item.uni_id)"></k-button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </k-accordion-item>
+            </k-accordion-item>
+        </k-accordion>
+        <template v-if="show_del_modal">
+            <div class="modal-mask">
+              <div class="modal-wrapper">
+                <div class="modal-container">
+                  <div class="modal-header">
+                    <slot name="header">
+                    </slot>
+                  </div>
+                  <div class="modal-body">
+                    <slot name="body">
+                        Confirm proxy_port deletion of UNI?
+                        <k-checkbox class="modal-checkbox" title="force" v-model:model="force_del" :value="'del'" tooltip="It will force to delete even if there are enabled EVCs"></k-checkbox>
+                    </slot>
+                  </div>
+                  <div class="modal-footer">
+                    <slot name="footer">
+                      <k-button tooltip="Cancel" title="Cancel" @click="modal_close">
+                      </k-button>
+                      <k-button id="modal_ok" tooltip="Delete" title="Delete" @click="modal_ok">
+                      </k-button>
+                    </slot>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </template>
+    </div>
+</template>
+<script>
+    module.exports = {
+        props: ["content"],
+        data: function() {
+            return {
+                UNIProxyPortFilter: [
+                    ["uni_id", ""],
+                    ["uni_status", ""],
+                    ["uni_status_reason", ""],
+                    ["proxy_port_port_number", ""],
+                    ["proxy_port_status", ""],
+                    ["proxy_port_status_reason", ""],
+                ],
+                sorted_column_name: ["", 0],
+                sort_identifier: {uni_id: 0, uni_status: 1, uni_status_reason: 2, proxy_port_port_number: 3, proxy_port_status: 4, proxy_port_status_reason: 5},
+                sort_symbols: ["▲", "▼"],
+                sort_identifier_list: ["", "", "", "", "", "", ""],
+                show_del_modal: false,
+                table_data: [],
+                fetched_interfaces: [],
+                interfaces: [],
+                proxy_ports: [],
+                uni_intf: "",
+                uni_switch: "",
+                uni_name: "",
+                pp_intf: "",
+                pp_name: "",
+                del_uni_intf: "",
+                force_set: [],
+                force_del: []
+            }
+        },
+        methods: {
+            reset_inputs() {
+                const self = this
+                self.uni_intf = ""
+                self.uni_switch = ""
+                self.uni_name = ""
+                self.pp_intf = ""
+                self.pp_name = ""
+            },
+            status_color(value) {
+                return value == "UP" ? "green" : "red"
+            },
+            change_sorted_col(name) {
+                if (this.sorted_column_name[0] == name && this.sorted_column_name[1] == 0) {
+                    this.sorted_column_name[1] = 1
+                } else {
+                    this.sorted_column_name = [name, 0]
+                }
+                this.set_sorted_column()
+            },
+            //Sets table sort symbol
+            set_sorted_column() {
+                this.sort_identifier_list = ["", "", "", "", "", "", ""]
+                this.sort_identifier_list[this.sort_identifier[this.sorted_column_name[0]]] = this.sort_symbols[this.sorted_column_name[1]]
+            },
+            set_proxy_port() {
+                const self = this
+                const split = self.pp_intf.split(":")
+                const port_no = split[split.length - 1]
+                const uni_intf = self.uni_intf
+                const request = $.ajax({
+                                type:"POST",
+                                dataType: "json",
+                                contentType: "application/json",
+                                url: this.$kytos_server_api + `kytos/telemetry_int/v1/uni/${uni_intf}/proxy_port/${port_no}?force=${this.force_set.includes('set')}`,
+                                async: true})
+                request.done(function(data) {
+                    let notification = {
+                        icon: 'check',
+                        title: `Set UNI ${uni_intf} proxy_port number ${port_no}`,
+                        description: data.responseJSON
+                    }
+                    self.$kytos.eventBus.$emit("kytos/telemetry_int/refetch-proxy-ports")
+                    self.reset_inputs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not set proxy_port',
+                        description: self.json_err_description_or_text(data)
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+            },
+            set_del_uni_intf(uni_intf) {
+                this.del_uni_intf = uni_intf
+                this.modal_display()
+            },
+            del_proxy_port(uni_intf) {
+                const request = $.ajax({
+                                type:"DELETE",
+                                dataType: "json",
+                                contentType: "application/json",
+                                url: this.$kytos_server_api + `kytos/telemetry_int/v1/uni/${uni_intf}/proxy_port?force=${this.force_del.includes('del')}`,
+                                async: true})
+                request.done(function(data) {
+                    let notification = {
+                        icon: 'check',
+                        title: `Deleted UNI ${uni_intf} proxy_port`,
+                        description: data.responseJSON
+                    }
+                    self.$kytos.eventBus.$emit("kytos/telemetry_int/refetch-proxy-ports")
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+                request.fail(function(data) {
+                    let notification = {
+                        icon: 'cog',
+                        title: `Could not delete proxy_port of UNI ${uni_intf}`,
+                        description: self.json_err_description_or_text(data)
+                    }
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+            },
+            modal_display() {
+                this.show_del_modal = true
+            },
+            modal_close() {
+                this.show_del_modal = false
+            },
+            modal_ok() {
+                this.show_del_modal = false
+                this.del_proxy_port(this.del_uni_intf)
+            },
+            get_topology_interfaces(){
+              const self = this
+              $.ajax({
+                async: true,
+                dataType: "json",
+                url: this.$kytos_server_api + "kytos/topology/v3/interfaces",
+                success: function(data) {
+                  self.fetched_interfaces = data['interfaces']
+                }
+              })
+            },
+            json_err_description_or_text(data) {
+                const content = data.responseJSON ? data.responseJSON.description : data.responseText
+                return data.status.toString() + ": " + content
+            }
+        },
+        computed: {
+            filtered_data: function() {
+                let current_data = this.$kytos.toRaw(this.table_data)
+                if (current_data) {
+                    let filtered_data = current_data.filter((EVC) => {
+                        for (const tableColumn of this.UNIProxyPortFilter) {
+                            let separatedFilter = tableColumn[1].toString()
+                            let separatedProperty = EVC[tableColumn[0]].toString()
+                            if (!(separatedProperty.includes(separatedFilter) || separatedFilter.includes(separatedProperty))) {
+                                return false
+                            }
+                        }
+                        return true
+                    })
+                    current_data = filtered_data
+                    //Sort by ascending or descending order
+                    if(this.sorted_column_name[1]) {
+                        current_data.sort((a, b) => {
+                            if (a[this.sorted_column_name[0]] > b[this.sorted_column_name[0]]) {
+                                return -1;
+                            }
+                            if (a[this.sorted_column_name[0]] < b[this.sorted_column_name[0]]) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                    } else {
+                        current_data.sort((a, b) => {
+                            if (a[this.sorted_column_name[0]] < b[this.sorted_column_name[0]]) {
+                                return -1;
+                            }
+                            if (a[this.sorted_column_name[0]] > b[this.sorted_column_name[0]]) {
+                                return 1;
+                            }
+                            return 0;
+                        });
+                    }
+                }
+                return current_data
+            },
+            get_interfaces(){
+              var interfaces = []
+              $.each(this.fetched_interfaces, function(key, value){
+                  if (value.metadata != undefined && value.metadata.port_name != undefined) {
+                      interfaces.push(`${value.metadata.port_name} - ${value.id}`)
+                  } else {
+                      interfaces.push(`${value.name} - ${value.id}`)
+                  }
+              })
+              this.interfaces = interfaces
+            },
+            onblur_uni_interfaces(){
+              const current_uni_intf = this.uni_intf
+              if (current_uni_intf.lastIndexOf(' ') > 0) {
+                let split_val = current_uni_intf.split(' ')
+                this.uni_name = split_val[0]
+                this.uni_intf = split_val[split_val.length - 1]
+                this.uni_switch = this.uni_intf.substr(0, 16 + 7)
+              }
+            },
+            onblur_pp_interfaces(){
+              const current_pp_intf = this.pp_intf
+              if (current_pp_intf.lastIndexOf(' ') > 0) {
+                let split_val = current_pp_intf.split(' ')
+                this.pp_name = split_val[0]
+                this.pp_intf = split_val[split_val.length - 1]
+              }
+            }
+        },
+        mounted() {
+            this.get_topology_interfaces()
+            this.table_data = this.content
+            if (JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/list_proxy_ports/UNIProxyPortFilter'))) {
+                this.UNIProxyPortFilter = JSON.parse(localStorage.getItem('telemetry_int/k-info-panel/list_proxy_ports/UNIProxyPortFilter'));
+            }
+        },
+        watch: {
+            uni_switch: {
+                handler: function () {
+                  this.proxy_ports = this.interfaces.filter(intf => intf && intf.includes(this.uni_switch) && !intf.includes(this.uni_intf))
+                },
+                deep: true
+            },
+            UNIProxyPortFilter: {
+                handler: function() {
+                    localStorage.setItem('telemetry_int/k-info-panel/list_proxy_ports/UNIProxyPortFilter', JSON.stringify(this.UNIProxyPortFilter))
+                },
+                deep: true
+            },
+            content: {
+                handler: function() {
+                    this.table_data = this.content
+                },
+                deep: true
+            }
+        }
+    }
+</script>
+<style>
+    .k-input-val{
+      width: 33%;
+      margin: 0.5em 0.5em 0.5em 0.5em;
+    }
+    .k-input-val-label{
+      width: 33%;
+      margin: 0.5em 0.5em 0.5em 0.5em;
+    }
+    .INT_table {
+      color: #ccc;
+      text-align: center;
+      margin: 0 auto;
+      display: block;
+      padding: 0.5em 0 1em 0.3em;
+      font-size: 0.8em;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    .INT_table table{
+      display: table;
+      width: 100%;
+    }
+    .INT_table thead{
+      font-weight: bold;
+      background: #554077;
+    }
+    .INT_table th{
+      padding: 0.6em 0 0.6em 0;
+      vertical-align: middle;
+      border: 1px solid;
+    }
+    .INT_table td{
+      vertical-align: middle;
+      padding: 0.45em 0 0.45em 0;
+      word-break: break-all;
+      border: 1px solid;
+    }
+    .INT_table tbody tr:nth-child(even) {
+      background: #313131;
+    }
+    .INT_table tbody tr:hover {
+        color: #eee;
+        background-color: #666;
+    }
+    .green {
+        background-color: #8bc34a;
+        color: #222;
+    }
+    .red {
+        background-color: #dd2c00;
+        color: #222;
+    }
+    .k-info-panel:has(.proxy_ports_container) {
+        width: calc(100% - 305px) !important; /* overrides the width of the parent panel if it loads the mef_eline container */
+    }
+    .k-checkbox-wrap {
+        background: none;
+        margin-left: 1em;
+    }
+    .sortable-column:hover {
+        color: #eee;
+        background-color: #322c5d;
+    }
+    /* Modal windows */
+    .modal-checkbox {
+        color: #222;
+    }
+    .modal-mask {
+        position: fixed;
+        z-index: 9998;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: table;
+        transition: opacity 0.3s ease;
+    }
+    .modal-wrapper {
+        display: table-cell;
+        vertical-align: middle;
+    }
+    .modal-container {
+        width: 300px;
+        margin: 0px auto;
+        padding: 10px 10px 10px 20px;;
+        background-color: #e8e8e8;
+        border-radius: 2px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
+        transition: all 0.3s ease;
+        font-family: Helvetica, Arial, sans-serif;
+    }
+    .modal-body {
+        margin: 20px 0;
+    }
+    .modal-default-button {
+        float: right;
+    }
+    .modal-enter {
+        opacity: 0;
+    }
+    .modal-leave-active {
+        opacity: 0;
+    }
+    .modal-enter .modal-container,
+    .modal-leave-active .modal-container {
+        -webkit-transform: scale(1.1);
+        transform: scale(1.1);
+    }
+    .modal-footer {
+        justify-content: end;
+        display: flex;
+    }
+    #modal_ok {
+        color: #ffc5c5;
+        background: #be0000;
+    }
+</style>
