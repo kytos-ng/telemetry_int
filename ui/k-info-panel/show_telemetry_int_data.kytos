@@ -187,7 +187,7 @@
                     let notification = {
                         icon: 'cog',
                         title: 'Could not enable INT on EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: self.json_err_description_or_text(data)
                     }
                     self.get_EVCs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -224,7 +224,7 @@
                     let notification = {
                         icon: 'cog',
                         title: 'Could not disable INT on EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: self.json_err_description_or_text(data)
                     }
                     self.get_EVCs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -258,7 +258,7 @@
                     let notification = {
                         icon: 'cog',
                         title: 'Could not redeploy INT on EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: self.json_err_description_or_text(data)
                     }
                     self.get_EVCs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -279,7 +279,7 @@
                     let notification = {
                         icon: 'cog',
                         title: 'Could not retrieve EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: self.json_err_description_or_text(data)
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
@@ -329,6 +329,11 @@
                  */
                 this.showDelModal = false
                 this.disableSelectedEVCs()
+            },
+            // Map request fail data response, either get json description or text
+            json_err_description_or_text(data) {
+                const content = data.responseJSON ? data.responseJSON.description : data.responseText
+                return data.status.toString() + ": " + content
             }
         },
         computed: {
