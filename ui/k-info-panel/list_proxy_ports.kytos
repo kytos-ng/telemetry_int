@@ -190,10 +190,11 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
                 request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
                     let notification = {
                         icon: 'cog',
                         title: 'Could not set proxy_port',
-                        description: self.json_err_description_or_text(data)
+                        description: data.status.toString() + ": " + content
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
@@ -219,10 +220,11 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
                 request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
                     let notification = {
                         icon: 'cog',
                         title: `Could not delete proxy_port of UNI ${uni_intf}`,
-                        description: self.json_err_description_or_text(data)
+                        description: data.status.toString() + ": " + content
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
@@ -247,10 +249,6 @@
                   self.fetched_interfaces = data['interfaces']
                 }
               })
-            },
-            json_err_description_or_text(data) {
-                const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                return data.status.toString() + ": " + content
             }
         },
         computed: {
