@@ -45,7 +45,7 @@ class TestINTManager:
         mock_interface_a.metadata = {"proxy_port": 5}
         with pytest.raises(exceptions.ProxyPortDestNotFound) as exc:
             int_manager.get_proxy_port_or_raise(intf_id, evc_id)
-        assert "destination interface not found" in str(exc)
+        assert "isn't looped" in str(exc)
 
         mock_interface_b = get_interface_mock("s1-eth5", 5, mock_switch_a)
         mock_interface_b.metadata = {"looped": {"port_numbers": [5, 6]}}

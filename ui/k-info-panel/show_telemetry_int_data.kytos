@@ -184,10 +184,11 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
                 request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
                     let notification = {
                         icon: 'cog',
                         title: 'Could not enable INT on EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: data.status.toString() + ": " + content
                     }
                     self.get_EVCs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -221,10 +222,11 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
                 request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
                     let notification = {
                         icon: 'cog',
                         title: 'Could not disable INT on EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: data.status.toString() + ": " + content
                     }
                     self.get_EVCs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -255,10 +257,11 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
                 request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
                     let notification = {
                         icon: 'cog',
                         title: 'Could not redeploy INT on EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: data.status.toString() + ": " + content
                     }
                     self.get_EVCs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
@@ -276,10 +279,11 @@
                     self.extract_TelemetryINTData(data)
                 });
                 request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
                     let notification = {
                         icon: 'cog',
                         title: 'Could not retrieve EVCs',
-                        description: data.status.toString() + ": " + data.responseJSON.description
+                        description: data.status.toString() + ": " + content
                     }
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 });
@@ -394,8 +398,6 @@
             content: {
                 handler: function() {
                     this.currentTableData = this.content
-                    console.log(this.content)
-                    console.log(this.currentTableData)
                 },
                 deep: true
             }

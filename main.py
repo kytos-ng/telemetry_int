@@ -301,15 +301,17 @@ class Main(KytosNApp):
     async def delete_proxy_port_metadata(self, request: Request) -> JSONResponse:
         """Delete proxy port metadata."""
         intf_id = request.path_params["interface_id"]
-        if (
-            intf := self.controller.get_interface_by_id(intf_id)
-        ) and "proxy_port" not in intf.metadata:
+        intf = self.controller.get_interface_by_id(intf_id)
+        if not intf:
+            raise HTTPException(404, detail=f"Interface id {intf_id} not found")
+        if "proxy_port" not in intf.metadata:
             return JSONResponse("Operation successful")
 
         qparams = request.query_params
         force = qparams.get("force", "false").lower() == "true"
+
         try:
-            pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id")
+            pp = self.int_manager.srcs_pp[self.int_manager.unis_src[intf_id]]
             if pp.evc_ids and not force:
                 return JSONResponse(
                     {
@@ -320,8 +322,8 @@ class Main(KytosNApp):
                     },
                     status_code=409,
                 )
-        except ProxyPortError as exc:
-            raise HTTPException(404, detail=exc.message)
+        except KeyError:
+            pass
 
         try:
             await api.delete_proxy_port_metadata(intf_id)

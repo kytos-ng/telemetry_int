@@ -61,26 +61,36 @@ class INTManager:
             uni_a = self.controller.get_interface_by_id(uni_a_id)
             uni_z = self.controller.get_interface_by_id(uni_z_id)
             if uni_a and "proxy_port" in uni_a.metadata:
-                src_a = uni_a.switch.get_interface_by_port_no(
+                if src_a := uni_a.switch.get_interface_by_port_no(
                     uni_a.metadata["proxy_port"]
-                )
-                self.unis_src[uni_a.id] = src_a.id
-                try:
-                    pp = self.get_proxy_port_or_raise(uni_a.id, evc_id)
-                except ProxyPortDestNotFound:
-                    pp = self.srcs_pp[src_a.id]
-                pp.evc_ids.add(evc_id)
+                ):
+                    self.unis_src[uni_a.id] = src_a.id
+                    try:
+                        pp = self.get_proxy_port_or_raise(uni_a.id, evc_id)
+                    except ProxyPortDestNotFound:
+                        pp = self.srcs_pp[src_a.id]
+                    pp.evc_ids.add(evc_id)
+                else:
+                    log.error(
+                        f"Failed to load proxy_port {uni_a.metadata['proxy_port']} "
+                        f"of UNI {uni_a_id}. You need to set a correct proxy_port value"
+                    )
 
             if uni_z and "proxy_port" in uni_z.metadata:
-                src_z = uni_z.switch.get_interface_by_port_no(
+                if src_z := uni_z.switch.get_interface_by_port_no(
                     uni_z.metadata["proxy_port"]
-                )
-                self.unis_src[uni_z.id] = src_z.id
-                try:
-                    pp = self.get_proxy_port_or_raise(uni_z.id, evc_id)
-                except ProxyPortDestNotFound:
-                    pp = self.srcs_pp[src_z.id]
-                pp.evc_ids.add(evc_id)
+                ):
+                    self.unis_src[uni_z.id] = src_z.id
+                    try:
+                        pp = self.get_proxy_port_or_raise(uni_z.id, evc_id)
+                    except ProxyPortDestNotFound:
+                        pp = self.srcs_pp[src_z.id]
+                    pp.evc_ids.add(evc_id)
+                else:
+                    log.error(
+                        f"Failed to load proxy_port {uni_z.metadata['proxy_port']} "
+                        f"of UNI {uni_z_id}. You need to set a correct proxy_port value"
+                    )
 
     async def handle_pp_link_down(self, link: Link) -> None:
         """Handle proxy_port link_down."""
@@ -452,8 +462,7 @@ class INTManager:
         if not pp.destination:
             raise ProxyPortDestNotFound(
                 evc_id,
-                f"proxy_port {port_no} of {intf_id} isn't looped or "
-                "destination interface not found",
+                f"proxy_port {port_no} of UNI {intf_id} isn't looped"
             )
 
         return pp
@@ -520,8 +529,8 @@ class INTManager:
                 and intf.metadata["proxy_port"] == new_port_no
             ):
                 msg = (
-                    f"UNI {uni.id} must use another dedicated proxy port. "
-                    f"UNI {intf.id} is already using proxy_port number {new_port_no}"
+                    f"UNI {uni.id} must use another dedicated proxy_port. "
+                    f"UNI {intf.id} is already using proxy_port {new_port_no}"
                 )
                 raise ProxyPortShared("no_evc_id", msg)
 
@@ -682,7 +691,7 @@ class INTManager:
                 dest_status = pp_a.status if pp_a.destination else None
                 raise ProxyPortStatusNotUP(
                     evc_id,
-                    f"proxy_port of {uni_a['interface_id']} isn't UP. "
+                    f"proxy_port of UNI {uni_a['interface_id']} isn't UP. "
                     f"source {pp_a.source.id} status {pp_a.source.status}, "
                     f"destination {dest_id} status {dest_status}",
                 )
@@ -691,7 +700,7 @@ class INTManager:
                 dest_status = pp_z.status if pp_z.destination else None
                 raise ProxyPortStatusNotUP(
                     evc_id,
-                    f"proxy_port of {uni_z['interface_id']} isn't UP."
+                    f"proxy_port of UNI {uni_z['interface_id']} isn't UP."
                     f"source {pp_z.source.id} status {pp_z.source.status}, "
                     f"destination {dest_id} status {dest_status}",
                 )
