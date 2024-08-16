@@ -59,6 +59,22 @@ def add_to_apply_actions(
     return instructions
 
 
+def has_instruction_and_action_type(
+    instructions: list[dict], instruction_type: str, action_type: str
+) -> bool:
+    """Check if any of the instructions has a given type and action type."""
+    for instruction in instructions:
+        if (
+            instruction["instruction_type"] != instruction_type
+            or "actions" not in instruction
+        ):
+            continue
+        for action in instruction["actions"]:
+            if "action_type" in action and action["action_type"] == action_type:
+                return True
+    return False
+
+
 def get_cookie(evc_id: str, cookie_prefix: int) -> int:
     """Return the cookie integer from evc id.
 

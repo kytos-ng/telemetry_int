@@ -4,6 +4,7 @@ import pytest
 
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.exceptions import ProxyPortSameSourceIntraEVC
+from napps.kytos.telemetry_int.exceptions import ProxyPortShared
 from napps.kytos.telemetry_int.managers.int import INTManager
 from napps.kytos.telemetry_int import exceptions
 from kytos.core.common import EntityStatus
@@ -44,7 +45,7 @@ class TestINTManager:
         mock_interface_a.metadata = {"proxy_port": 5}
         with pytest.raises(exceptions.ProxyPortDestNotFound) as exc:
             int_manager.get_proxy_port_or_raise(intf_id, evc_id)
-        assert "destination interface not found" in str(exc)
+        assert "isn't looped" in str(exc)
 
         mock_interface_b = get_interface_mock("s1-eth5", 5, mock_switch_a)
         mock_interface_b.metadata = {"looped": {"port_numbers": [5, 6]}}
@@ -222,7 +223,7 @@ class TestINTManager:
         assert "proxy_port" not in intf_mock.metadata
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         api_mock.get_evcs.return_value = {evc_id: {}}
-        int_manager.remove_int_flows = AsyncMock()
+        int_manager.disable_int = AsyncMock()
 
         await int_manager.handle_pp_metadata_removed(intf_mock)
         assert api_mock.get_evcs.call_count == 1
@@ -231,15 +232,9 @@ class TestINTManager:
             "metadata.telemetry.enabled": "true",
             "metadata.telemetry.status": "UP",
         }
-        assert int_manager.remove_int_flows.call_count == 1
-        args = int_manager.remove_int_flows.call_args[0]
+        assert int_manager.disable_int.call_count == 1
+        args = int_manager.disable_int.call_args[0]
         assert evc_id in args[0]
-        assert "telemetry" in args[1]
-        telemetry = args[1]["telemetry"]
-        assert telemetry["enabled"]
-        assert telemetry["status"] == "DOWN"
-        assert telemetry["status_reason"] == ["proxy_port_metadata_removed"]
-        assert "status_updated_at" in telemetry
 
     async def test_handle_pp_metadata_added(self, monkeypatch):
         """Test handle_pp_metadata_added."""
@@ -322,6 +317,37 @@ class TestINTManager:
         }
         assert not int_manager.disable_int.call_count
         assert not int_manager.enable_int.call_count
+
+    async def test_handle_pp_metadata_added_exc_port_shared(self, monkeypatch):
+        """Test handle_pp_metadata_added exception port shared."""
+        log_mock = MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.log", log_mock)
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        source_id, source_port = "some_source_id", 2
+        intf_mock.metadata = {"proxy_port": source_port}
+        evc_id = "3766c105686748"
+        int_manager.unis_src[intf_mock.id] = source_id
+        int_manager.srcs_pp[source_id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        assert "proxy_port" in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {evc_id: {}}
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock()
+        int_manager.enable_int.side_effect = ProxyPortShared(evc_id, "shared")
+
+        await int_manager.handle_pp_metadata_added(intf_mock)
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
+        assert int_manager.disable_int.call_count == 1
+        assert int_manager.enable_int.call_count == 1
+
+        assert api_mock.add_evcs_metadata.call_count == 1
+        assert log_mock.error.call_count == 1
 
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
@@ -440,6 +466,37 @@ class TestINTManager:
         with pytest.raises(ProxyPortSameSourceIntraEVC):
             int_manager._validate_intra_evc_different_proxy_ports(evc)
 
+    def test_validate_dedicated_proxy_port_evcs(self) -> None:
+        """Test _validate_intra_evc_different_proxy_ports."""
+        pp_a, pp_z, controller = MagicMock(), MagicMock(), MagicMock()
+        evc = {
+            "id": "some_id",
+            "uni_a": {"proxy_port": pp_a, "interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"proxy_port": pp_z, "interface_id": "00:00:00:00:00:00:00:01:2"},
+        }
+
+        int_manager = INTManager(controller)
+        int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
+
+        source = MagicMock()
+        pp_a.source, pp_z.source = source, source
+        with pytest.raises(ProxyPortShared):
+            int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
+
+    def test_validate_dedicated_proxy_port_evcs_existing(self) -> None:
+        """Test _validate_intra_evc_different_proxy_ports existing."""
+        pp_a, pp_z, controller = MagicMock(), MagicMock(), MagicMock()
+        evc = {
+            "id": "some_id",
+            "uni_a": {"proxy_port": pp_a, "interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"proxy_port": pp_z, "interface_id": "00:00:00:00:00:00:00:01:2"},
+        }
+
+        int_manager = INTManager(controller)
+        int_manager.unis_src["00:00:00:00:00:00:00:01:3"] = pp_a.source.id
+        with pytest.raises(ProxyPortShared):
+            int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
+
     async def test__remove_int_flows_by_cookies(
         self, inter_evc_evpl_flows_data
     ) -> None:
@@ -520,11 +577,11 @@ class TestINTManager:
         controller = get_controller_mock()
         int_manager = INTManager(controller)
         pp = MagicMock()
-        mock = MagicMock()
-        int_manager.get_proxy_port_or_raise = mock
-        mock.return_value = pp
+        int_manager.unis_src[intf_id_a] = "a"
+        int_manager.unis_src[intf_id_z] = "z"
+        int_manager.srcs_pp[int_manager.unis_src[intf_id_a]] = pp
+        int_manager.srcs_pp[int_manager.unis_src[intf_id_z]] = pp
         int_manager._discard_pps_evc_ids(evcs)
-        assert int_manager.get_proxy_port_or_raise.call_count == 2
         assert pp.evc_ids.discard.call_count == 2
         pp.evc_ids.discard.assert_called_with(evc_id)
 

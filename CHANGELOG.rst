@@ -18,15 +18,22 @@ Added
 - Handled ``kytos/mef_eline.uni_active_updated`` event.
 - Handled ``kytos/mef_eline.deployed`` event.
 - Handled ``kytos/mef_eline.(failover_link_down|failover_old_path|failover_deployed)`` events.
-- Added UI for telemetry_int.
+- Added UI for telemetry_int to list EVCs and to configure proxy ports
+- Included the endpoints to create, update, delete and list proxy_port metadata, and updated OpenAPI spec. These endpoints should be used to manage the proxy_port metadata instead of directly on topology endpoints since these endpoints provide extra validations.
 
 Changed
 =======
 - Only raise ``FlowsNotFound`` when an EVC is active and flows aren't found. Update status and status_reason accordingly too when installing flows.
+- Validate to support only a single proxy port per UNI for now.
+
+Removed
+=======
+- Removed client side batching with ``BATCH_INTERVAL`` and ``BATCH_SIZE``, now replaced with pacing in ``flow_manager``
 
 Fixed
 =====
 - Only redeploy if INT has been enabled before
+- Fixed batched flows slicing
 
 [2023.2.0] - 2024-02-16
 ***********************
