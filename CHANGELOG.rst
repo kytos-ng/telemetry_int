@@ -7,6 +7,14 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+[2024.1.1] - 2024-08-21
+***********************
+
+Fixed
+=====
+- Fixed UI proxy port filter to only exclude the UNI interface ID
+
+
 [2024.1.0] - 2024-07-23
 ***********************
 
