@@ -512,6 +512,7 @@ class TestINTManager:
                 assert "cookie_mask" in flow
                 assert flow["cookie_mask"] == int(0xFFFFFFFFFFFFFFFF)
                 assert flow["table_id"] == 0xFF
+                assert flow["owner"] == "telemetry_int"
         assert controller._buffers.app.aput.call_count == 3
 
     async def test__remove_int_flows(self, inter_evc_evpl_flows_data) -> None:

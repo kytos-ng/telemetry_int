@@ -461,8 +461,7 @@ class INTManager:
 
         if not pp.destination:
             raise ProxyPortDestNotFound(
-                evc_id,
-                f"proxy_port {port_no} of UNI {intf_id} isn't looped"
+                evc_id, f"proxy_port {port_no} of UNI {intf_id} isn't looped"
             )
 
         return pp
@@ -818,6 +817,7 @@ class INTManager:
                         "cookie": cookie,
                         "cookie_mask": int(0xFFFFFFFFFFFFFFFF),
                         "table_id": Table.OFPTT_ALL.value,
+                        "owner": "telemetry_int",
                     }
                 )
         await self._send_flows(switch_flows, "delete")
