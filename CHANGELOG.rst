@@ -12,7 +12,7 @@ file.
 
 Fixed
 =====
-- Fixed UI proxy port filter to only exclude the UNI interface ID
+- Fixed UI proxy port filter filter exclusion. It'll include all the switches interfaces
 
 
 [2024.1.0] - 2024-07-23
