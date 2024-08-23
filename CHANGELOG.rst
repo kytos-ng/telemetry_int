@@ -7,6 +7,15 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+[2024.1.1] - 2024-08-21
+***********************
+
+Fixed
+=====
+- Fixed UI proxy port filter filter exclusion. It'll include all interfaces of the switch.
+- Set ``telemetry_int`` owner on flow mods deletions to be compatible with flows pacing
+
+
 [2024.1.0] - 2024-07-23
 ***********************
 

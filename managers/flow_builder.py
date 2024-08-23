@@ -85,6 +85,7 @@ class FlowBuilder:
                         )
                     else:
                         flow["flow"]["cookie"] = int_cookie
+                        utils.set_owner(flow)
                         sink_a_flows = [flow]
                 elif not sink_z_flows and flow["switch"] == dpid_z:
                     if (
@@ -96,6 +97,7 @@ class FlowBuilder:
                         )
                     else:
                         flow["flow"]["cookie"] = int_cookie
+                        utils.set_owner(flow)
                         sink_z_flows = [flow]
                 if sink_a_flows and sink_z_flows:
                     break

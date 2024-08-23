@@ -330,7 +330,7 @@
         watch: {
             uni_switch: {
                 handler: function () {
-                  this.proxy_ports = this.interfaces.filter(intf => intf && intf.includes(this.uni_switch) && !intf.includes(this.uni_intf))
+                  this.proxy_ports = this.interfaces.filter(intf => intf && intf.includes(this.uni_switch))
                 },
                 deep: true
             },
