@@ -5,6 +5,7 @@ Napp to deploy In-band Network Telemetry over Ethernet Virtual Circuits
 """
 
 import asyncio
+import copy
 import pathlib
 from datetime import datetime
 
@@ -534,21 +535,21 @@ class Main(KytosNApp):
     async def on_failover_link_down(self, event: KytosEvent):
         """Handle kytos/mef_eline.failover_link_down."""
         await self.int_manager.handle_failover_flows(
-            event.content, event_name="failover_link_down"
+            copy.deepcopy(event.content), event_name="failover_link_down"
         )
 
     @alisten_to("kytos/mef_eline.failover_old_path")
     async def on_failover_old_path(self, event: KytosEvent):
         """Handle kytos/mef_eline.failover_old_path."""
         await self.int_manager.handle_failover_flows(
-            event.content, event_name="failover_old_path"
+            copy.deepcopy(event.content), event_name="failover_old_path"
         )
 
     @alisten_to("kytos/mef_eline.failover_deployed")
     async def on_failover_deployed(self, event: KytosEvent):
         """Handle kytos/mef_eline.failover_deployed."""
         await self.int_manager.handle_failover_flows(
-            event.content, event_name="failover_deployed"
+            copy.deepcopy(event.content), event_name="failover_deployed"
         )
 
     @alisten_to("kytos/topology.link_down")

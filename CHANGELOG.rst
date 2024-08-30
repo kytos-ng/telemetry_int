@@ -7,6 +7,14 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+[2024.1.2] - 2024-08-30
+***********************
+
+Fixed
+=====
+- Prevented shared flow accidental mutability when handling failover flows events
+
+
 [2024.1.1] - 2024-08-21
 ***********************
 
