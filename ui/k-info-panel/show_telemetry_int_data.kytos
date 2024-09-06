@@ -78,6 +78,7 @@
         </k-accordion>
         <k-modal
             message="Disable Telemetry INT on selected EVCs?"
+            buttonTitle="Delete"
             :action="disableSelectedEVCs"
             v-model:show-modal="showDelModal">
         </k-modal>
