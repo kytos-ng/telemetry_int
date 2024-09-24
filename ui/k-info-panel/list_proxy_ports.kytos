@@ -34,7 +34,7 @@
                                 <tr>
                                     <th rowspan="1" colspan="3">UNI</th>
                                     <th rowspan="1" colspan="3">Proxy Port</th>
-                                    <th class="sortable-column" rowspan="2" colspan="1"></th>
+                                    <th class="sortable-column" rowspan="2" colspan="1">Options</th>
                                 </tr>
                                 <tr>
                                     <th class="sortable-column" @click="change_sorted_col('uni_id')">ID &nbsp;{{sort_identifier_list[0]}}</th>
@@ -64,6 +64,7 @@
                                         <input v-model="UNIProxyPortFilter[5][1]"></input>
                                     </th>
                                     <th>
+                                        <k-checkbox class="table-checkbox" title="force" v-model:model="force_del" :value="'del'" tooltip="It will force to delete even if there are enabled EVCs"></k-checkbox>
                                     </th>
                                 </tr>
                             </thead>
@@ -75,7 +76,7 @@
                                     <td>{{item.proxy_port_port_number}}</td>
                                     <td :class="status_color(item.proxy_port_status)">{{item.proxy_port_status}}</td>
                                     <td>{{item.proxy_port_status_reason}}</td>
-                                    <td><k-button icon="trash" tooltip="Delete" @click="set_del_uni_intf(item.uni_id)"></k-button></td>
+                                    <td><k-button :class="force_del[0] ? 'delete-button-red' : 'delete-button'" icon="trash" tooltip="Delete" @click="set_del_uni_intf(item.uni_id)"></k-button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -83,32 +84,12 @@
                 </k-accordion-item>
             </k-accordion-item>
         </k-accordion>
-        <template v-if="show_del_modal">
-            <div class="modal-mask">
-              <div class="modal-wrapper">
-                <div class="modal-container">
-                  <div class="modal-header">
-                    <slot name="header">
-                    </slot>
-                  </div>
-                  <div class="modal-body">
-                    <slot name="body">
-                        Confirm proxy_port deletion of UNI?
-                        <k-checkbox class="modal-checkbox" title="force" v-model:model="force_del" :value="'del'" tooltip="It will force to delete even if there are enabled EVCs"></k-checkbox>
-                    </slot>
-                  </div>
-                  <div class="modal-footer">
-                    <slot name="footer">
-                      <k-button tooltip="Cancel" title="Cancel" @click="modal_close">
-                      </k-button>
-                      <k-button id="modal_ok" tooltip="Delete" title="Delete" @click="modal_ok">
-                      </k-button>
-                    </slot>
-                  </div>
-                </div>
-              </div>
-            </div>
-        </template>
+        <k-modal
+            message="Confirm proxy_port deletion of UNI?"
+            button-title="Delete"
+            :action="modal_ok"
+            v-model:show-modal="show_del_modal">
+        </k-modal>
     </div>
 </template>
 <script>
@@ -232,11 +213,7 @@
             modal_display() {
                 this.show_del_modal = true
             },
-            modal_close() {
-                this.show_del_modal = false
-            },
             modal_ok() {
-                this.show_del_modal = false
                 this.del_proxy_port(this.del_uni_intf)
             },
             get_topology_interfaces(){
@@ -413,58 +390,22 @@
         color: #eee;
         background-color: #322c5d;
     }
-    /* Modal windows */
-    .modal-checkbox {
-        color: #222;
+    .table-checkbox .slider {
+        background-color: #eee;
     }
-    .modal-mask {
-        position: fixed;
-        z-index: 9998;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: table;
-        transition: opacity 0.3s ease;
+    .table-checkbox {
+        color: #eee;
+        margin-right: 1em;
     }
-    .modal-wrapper {
-        display: table-cell;
-        vertical-align: middle;
+    .delete-button {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
     }
-    .modal-container {
-        width: 300px;
-        margin: 0px auto;
-        padding: 10px 10px 10px 20px;;
-        background-color: #e8e8e8;
-        border-radius: 2px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
-        transition: all 0.3s ease;
-        font-family: Helvetica, Arial, sans-serif;
-    }
-    .modal-body {
-        margin: 20px 0;
-    }
-    .modal-default-button {
-        float: right;
-    }
-    .modal-enter {
-        opacity: 0;
-    }
-    .modal-leave-active {
-        opacity: 0;
-    }
-    .modal-enter .modal-container,
-    .modal-leave-active .modal-container {
-        -webkit-transform: scale(1.1);
-        transform: scale(1.1);
-    }
-    .modal-footer {
-        justify-content: end;
-        display: flex;
-    }
-    #modal_ok {
-        color: #ffc5c5;
-        background: #be0000;
+    .delete-button-red {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        background-color: #dd2c00;
     }
 </style>

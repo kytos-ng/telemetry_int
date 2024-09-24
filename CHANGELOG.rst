@@ -7,6 +7,10 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+Changed
+=======
+- The telemetry_int modal now uses the modal component
+
 [2024.1.2] - 2024-08-30
 ***********************
 
