@@ -8,7 +8,7 @@
                         <k-button icon="comment" title="Enable Selected" tooltip="Enable INT on selected EVCs" @click="enableSelectedEVCs()"></k-button>
                         <k-button icon="comment-slash" title="Disable Selected" tooltip="Disable INT on selected EVCs" @click="displayModal()"></k-button>
                         <k-button icon="truck-moving" title="Redeploy Selected" tooltip="Redeploy INT on selected EVCs" @click="redeploySelectedEVCs()"></k-button>
-                    <k-button-group>
+                    </k-button-group>
                     <k-checkbox title="Force" v-model:model="forceOption" :value="true"></k-checkbox>
                 </k-accordion-item>
                 <!--
