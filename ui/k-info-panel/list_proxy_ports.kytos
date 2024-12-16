@@ -4,24 +4,24 @@
             <k-accordion-item title="Proxy Ports Info">
                 <k-accordion-item title="Set proxy_port metadata">
 
-                    <k-input-auto class="k-input-val" id="uni_intf" v-model:value="uni_intf"
+                    <k-input-auto customClass="k-input-val" id="uni_intf" v-model:value="uni_intf"
                               title="UNI:"
                               placeholder="UNI" icon="arrow-right"
                               :candidates="interfaces"
                               @focus="get_interfaces"
                               @blur="onblur_uni_interfaces"
                               >{{ uni_intf }}</k-input-auto>
-                    <k-input class="k-input-val-label" v-model:value="uni_name" icon="none"
+                    <k-input customClass="k-input-val-label" v-model:value="uni_name" icon="none"
                               >{{ uni_name }}</k-input>
 
-                    <k-input-auto class="k-input-val" id="pp_intf" v-model:value="pp_intf"
+                    <k-input-auto customClass="k-input-val" id="pp_intf" v-model:value="pp_intf"
                               title="Proxy Port:"
                               placeholder="Proxy Port" icon="arrow-right"
                               :candidates="proxy_ports"
                               @focus="get_interfaces"
                               @blur="onblur_pp_interfaces"
                               >{{ pp_intf }}</k-input-auto>
-                    <k-input class="k-input-val-label" v-model:value="pp_name" icon="none"
+                    <k-input customClass="k-input-val-label" v-model:value="pp_name" icon="none"
                               >{{ pp_name }}</k-input>
 
                     <k-checkbox title="force" v-model:model="force_set" :value="'set'" tooltip="It will force to enable even if the proxy port status isn't UP"></k-checkbox>
@@ -64,7 +64,7 @@
                                         <input v-model="UNIProxyPortFilter[5][1]"></input>
                                     </th>
                                     <th>
-                                        <k-checkbox class="table-checkbox" title="force" v-model:model="force_del" :value="'del'" tooltip="It will force to delete even if there are enabled EVCs"></k-checkbox>
+                                        <k-checkbox customClass="table-checkbox" title="force" v-model:model="force_del" :value="'del'" tooltip="It will force to delete even if there are enabled EVCs"></k-checkbox>
                                     </th>
                                 </tr>
                             </thead>
@@ -76,7 +76,7 @@
                                     <td>{{item.proxy_port_port_number}}</td>
                                     <td :class="status_color(item.proxy_port_status)">{{item.proxy_port_status}}</td>
                                     <td>{{item.proxy_port_status_reason}}</td>
-                                    <td><k-button :class="force_del[0] ? 'delete-button-red' : 'delete-button'" icon="trash" tooltip="Delete" @click="set_del_uni_intf(item.uni_id)"></k-button></td>
+                                    <td><k-button :customClass="force_del[0] ? 'delete-button-red' : 'delete-button'" icon="trash" tooltip="Delete" @click="set_del_uni_intf(item.uni_id)"></k-button></td>
                                 </tr>
                             </tbody>
                         </table>
