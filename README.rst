@@ -53,13 +53,36 @@ A response from the ``kytos/of_multi_table.enable_table`` event to confirm table
 General Information
 ===================
 
-Configure the proxy ports related to the UNIs you aim to enable telemetry. For instance, for UNI 1 on switch 1, the proxy port is the interface 2.
+Before enabling INT, you need to pre-configure proxy ports. Currently, only dedicated proxy ports are supported, for each used UNI you'll need one looped proxy port.
 
+Since version 2024.1, the UI supports the following main API functionalities: configuring proxy ports, enabling and disabling INT, and redeploying INT.
+
+Topology Example
+================
+
+Here's a linear topology example with three INT capable switches:
 
 .. code-block:: shell
 
-  curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/topology/v3/interfaces/00:00:00:00:00:00:00:01:1/metadata -d '{"proxy_port": 2}'
 
+         17-18                                           25-26
+   15 - [dpid1] - 2 ------- 2 - [dpid2] - 1 ------- 5 - [dpid6] - 22
+   16 -  19-20 
+
+
+To configure the proxy ports (the proxy port number is supposed to be the lower number of the loop):
+
+.. code-block:: shell
+
+  curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/uni/00:00:00:00:00:00:00:01:15/proxy_port/17
+  curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/uni/00:00:00:00:00:00:00:01:16/proxy_port/19
+  curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/uni/00:00:00:00:00:00:00:06:22/proxy_port/25
+
+To enable telemetry in a set of EVCs:
+
+.. code-block:: shell
+
+  curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/evc/enable -d '{"evc_ids": ["1234", ...]}'
 
 To enable telemetry for all EVCs:
 
@@ -71,13 +94,43 @@ To list all EVCs with telemetry enabled:
 
 .. code-block:: shell
 
-  curl  http://127.0.0.1:8181/api/kytos/telemetry_int/v1/evc/
+  curl  http://127.0.0.1:8181/api/kytos/telemetry_int/v1/evc
+
+To list configured proxy ports:
+
+.. code-block:: shell
+
+  curl  http://127.0.0.1:8181/api/kytos/telemetry_int/v1/uni/proxy_port
+
+To list and compare which INT EVCs have flows installed comparing with ``mef_eline`` flows and expected telemetry metadata:
+
+.. code-block:: shell
+
+  curl  http://127.0.0.1:8181/api/kytos/telemetry_int/v1/evc/compare
+
+To redeploy telemetry in a set of EVCs:
+
+.. code-block:: shell
+
+  curl -s -X PATCH -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/evc/redeploy -d '{"evc_ids": ["1234", ...]}'
+
+To redeploy telemetry for all EVCs:
+
+.. code-block:: shell
+
+  curl -s -X PATCH -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/evc/redeploy -d '{"evc_ids": []}'
 
 To disable telemetry for all EVCs:
 
 .. code-block:: shell
 
   curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/evc/disable -d '{"evc_ids": []}'
+
+To disable telemetry in a set of EVCs:
+
+.. code-block:: shell
+
+  curl -s -X POST -H 'Content-type: application/json' http://0.0.0.0:8181/api/kytos/telemetry_int/v1/evc/disable -d '{"evc_ids": ["1234", ...]}'
 
 
 .. TAGs
