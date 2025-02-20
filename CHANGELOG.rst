@@ -14,6 +14,7 @@ Changed
 
 Fixed
 =====
+- Removed customClass
 - Added missing ``k-button-group`` end tag within ``show_telemetry_int_data`` k-info-panel
 
 [2024.1.2] - 2024-08-30
