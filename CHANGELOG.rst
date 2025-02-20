@@ -11,10 +11,10 @@ Changed
 =======
 - The telemetry_int modal now uses the modal component
 - k-inputs now use customClass prop to add CSS classes
+- Removed customClass
 
 Fixed
 =====
-- Removed customClass
 - Added missing ``k-button-group`` end tag within ``show_telemetry_int_data`` k-info-panel
 
 [2024.1.2] - 2024-08-30
