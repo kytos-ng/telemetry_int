@@ -10,8 +10,6 @@ file.
 Changed
 =======
 - The telemetry_int modal now uses the modal component
-- k-inputs now use customClass prop to add CSS classes
-- Removed customClass
 
 Fixed
 =====
