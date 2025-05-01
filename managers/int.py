@@ -248,7 +248,6 @@ class INTManager:
         and has associated EVCs then it'll remove and install the flows accordingly.
 
         """
-        # TODO check if asymmetric val worked
         if "proxy_port" not in intf.metadata:
             return
         pp = None

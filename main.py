@@ -345,13 +345,13 @@ class Main(KytosNApp):
             pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id", port_no)
             if pp.status != EntityStatus.UP and not force:
                 raise HTTPException(409, detail=f"{pp} status isn't UP")
-            evcs = await api.get_evcs()
+            evcs = await api.get_evcs(**{"metadata.telemetry.enabled": "true"})
             self.int_manager._validate_existing_evcs_proxy_port_symmetry(intf, evcs)
             self.int_manager._validate_new_dedicated_proxy_port(intf, port_no)
         except RetryError as exc:
             raise HTTPException(424, detail=str(exc))
         except ProxyPortConflict as exc:
-            raise HTTPException(409, detail=exc.message)
+            raise HTTPException(409, detail=str(exc))
         except ProxyPortError as exc:
             raise HTTPException(404, detail=exc.message)
 
