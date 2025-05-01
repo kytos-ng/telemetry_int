@@ -24,11 +24,11 @@ from .exceptions import (
     EVCHasNoINT,
     EVCNotFound,
     FlowsNotFound,
+    ProxyPortConflict,
     ProxyPortError,
     ProxyPortNotFound,
     ProxyPortSameSourceIntraEVC,
     ProxyPortShared,
-    ProxyPortStatusNotUP,
     UnrecoverableError,
 )
 from .managers.int import INTManager
@@ -117,12 +117,7 @@ class Main(KytosNApp):
             await self.int_manager.enable_int(evcs, force)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
-        except (
-            EVCHasINT,
-            ProxyPortStatusNotUP,
-            ProxyPortSameSourceIntraEVC,
-            ProxyPortShared,
-        ) as exc:
+        except (EVCHasINT, ProxyPortConflict) as exc:
             raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
@@ -350,8 +345,12 @@ class Main(KytosNApp):
             pp = self.int_manager.get_proxy_port_or_raise(intf_id, "no_evc_id", port_no)
             if pp.status != EntityStatus.UP and not force:
                 raise HTTPException(409, detail=f"{pp} status isn't UP")
+            evcs = await api.get_evcs()
+            self.int_manager._validate_existing_evcs_proxy_port_symmetry(intf, evcs)
             self.int_manager._validate_new_dedicated_proxy_port(intf, port_no)
-        except ProxyPortShared as exc:
+        except RetryError as exc:
+            raise HTTPException(424, detail=str(exc))
+        except ProxyPortConflict as exc:
             raise HTTPException(409, detail=exc.message)
         except ProxyPortError as exc:
             raise HTTPException(404, detail=exc.message)

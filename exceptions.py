@@ -38,22 +38,38 @@ class ProxyPortNotFound(ProxyPortError):
     """ProxyPortNotFound."""
 
 
-class ProxyPortDestNotFound(ProxyPortError):
+class ProxyPortMetadataNotFound(ProxyPortNotFound):
+    """ProxyPortMetadataNotFound."""
+
+
+class ProxyPortDestNotFound(ProxyPortNotFound):
     """ProxyPorDesttNotFound."""
 
 
-class ProxyPortStatusNotUP(ProxyPortError):
+class ProxyPortConflict(ProxyPortError):
+    """ProxyPortConflict."""
+
+
+class ProxyPortRequired(ProxyPortConflict):
+    """ProxyPortRequired."""
+
+
+class ProxyPortAsymmetric(ProxyPortConflict):
+    """ProxyPortAsymmetric."""
+
+
+class ProxyPortStatusNotUP(ProxyPortConflict):
     """ProxyPortStatusNotUP."""
 
 
-class ProxyPortSameSourceIntraEVC(ProxyPortError):
+class ProxyPortSameSourceIntraEVC(ProxyPortConflict):
     """ProxyPortSameSourceIntraEVC.
 
     Intra EVC UNIs must use different proxy ports.
     """
 
 
-class ProxyPortShared(ProxyPortError):
+class ProxyPortShared(ProxyPortConflict):
     """ProxyPortShared. A shared proxy port isn't supported for now.
     Each uni should have its own proxy port"""
 
