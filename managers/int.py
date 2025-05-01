@@ -504,7 +504,7 @@ class INTManager:
         """
         for evc_id, evc in evcs.items():
             uni_a = self.controller.get_interface_by_id(evc["uni_a"]["interface_id"])
-            uni_z = self.controller.get_interface_by_id(evc["uni_a"]["interface_id"])
+            uni_z = self.controller.get_interface_by_id(evc["uni_z"]["interface_id"])
             if uni_a == intf_adding_pp and "proxy_port" not in uni_z.metadata:
                 raise ProxyPortAsymmetric(
                     evc_id,
