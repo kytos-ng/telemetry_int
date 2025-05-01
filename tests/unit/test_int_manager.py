@@ -37,9 +37,9 @@ class TestINTManager:
 
         # Now, proxy_port still hasn't been set yet
         controller.get_interface_by_id = lambda x: mock_interface_a
-        with pytest.raises(exceptions.ProxyPortNotFound) as exc:
+        with pytest.raises(exceptions.ProxyPortMetadataNotFound) as exc:
             int_manager.get_proxy_port_or_raise(intf_id, evc_id)
-        assert f"proxy_port metadata not found in {intf_id}" in str(exc)
+        assert f"metadata not found in {intf_id}" in str(exc)
 
         # Now, destination interface hasn't been mocked yet
         mock_interface_a.metadata = {"proxy_port": 5}
@@ -241,16 +241,44 @@ class TestINTManager:
         int_manager = INTManager(MagicMock())
         api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
         intf_mock.id = "some_intf_id"
-        source_id, source_port = "some_source_id", 2
-        intf_mock.metadata = {"proxy_port": source_port}
+        intf_mock.metadata = {"proxy_port": 2}
         evc_id = "3766c105686748"
-        int_manager.unis_src[intf_mock.id] = source_id
-        int_manager.srcs_pp[source_id] = pp_mock
         pp_mock.evc_ids = {evc_id}
+        int_manager.get_proxy_port_or_raise = MagicMock()
+        int_manager.get_proxy_port_or_raise.return_value = pp_mock
 
         assert "proxy_port" in intf_mock.metadata
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         api_mock.get_evcs.return_value = {evc_id: {}}
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock()
+
+        await int_manager.handle_pp_metadata_added(intf_mock)
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_count == 1
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
+        assert int_manager.disable_int.call_count == 1
+        assert int_manager.enable_int.call_count == 1
+
+    async def test_handle_pp_metadata_added_evcs_with_no_pp(self, monkeypatch):
+        """Test handle_pp_metadata_added with existing evcs with no pp."""
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        intf_mock.metadata = {"proxy_port": 2}
+        evc_id = "3766c105686748"
+        pp_mock.evc_ids = {}
+        int_manager.get_proxy_port_or_raise = MagicMock()
+        int_manager.get_proxy_port_or_raise.return_value = pp_mock
+
+        assert "proxy_port" in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {
+            evc_id: {
+                "uni_a": {"interface_id": "some_intf_id"},
+                "uni_z": {"interface_id": "another_intf_id"},
+            }
+        }
         int_manager.disable_int = AsyncMock()
         int_manager.enable_int = AsyncMock()
 
@@ -292,6 +320,7 @@ class TestINTManager:
     async def test_handle_pp_metadata_added_no_affected(self, monkeypatch):
         """Test handle_pp_metadata_added no affected evcs."""
         int_manager = INTManager(MagicMock())
+        int_manager.get_proxy_port_or_raise = MagicMock()
         api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
         intf_mock.id = "some_intf_id"
         source_id, source_port = "some_source_id", 2
@@ -325,12 +354,11 @@ class TestINTManager:
         int_manager = INTManager(MagicMock())
         api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
         intf_mock.id = "some_intf_id"
-        source_id, source_port = "some_source_id", 2
-        intf_mock.metadata = {"proxy_port": source_port}
+        intf_mock.metadata = {"proxy_port": 2}
         evc_id = "3766c105686748"
-        int_manager.unis_src[intf_mock.id] = source_id
-        int_manager.srcs_pp[source_id] = pp_mock
+        int_manager.get_proxy_port_or_raise = MagicMock()
         pp_mock.evc_ids = {evc_id}
+        int_manager.get_proxy_port_or_raise.return_value = pp_mock
 
         assert "proxy_port" in intf_mock.metadata
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
@@ -482,6 +510,70 @@ class TestINTManager:
         pp_a.source, pp_z.source = source, source
         with pytest.raises(ProxyPortShared):
             int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
+
+    def test_validate_proxy_ports_symmetry_inter_evc(self) -> None:
+        """Test _validate_proxy_ports_symmetry for inter evc."""
+        evc = {
+            "id": "some_id",
+            "uni_a": {"interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"interface_id": "00:00:00:00:00:00:00:03:1"},
+        }
+
+        controller = MagicMock()
+        int_manager = INTManager(controller)
+
+        # no proxy ports case
+        int_manager._validate_proxy_ports_symmetry(evc)
+
+        # one proxy port, asymmetric case
+        pp_a = MagicMock()
+        evc["uni_a"]["proxy_port"] = pp_a
+        with pytest.raises(exceptions.ProxyPortAsymmetric):
+            int_manager._validate_proxy_ports_symmetry(evc)
+
+        # one proxy port, still asymmetric case
+        pp_z = MagicMock()
+        evc["uni_a"].pop("proxy_port")
+        evc["uni_z"]["proxy_port"] = pp_z
+        with pytest.raises(exceptions.ProxyPortAsymmetric):
+            int_manager._validate_proxy_ports_symmetry(evc)
+
+        # symmetric case
+        evc["uni_a"]["proxy_port"] = pp_a
+        int_manager._validate_proxy_ports_symmetry(evc)
+
+    def test_validate_proxy_ports_symmetry_intra_evc(self) -> None:
+        """Test _validate_proxy_ports_symmetry intra evc."""
+        evc = {
+            "id": "some_id",
+            "uni_a": {"interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"interface_id": "00:00:00:00:00:00:00:01:2"},
+        }
+
+        controller = MagicMock()
+        int_manager = INTManager(controller)
+
+        # no proxy ports case
+        with pytest.raises(exceptions.ProxyPortRequired) as exc:
+            int_manager._validate_proxy_ports_symmetry(evc)
+        assert "intra-EVC must use proxy ports" in str(exc)
+
+        # one proxy port, asymmetric case
+        pp_a = MagicMock()
+        evc["uni_a"]["proxy_port"] = pp_a
+        with pytest.raises(exceptions.ProxyPortAsymmetric):
+            int_manager._validate_proxy_ports_symmetry(evc)
+
+        # one proxy port, still asymmetric case
+        pp_z = MagicMock()
+        evc["uni_a"].pop("proxy_port")
+        evc["uni_z"]["proxy_port"] = pp_z
+        with pytest.raises(exceptions.ProxyPortAsymmetric):
+            int_manager._validate_proxy_ports_symmetry(evc)
+
+        # symmetric case
+        evc["uni_a"]["proxy_port"] = pp_a
+        int_manager._validate_proxy_ports_symmetry(evc)
 
     def test_validate_dedicated_proxy_port_evcs_existing(self) -> None:
         """Test _validate_intra_evc_different_proxy_ports existing."""

@@ -43,6 +43,17 @@ class TestMain:
         endpoint = f"{self.base_endpoint}/evc/enable"
         response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
         assert self.napp.int_manager.enable_int.call_count == 1
+
+        enable_int_args = self.napp.int_manager.enable_int.call_args
+        # evcs arg
+        assert evc_id in enable_int_args[0][0]
+        # force arg, False by default
+        assert not enable_int_args[0][1]
+
+        assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
+        assert response.status_code == 201
+        assert response.json() == [evc_id]
+
         assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
         assert response.status_code == 201
         assert response.json() == [evc_id]
@@ -325,6 +336,7 @@ class TestMain:
     async def test_add_proxy_port_metadata(self, monkeypatch) -> None:
         """Test add proxy_port metadata."""
         api_mock = AsyncMock()
+        api_mock.get_evcs.return_value = {}
         monkeypatch.setattr(
             "napps.kytos.telemetry_int.main.api",
             api_mock,
@@ -364,6 +376,7 @@ class TestMain:
     async def test_add_proxy_port_metadata_conflict(self, monkeypatch) -> None:
         """Test add proxy_port metadata conflict."""
         api_mock = AsyncMock()
+        api_mock.get_evcs.return_value = {}
         monkeypatch.setattr(
             "napps.kytos.telemetry_int.main.api",
             api_mock,
@@ -383,6 +396,7 @@ class TestMain:
     async def test_add_proxy_port_metadata_force(self, monkeypatch) -> None:
         """Test add proxy_port metadata force."""
         api_mock = AsyncMock()
+        api_mock.get_evcs.return_value = {}
         monkeypatch.setattr(
             "napps.kytos.telemetry_int.main.api",
             api_mock,
