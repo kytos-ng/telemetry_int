@@ -106,15 +106,7 @@ class Main(KytosNApp):
                 return JSONResponse(list(evcs.keys()))
 
         try:
-            # First, it tries to get and remove the existing INT flows like mef_eline
-            stored_flows = await api.get_stored_flows(
-                [
-                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
-                    for evc_id in evcs
-                ]
-            )
-            await self.int_manager._remove_int_flows_by_cookies(stored_flows)
-            await self.int_manager.enable_int(evcs, force)
+            await self.int_manager.remove_flows_enable_int(evcs, force)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
         except (EVCHasINT, ProxyPortConflict) as exc:
@@ -606,12 +598,12 @@ class Main(KytosNApp):
 
         async with self._ofpt_error_lock:
             evc_id = utils.get_id_from_cookie(flow.cookie)
-            evc = await api.get_evc(evc_id, exclude_archived=False)
+            evcs = await api.get_evc(evc_id, exclude_archived=False)
             if (
-                not evc
-                or "telemetry" not in evc[evc_id]["metadata"]
-                or "enabled" not in evc[evc_id]["metadata"]["telemetry"]
-                or not evc[evc_id]["metadata"]["telemetry"]["enabled"]
+                not evcs
+                or "telemetry" not in evcs[evc_id]["metadata"]
+                or "enabled" not in evcs[evc_id]["metadata"]["telemetry"]
+                or not evcs[evc_id]["metadata"]["telemetry"]["enabled"]
             ):
                 return
 
@@ -632,7 +624,6 @@ class Main(KytosNApp):
                 f"flow: {flow.as_dict()} "
             )
 
-            evcs = {evc_id: {evc_id: evc_id}}
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
     @alisten_to("kytos/topology.interfaces.metadata.removed")

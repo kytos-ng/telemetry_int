@@ -176,3 +176,16 @@ def get_svlan_dpid_link(link: dict, dpid: str) -> Optional[int]:
     ):
         return link["metadata"]["s_vlan"]["value"]
     return None
+
+
+def sorted_evcs_by_svc_lvl(evcs: dict[str, dict]) -> dict[str, dict]:
+    """Sorted EVCs by service level and id.
+    This is to ensure processing by service level, and to leverage deterministic
+    EVC order processing.
+    """
+    return {
+        evc["id"]: evc
+        for evc in sorted(
+            evcs.values(), key=lambda evc: (-evc.get("service_level", 0), evc["id"])
+        )
+    }
