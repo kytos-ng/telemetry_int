@@ -1,5 +1,5 @@
 <template>
-    <k-toolbar-item icon="chart-line" tooltip="Telemetry INT">
+    <k-toolbar-item name="kytos-telemetry_int-k-toolbar-main" icon="chart-line" tooltip="Telemetry INT">
         <k-accordion>
             <k-accordion-item title="List EVCs">
                 <k-button icon="plug" title="List Installed EVCs" @click="get_EVCs">
