@@ -81,8 +81,8 @@ def test_get_new_cookie(cookie, expected) -> None:
     [
         (0xAA3766C105686749, "3766c105686749"),
         (0xAACBEE9338673946, "cbee9338673946"),
-        (0xAA0F756E60d34E4B, "0f756e60d34e4b"),
-        (0xAA00756E60d34E4B, "00756e60d34e4b")
+        (0xAA0F756E60D34E4B, "0f756e60d34e4b"),
+        (0xAA00756E60D34E4B, "00756e60d34e4b"),
     ],
 )
 def test_get_id_from_cookie(cookie, expected_evc_id) -> None:
