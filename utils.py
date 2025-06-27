@@ -87,7 +87,7 @@ def get_cookie(evc_id: str, cookie_prefix: int) -> int:
 def get_id_from_cookie(cookie: int) -> str:
     """Return the evc id given a cookie value."""
     evc_id = cookie & 0xFFFFFFFFFFFFFF
-    return f"{evc_id:x}"
+    return f"{evc_id:x}".zfill(14)
 
 
 def is_intra_switch_evc(evc):
