@@ -563,6 +563,7 @@ def inter_evc_evpl_flows_data() -> None:
     return json.loads(data)
 
 
+# pylint: disable=redefined-outer-name
 @pytest.fixture
 def inter_evc_evpl_set_queue_flows_data(inter_evc_evpl_flows_data) -> dict:
     """inter evc evpl set_queue flows data."""
