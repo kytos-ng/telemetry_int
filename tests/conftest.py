@@ -561,3 +561,21 @@ def inter_evc_evpl_flows_data() -> None:
 }
 """
     return json.loads(data)
+
+
+# pylint: disable=redefined-outer-name
+@pytest.fixture
+def inter_evc_evpl_set_queue_flows_data(inter_evc_evpl_flows_data) -> dict:
+    """inter evc evpl set_queue flows data."""
+    queue_id = 1
+    for flows in inter_evc_evpl_flows_data.values():
+        for flow in flows:
+            index = 0
+            for i, action in enumerate(flow["flow"]["actions"]):
+                if action["action_type"] == "output":
+                    index = i
+                    break
+            flow["flow"]["actions"].insert(
+                index, {"action_type": "set_queue", "queue_id": queue_id}
+            )
+    return inter_evc_evpl_flows_data

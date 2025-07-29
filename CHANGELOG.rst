@@ -7,10 +7,20 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+Fixed
+=====
+- Fixed ``get_id_from_cookie(cookie)`` utility function, now it handles EVC id with leading zeros correctly. This function is used in flow mod error handling and also in the ``GET v1/evc/compare`` endpoint
+
+Changed
+=======
+- Internal refactoring updating UI components to use ``pinia``
+
+[2025.1.0] - 2025-04-14
+***********************
+
 Changed
 =======
 - The telemetry_int modal now uses the modal component
-- k-inputs now use customClass prop to add CSS classes
 
 Fixed
 =====
