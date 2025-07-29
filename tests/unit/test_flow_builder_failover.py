@@ -77,10 +77,10 @@ async def test_handle_failover_link_down() -> None:
         mock_interface_z6.port_number: mock_interface_z6,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a5)
+    pp_a = ProxyPort(source=mock_interface_a5)
     assert pp_a.source == mock_interface_a5
     assert pp_a.destination == mock_interface_a6
-    pp_z = ProxyPort(controller, source=mock_interface_z5)
+    pp_z = ProxyPort(source=mock_interface_z5)
     assert pp_z.source == mock_interface_z5
     assert pp_z.destination == mock_interface_z6
 
@@ -273,10 +273,10 @@ async def test_handle_failover_old_path_same_svlan() -> None:
         mock_interface_z6.port_number: mock_interface_z6,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a5)
+    pp_a = ProxyPort(source=mock_interface_a5)
     assert pp_a.source == mock_interface_a5
     assert pp_a.destination == mock_interface_a6
-    pp_z = ProxyPort(controller, source=mock_interface_z5)
+    pp_z = ProxyPort(source=mock_interface_z5)
     assert pp_z.source == mock_interface_z5
     assert pp_z.destination == mock_interface_z6
 
@@ -528,10 +528,10 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
         mock_interface_z6.port_number: mock_interface_z6,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a5)
+    pp_a = ProxyPort(source=mock_interface_a5)
     assert pp_a.source == mock_interface_a5
     assert pp_a.destination == mock_interface_a6
-    pp_z = ProxyPort(controller, source=mock_interface_z5)
+    pp_z = ProxyPort(source=mock_interface_z5)
     assert pp_z.source == mock_interface_z5
     assert pp_z.destination == mock_interface_z6
 

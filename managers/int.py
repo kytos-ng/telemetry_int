@@ -5,7 +5,6 @@ import copy
 from collections import defaultdict
 from datetime import datetime
 from typing import Literal, Optional
-from tenacity import RetryError
 
 from pyof.v0x04.controller2switch.table_mod import Table
 
@@ -37,7 +36,6 @@ from napps.kytos.telemetry_int.exceptions import (
     ProxyPortRequired,
     ProxyPortSameSourceIntraEVC,
     ProxyPortShared,
-    UnrecoverableError,
 )
 
 
@@ -463,7 +461,7 @@ class INTManager:
 
         pp = self.srcs_pp.get(source_intf.id)
         if not pp:
-            pp = ProxyPort(self.controller, source_intf)
+            pp = ProxyPort(source_intf)
             self.srcs_pp[source_intf.id] = pp
 
         if not pp.destination:

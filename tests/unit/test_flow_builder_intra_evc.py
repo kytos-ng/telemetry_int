@@ -85,10 +85,10 @@ def test_build_int_flows_intra_evpl(evcs_data, intra_evc_evpl_flows_data) -> Non
         mock_interface_z21.port_number: mock_interface_z21,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a10)
+    pp_a = ProxyPort(source=mock_interface_a10)
     assert pp_a.source == mock_interface_a10
     assert pp_a.destination == mock_interface_a11
-    pp_z = ProxyPort(controller, source=mock_interface_z20)
+    pp_z = ProxyPort(source=mock_interface_z20)
     assert pp_z.source == mock_interface_z20
     assert pp_z.destination == mock_interface_z21
 
@@ -400,10 +400,10 @@ def test_build_int_flows_intra_epl(evcs_data, intra_evc_epl_flows_data) -> None:
         mock_interface_z21.port_number: mock_interface_z21,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a10)
+    pp_a = ProxyPort(source=mock_interface_a10)
     assert pp_a.source == mock_interface_a10
     assert pp_a.destination == mock_interface_a11
-    pp_z = ProxyPort(controller, source=mock_interface_z20)
+    pp_z = ProxyPort(source=mock_interface_z20)
     assert pp_z.source == mock_interface_z20
     assert pp_z.destination == mock_interface_z21
 
@@ -711,10 +711,10 @@ def test_build_int_flows_intra_epl_inactive(evcs_data) -> None:
         mock_interface_z21.port_number: mock_interface_z21,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a10)
+    pp_a = ProxyPort(source=mock_interface_a10)
     assert pp_a.source == mock_interface_a10
     assert pp_a.destination == mock_interface_a11
-    pp_z = ProxyPort(controller, source=mock_interface_z20)
+    pp_z = ProxyPort(source=mock_interface_z20)
     assert pp_z.source == mock_interface_z20
     assert pp_z.destination == mock_interface_z21
 
