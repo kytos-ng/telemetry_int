@@ -12,7 +12,9 @@ from kytos.lib.helpers import get_controller_mock, get_switch_mock, get_interfac
 from kytos.core.common import EntityStatus
 
 
-def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> None:
+def test_build_int_flows_inter_evpl(
+    evcs_data, inter_evc_evpl_set_queue_flows_data
+) -> None:
     """Test build INT flows inter EVPL.
 
                +----+                                              +----+
@@ -79,17 +81,17 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
         mock_interface_z6.port_number: mock_interface_z6,
     }[port_no]
 
-    pp_a = ProxyPort(controller, source=mock_interface_a5)
+    pp_a = ProxyPort(source=mock_interface_a5)
     assert pp_a.source == mock_interface_a5
     assert pp_a.destination == mock_interface_a6
-    pp_z = ProxyPort(controller, source=mock_interface_z5)
+    pp_z = ProxyPort(source=mock_interface_z5)
     assert pp_z.source == mock_interface_z5
     assert pp_z.destination == mock_interface_z6
 
     get_proxy_port_or_raise.side_effect = [pp_a, pp_z]
     evcs_data = {evc_id: evcs_data[evc_id]}
     evcs_data = int_manager._validate_map_enable_evcs(evcs_data)
-    stored_flows = _map_stored_flows_by_cookies(inter_evc_evpl_flows_data)
+    stored_flows = _map_stored_flows_by_cookies(inter_evc_evpl_set_queue_flows_data)
 
     cookie = get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
     flows = FlowBuilder().build_int_flows(evcs_data, stored_flows)[cookie]
@@ -162,6 +164,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                             {"action_type": "set_vlan", "vlan_id": 102},
                             {"action_type": "push_vlan", "tag_type": "s"},
                             {"action_type": "set_vlan", "vlan_id": 1},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 3},
                         ],
                     }
@@ -232,6 +235,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                             {"action_type": "set_vlan", "vlan_id": 101},
                             {"action_type": "push_vlan", "tag_type": "s"},
                             {"action_type": "set_vlan", "vlan_id": 1},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 2},
                         ],
                     }
@@ -257,6 +261,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "actions": [
                             {"action_type": "add_int_metadata"},
                             {"action_type": "set_vlan", "vlan_id": 1},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 3},
                         ],
                     }
@@ -279,6 +284,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "actions": [
                             {"action_type": "add_int_metadata"},
                             {"action_type": "set_vlan", "vlan_id": 1},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 3},
                         ],
                     }
@@ -301,6 +307,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "actions": [
                             {"action_type": "add_int_metadata"},
                             {"action_type": "set_vlan", "vlan_id": 1},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 2},
                         ],
                     }
@@ -323,6 +330,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "actions": [
                             {"action_type": "add_int_metadata"},
                             {"action_type": "set_vlan", "vlan_id": 1},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 2},
                         ],
                     }
@@ -347,6 +355,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
                     }
@@ -368,6 +377,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
                     }
@@ -409,6 +419,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "actions": [
                             {"action_type": "pop_int"},
                             {"action_type": "pop_vlan"},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 1},
                         ],
                     }
@@ -433,6 +444,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
                     }
@@ -454,6 +466,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
                     }
@@ -495,6 +508,7 @@ def test_build_int_flows_inter_evpl(evcs_data, inter_evc_evpl_flows_data) -> Non
                         "actions": [
                             {"action_type": "pop_int"},
                             {"action_type": "pop_vlan"},
+                            {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 1},
                         ],
                     }

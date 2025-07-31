@@ -508,7 +508,7 @@ class INTManager:
 
         pp = self.srcs_pp.get(source_intf.id)
         if not pp:
-            pp = ProxyPort(self.controller, source_intf)
+            pp = ProxyPort(source_intf)
             self.srcs_pp[source_intf.id] = pp
 
         if not pp.destination:
