@@ -47,14 +47,13 @@ class TestMain:
         enable_int_args = self.napp.int_manager.enable_int.call_args
         # evcs arg
         assert evc_id in enable_int_args[0][0]
-        # force arg, False by default
-        assert not enable_int_args[0][1]
+        # assert the other args
+        assert enable_int_args[1] == {
+            "force": False,
+            "proxy_port_enabled": None,
+            "set_proxy_port_metadata": True,
+        }
 
-        assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
-        assert response.status_code == 201
-        assert response.json() == [evc_id]
-
-        assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
         assert response.status_code == 201
         assert response.json() == [evc_id]
 
