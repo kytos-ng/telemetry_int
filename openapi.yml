@@ -37,6 +37,9 @@ paths:
                   type: boolean
                   description: Force INT to get enabled again. It will enable even if the EVC already has INT or if a ProxyPort isn't UP.
                   default: false
+                proxy_port_enabled:
+                  type: boolean
+                  description: Overwrites whether or not a proxy_port is expected for an inter EVC.
       responses:
         '201':
           description: INT enabled on EVCs
