@@ -16,6 +16,11 @@ Changed
 - ``proxy_port`` is now optional by default for inter EVCs
 - Internal refactoring updating UI components to use ``pinia``
 
+Added
+=====
+- EVC metadata ``proxy_port_enabled`` can overwrite whether or not a ``proxy_port`` should be used by an inter EVC. This unlocks EVPLs that shouldn't be using proxy port over UNIs that have proxy ports configured
+- Added UI for selecting ``proxy_port_enabled`` option and displaying it
+
 [2025.1.0] - 2025-04-14
 ***********************
 
