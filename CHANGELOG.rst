@@ -18,7 +18,7 @@ Changed
 
 Added
 =====
-- EVC metadata ``proxy_port_enabled`` can overwrite whether or not a ``proxy_port`` should be used by an inter EVC. This unlocks EVPLs that shouldn't be using proxy port over UNIs that have proxy ports configured
+- EVC metadata ``proxy_port_enabled`` can overwrite whether or not a ``proxy_port`` should be used by an inter EVC. This unlocks EVPLs that shouldn't be using proxy port over UNIs that have proxy ports configured. This option is exposed on the ``POST`` /v1/evc/enable endpoint
 - Added UI for selecting ``proxy_port_enabled`` option and displaying it
 
 [2025.1.0] - 2025-04-14
