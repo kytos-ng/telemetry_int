@@ -512,7 +512,7 @@ class TestMain:
         log_mock = MagicMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
         await self.napp.on_evc_deployed(KytosEvent(content=content))
-        assert log_mock.error.call_count == 1
+        assert log_mock.error.call_count == 2
 
     async def test_on_evc_deleted(self) -> None:
         """Test on_evc_deleted."""

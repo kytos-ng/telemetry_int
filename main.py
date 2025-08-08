@@ -470,11 +470,35 @@ class Main(KytosNApp):
                     proxy_port_enabled=proxy_port_enabled,
                     set_proxy_port_metadata=True,
                 )
-        except EVCError as exc:
+        except (EVCError, RetryError, UnrecoverableError) as exc:
+            excs = str(exc)
+            if isinstance(exc, RetryError):
+                excs = str(exc.last_attempt.exception())
             log.error(
-                f"Failed when handling mef_eline.deployed: {exc}. Analyze the error "
+                f"Failed when handling mef_eline.deployed: {excs}. Analyze the error "
                 f"and you'll need to enable or redeploy EVC {evc_id} later"
             )
+            metadata = {
+                "telemetry": {
+                    "enabled": False,
+                    "status": "DOWN",
+                    "status_reason": [type(exc).__name__],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            try:
+                await api.add_evcs_metadata(evcs, metadata)
+            except (RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
+                log.error(
+                    f"Failed to set INT metadata, Exception: {excs}, "
+                    f"when handling mef_eline.deployed on EVC id: {evc_id} "
+                    "You need to solve the error and then force enable INT"
+                )
 
     @alisten_to("kytos/mef_eline.undeployed")
     async def on_evc_undeployed(self, event: KytosEvent) -> None:
