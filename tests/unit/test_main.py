@@ -511,8 +511,14 @@ class TestMain:
         self.napp.int_manager.enable_int.side_effect = EVCError("no_id", "boom")
         log_mock = MagicMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
         await self.napp.on_evc_deployed(KytosEvent(content=content))
-        assert log_mock.error.call_count == 2
+        assert log_mock.error.call_count == 1
+        assert api_mock.add_evcs_metadata.call_count == 1
 
     async def test_on_evc_deleted(self) -> None:
         """Test on_evc_deleted."""

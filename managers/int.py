@@ -236,20 +236,20 @@ class INTManager:
 
             affected_evcs_list = list(affected_evcs)
             log.info(
-                f"Handling interface metadata removed on {intf}, it'll disable INT "
-                f"falling back to mef_eline, EVC ids: {affected_evcs_list}"
+                f"Handling topology.interfaces.metadata.removed on {intf}, it'll "
+                f"disable INT falling back to mef_eline, EVC ids: {affected_evcs_list}"
             )
             try:
                 await self.disable_int(
                     affected_evcs, force=True, reason="proxy_port_metadata_removed"
                 )
-            except (EVCError, RetryError) as exc:
-                exc_error = str(exc)
+            except (EVCError, RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
                 if isinstance(exc, RetryError):
-                    exc_error = str(exc.last_attempt.exception())
+                    excs = str(exc.last_attempt.exception())
                 log.error(
-                    f"Failed to disable INT, Exception: {exc_error}, "
-                    f"when handling intf metadata removed on {intf}, {pp}"
+                    f"Failed to disable INT, Exception: {excs}, when handling "
+                    f"topology.interfaces.metadata.removed on {intf}, {pp}. "
                     "You need to force disable INT on these EVC ids: "
                     f"{affected_evcs_list}"
                 )
@@ -289,69 +289,60 @@ class INTManager:
 
             affected_evcs_list = list(affected_evcs)
             log.info(
-                f"Handling interface metadata updated on {intf}. It'll disable the "
-                "EVCs to be safe, and then try to enable again with the updated "
+                f"Handling topology.interfaces.metadata.added on {intf}. It'll disable "
+                "the EVCs to be safe, and then try to enable again with the updated "
                 f" proxy port {pp}, EVC ids: {affected_evcs_list}"
             )
             try:
                 await self.disable_int(
                     affected_evcs, force=True, reason="proxy_port_metadata_added"
                 )
-            except (EVCError, RetryError) as exc:
-                exc_error = str(exc)
+            except (EVCError, RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
                 if isinstance(exc, RetryError):
-                    exc_error = str(exc.last_attempt.exception())
+                    excs = str(exc.last_attempt.exception())
                 log.error(
-                    f"Failed to disable INT, Exception: {exc_error}, "
-                    f"when handling intf metadata updated on {intf}, {pp}"
-                    "You need to force disable and then enable INT on these EVC ids: "
+                    f"Failed to disable INT, Exception: {excs}, "
+                    f"when handling topology.interfaces.metadata.added on {intf}, {pp}."
+                    " You need to force disable and then enable INT on these EVC ids: "
                     f"{affected_evcs_list}"
                 )
                 return
 
             try:
                 await self.enable_int(affected_evcs, force=True)
-            except ProxyPortConflict as exc:
-                msg = (
-                    f"Validation error when updating interface {intf}"
-                    f" EVC ids: {affected_evcs_list}, exception {str(exc)}. "
-                    " You need to solve the proxy port conflict config and then "
-                    " enable INT again"
+            except (EVCError, RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
+                log.error(
+                    f"Failed to re-enable INT, Exception: {excs} when handling "
+                    f"topology.interfaces.metadata.added on {intf}, {pp}. You need to "
+                    "analyze the error, and force enable INT later on "
+                    f"EVC ids: {affected_evcs_list}"
                 )
-                log.error(msg)
                 metadata = {
                     "telemetry": {
                         "enabled": False,
                         "status": "DOWN",
-                        "status_reason": ["proxy_port_conflict"],
+                        "status_reason": [type(exc).__name__],
                         "status_updated_at": datetime.utcnow().strftime(
                             "%Y-%m-%dT%H:%M:%S"
                         ),
                     }
                 }
-
                 try:
-                    await api.add_evcs_metadata(affected_evcs, metadata)
+                    await api.add_evcs_metadata(evcs, metadata)
                 except (RetryError, UnrecoverableError) as exc:
-                    exc_error = str(exc)
+                    excs = str(exc)
                     if isinstance(exc, RetryError):
-                        exc_error = str(exc.last_attempt.exception())
+                        excs = str(exc.last_attempt.exception())
                     log.error(
-                        f"Failed to set INT metadata, Exception: {exc_error}, "
-                        f"when handling intf metadata updated on {intf}, {pp}"
-                        "You need to solve the proxy port conflict and then "
-                        " force enable INT on these EVC ids: "
-                        f"{affected_evcs_list}"
+                        f"Failed to set INT metadata, Exception: {excs}, when handling"
+                        f"topology.interfaces.metadata.added on intf {intf}, {pp}. "
+                        "You need to solve the error and then force enable INT "
+                        f"on EVC ids: {affected_evcs_list} "
                     )
-            except (EVCError, RetryError) as exc:
-                exc_error = str(exc)
-                if isinstance(exc, RetryError):
-                    exc_error = str(exc.last_attempt.exception())
-                log.error(
-                    f"Failed to re-enable INT, Exception: {exc_error}, "
-                    f"when handling intf metadata updated on {intf}, {pp}"
-                    f"You need to enable INT on these EVC ids: {affected_evcs_list}"
-                )
 
     async def disable_int(
         self, evcs: dict[str, dict], force=False, reason="disabled"
