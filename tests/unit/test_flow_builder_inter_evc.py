@@ -13,6 +13,8 @@ from napps.kytos.telemetry_int.kytos_api_helper import _map_stored_flows_by_cook
 from kytos.lib.helpers import get_controller_mock, get_switch_mock, get_interface_mock
 from kytos.core.common import EntityStatus
 
+# pylint: disable=too-many-lines, too-many-statements
+
 
 def test_build_int_flows_inter_evpl(
     evcs_data, inter_evc_evpl_set_queue_flows_data

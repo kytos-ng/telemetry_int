@@ -29,7 +29,6 @@ from napps.kytos.telemetry_int.exceptions import (
     EVCHasNoINT,
     FlowsNotFound,
     ProxyPortAsymmetric,
-    ProxyPortConflict,
     ProxyPortMetadataNotFound,
     ProxyPortError,
     ProxyPortStatusNotUP,
