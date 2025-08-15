@@ -57,6 +57,39 @@ class TestMain:
         assert response.status_code == 201
         assert response.json() == [evc_id]
 
+    async def test_enable_telemetry_wrong_types(self, monkeypatch) -> None:
+        """Test enable telemetry wrong types."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evcs.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": False}}}
+        }
+
+        endpoint = f"{self.base_endpoint}/evc/enable"
+        response = await self.api_client.post(
+            endpoint, json={"evc_ids": [evc_id], "proxy_port_enabled": 1}
+        )
+        assert response.status_code == 400
+        assert (
+            "1 is not of type 'boolean' for field proxy_port_enabled"
+            in response.json()["description"]
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/enable"
+        response = await self.api_client.post(
+            endpoint, json={"evc_ids": [evc_id], "force": 2}
+        )
+        assert response.status_code == 400
+        assert (
+            "2 is not of type 'boolean' for field force"
+            in response.json()["description"]
+        )
+
     async def test_redeploy_telemetry_enabled(self, monkeypatch) -> None:
         """Test redeploy telemetry enabled."""
         api_mock, flow = AsyncMock(), MagicMock()
