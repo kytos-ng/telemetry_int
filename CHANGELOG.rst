@@ -15,6 +15,7 @@ Changed
 =======
 - ``proxy_port`` is now optional by default for inter EVCs
 - Internal refactoring updating UI components to use ``pinia``
+- Improved certain log messages to be more informative
 
 Added
 =====
