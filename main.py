@@ -82,15 +82,6 @@ class Main(KytosNApp):
             evc_ids = content["evc_ids"]
             force = content.get("force", False)
             proxy_port_enabled = content.get("proxy_port_enabled")
-            if not isinstance(force, bool):
-                raise TypeError(f"'force' wrong type: {type(force)} expected bool")
-            if proxy_port_enabled is not None and not isinstance(
-                proxy_port_enabled, bool
-            ):
-                raise TypeError(
-                    "'proxy_port_enabled' wrong type: "
-                    f"{type(proxy_port_enabled)} expected bool"
-                )
         except (TypeError, KeyError):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
@@ -156,8 +147,6 @@ class Main(KytosNApp):
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
             force = content.get("force", False)
-            if not isinstance(force, bool):
-                raise TypeError(f"'force' wrong type: {type(force)} expected bool")
         except (TypeError, KeyError):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
