@@ -16,6 +16,7 @@ Changed
 - ``proxy_port`` is now optional by default for inter EVCs
 - Internal refactoring updating UI components to use ``pinia``
 - Improved certain log messages to be more informative
+- Refactored /v1/evc/enable to first perform the validations before removing flows to avoid unexpected side effect
 
 Added
 =====
