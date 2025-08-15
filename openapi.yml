@@ -39,7 +39,7 @@ paths:
                   default: false
                 proxy_port_enabled:
                   type: boolean
-                  description: Overwrites whether or not a proxy_port is expected for an inter EVC.
+                  description: Overwrites whether or not a proxy_port is expected for an inter EVC. This value is always overwritten when an EVC is enabled, so if you are forcing enable make sure to also set the expected proxy_port_enabled value (or just redeploy, since redeploying won't overwrite it).
       responses:
         '201':
           description: INT enabled on EVCs
