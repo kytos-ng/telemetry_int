@@ -3,7 +3,6 @@
 from typing import Optional
 
 from kytos.core.common import EntityStatus
-from kytos.core.controller import Controller
 from kytos.core.interface import Interface
 
 
@@ -16,8 +15,7 @@ class ProxyPort:
 
     """
 
-    def __init__(self, controller: Controller, source: Interface):
-        self.controller = controller
+    def __init__(self, source: Interface):
         self.source = source
         self.evc_ids: set[str] = set()
 

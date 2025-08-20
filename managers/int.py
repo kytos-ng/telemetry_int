@@ -26,10 +26,14 @@ from napps.kytos.telemetry_int.exceptions import (
     EVCHasINT,
     EVCHasNoINT,
     FlowsNotFound,
+    ProxyPortAsymmetric,
+    ProxyPortConflict,
+    ProxyPortMetadataNotFound,
     ProxyPortError,
     ProxyPortStatusNotUP,
     ProxyPortDestNotFound,
     ProxyPortNotFound,
+    ProxyPortRequired,
     ProxyPortSameSourceIntraEVC,
     ProxyPortShared,
 )
@@ -244,17 +248,11 @@ class INTManager:
         """
         if "proxy_port" not in intf.metadata:
             return
+        pp = None
         try:
-            pp = self.srcs_pp[self.unis_src[intf.id]]
-            if not pp.evc_ids:
-                return
-        except KeyError:
-            return
-
-        cur_source_intf = intf.switch.get_interface_by_port_no(
-            intf.metadata.get("proxy_port")
-        )
-        if cur_source_intf == pp.source:
+            pp = self.get_proxy_port_or_raise(intf.id, "proxy_port")
+        except ProxyPortNotFound as exc:
+            log.error(f"Error {str(exc)} when getting interface {intf} proxy port")
             return
 
         async with self._intf_meta_lock:
@@ -264,7 +262,12 @@ class INTManager:
                 }
             )
             affected_evcs = {
-                evc_id: evc for evc_id, evc in evcs.items() if evc_id in pp.evc_ids
+                evc_id: evc
+                for evc_id, evc in evcs.items()
+                if pp
+                and evc_id in pp.evc_ids
+                or evc["uni_a"]["interface_id"] == intf.id
+                or evc["uni_z"]["interface_id"] == intf.id
             }
             if not affected_evcs:
                 return
@@ -279,7 +282,7 @@ class INTManager:
             )
             try:
                 await self.enable_int(affected_evcs, force=True)
-            except (ProxyPortSameSourceIntraEVC, ProxyPortShared) as exc:
+            except ProxyPortConflict as exc:
                 msg = (
                     f"Validation error when updating interface {intf}"
                     f" EVC ids: {list(affected_evcs)}, exception {str(exc)}"
@@ -289,7 +292,7 @@ class INTManager:
                     "telemetry": {
                         "enabled": False,
                         "status": "DOWN",
-                        "status_reason": ["proxy_port_shared"],
+                        "status_reason": ["proxy_port_conflict"],
                         "status_updated_at": datetime.utcnow().strftime(
                             "%Y-%m-%dT%H:%M:%S"
                         ),
@@ -348,6 +351,8 @@ class INTManager:
         2 - ProxyPort isn't UP
         Other cases won't be bypassed since at the point it won't have the data needed.
 
+        A proxy port is only used for an inter-EVC if it's been pre-configured,
+        otherwise by default it's not expected to be in place.
         """
         evcs = self._validate_map_enable_evcs(evcs, force)
         log.info(f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}")
@@ -408,8 +413,10 @@ class INTManager:
                 continue
             if any(
                 (
-                    evc["uni_a"]["proxy_port"].status != EntityStatus.UP,
-                    evc["uni_z"]["proxy_port"].status != EntityStatus.UP,
+                    "proxy_port" in evc["uni_a"]
+                    and evc["uni_a"]["proxy_port"].status != EntityStatus.UP,
+                    "proxy_port" in evc["uni_z"]
+                    and evc["uni_z"]["proxy_port"].status != EntityStatus.UP,
                 )
             ):
                 pp_down_evcs[evc_id] = evc
@@ -442,9 +449,7 @@ class INTManager:
             raise ProxyPortNotFound(evc_id, f"UNI interface {intf_id} not found")
 
         if new_port_number is None and "proxy_port" not in interface.metadata:
-            raise ProxyPortNotFound(
-                evc_id, f"proxy_port metadata not found in {intf_id}"
-            )
+            raise ProxyPortMetadataNotFound(evc_id, f"metadata not found in {intf_id}")
 
         port_no = new_port_number or interface.metadata.get("proxy_port")
         source_intf = interface.switch.get_interface_by_port_no(port_no)
@@ -456,7 +461,7 @@ class INTManager:
 
         pp = self.srcs_pp.get(source_intf.id)
         if not pp:
-            pp = ProxyPort(self.controller, source_intf)
+            pp = ProxyPort(source_intf)
             self.srcs_pp[source_intf.id] = pp
 
         if not pp.destination:
@@ -487,6 +492,46 @@ class INTManager:
                 utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
             ):
                 raise FlowsNotFound(evc_id)
+
+    def _validate_existing_evcs_proxy_port_symmetry(
+        self, intf_adding_pp: Interface, evcs: dict[str, dict]
+    ) -> None:
+        """Validate existing EVCs proxy port symmetry before adding proxy port metadata.
+        This is needed to validate since when optional proxy ports were introduced.
+        """
+        for evc_id, evc in evcs.items():
+            uni_a = self.controller.get_interface_by_id(evc["uni_a"]["interface_id"])
+            uni_z = self.controller.get_interface_by_id(evc["uni_z"]["interface_id"])
+            if uni_a == intf_adding_pp and "proxy_port" not in uni_z.metadata:
+                raise ProxyPortAsymmetric(
+                    evc_id,
+                    f"proxy port asymmetry. uni_z {uni_z.id} doesn't have "
+                    f"a proxy port but uni_a {intf_adding_pp.id} would have ",
+                )
+            if uni_z == intf_adding_pp and "proxy_port" not in uni_a.metadata:
+                raise ProxyPortAsymmetric(
+                    evc_id,
+                    f"proxy port asymmetry. uni_a {uni_a.id} doesn't have "
+                    f"a proxy port but uni_z {intf_adding_pp.id} would have ",
+                )
+
+    def _validate_proxy_ports_symmetry(self, evc: dict) -> None:
+        """Validate proxy ports symmetry for a given EVC."""
+
+        pp_a = evc["uni_a"].get("proxy_port")
+        pp_z = evc["uni_z"].get("proxy_port")
+        if any(
+            (
+                pp_a and not pp_z,
+                not pp_a and pp_z,
+            )
+        ):
+            raise ProxyPortAsymmetric(
+                evc["id"], f"proxy ports asymmetry. pp_a: {pp_a}, pp_z: {pp_z}"
+            )
+
+        if utils.is_intra_switch_evc(evc) and not pp_a and not pp_z:
+            raise ProxyPortRequired(evc["id"], "intra-EVC must use proxy ports")
 
     def _validate_intra_evc_different_proxy_ports(self, evc: dict) -> None:
         """Validate that an intra EVC is using different proxy ports.
@@ -541,8 +586,14 @@ class INTManager:
         """
         seen_src_unis: dict[str, str] = {}
         for evc in evcs.values():
-            pp_a, unia_id = evc["uni_a"]["proxy_port"], evc["uni_a"]["interface_id"]
-            pp_z, uniz_id = evc["uni_z"]["proxy_port"], evc["uni_z"]["interface_id"]
+            try:
+                pp_a, pp_z = evc["uni_a"]["proxy_port"], evc["uni_z"]["proxy_port"]
+            except KeyError:
+                continue
+            unia_id, uniz_id = (
+                evc["uni_a"]["interface_id"],
+                evc["uni_z"]["interface_id"],
+            )
             for cur_uni_id, cur_src_id in self.unis_src.items():
                 for uni_id, pp in zip((unia_id, uniz_id), (pp_a, pp_z)):
                     if uni_id != cur_uni_id and cur_src_id == pp.source.id:
@@ -585,11 +636,19 @@ class INTManager:
                 continue
             try:
                 uni_a, uni_z = utils.get_evc_unis(evc)
+                evc["id"] = evc_id
+                evc["uni_a"], evc["uni_z"] = uni_a, uni_z
                 pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
                 pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
                 uni_a["proxy_port"], uni_z["proxy_port"] = pp_a, pp_z
-                evc["id"] = evc_id
-                evc["uni_a"], evc["uni_z"] = uni_a, uni_z
+            except ProxyPortMetadataNotFound as e:
+                if utils.is_intra_switch_evc(evc):
+                    log.error(
+                        f"Unexpected proxy port state on intra EVC: {str(e)}."
+                        f"INT will be removed on evc id {evc_id}"
+                    )
+                    to_remove_with_err[evc_id] = evc
+                    continue
             except ProxyPortError as e:
                 log.error(
                     f"Unexpected proxy port state: {str(e)}."
@@ -679,11 +738,29 @@ class INTManager:
                 raise EVCHasINT(evc_id)
 
             uni_a, uni_z = utils.get_evc_unis(evc)
-            pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
-            pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
-
-            uni_a["proxy_port"], uni_z["proxy_port"] = pp_a, pp_z
             evc["uni_a"], evc["uni_z"] = uni_a, uni_z
+
+            pp_a = None
+            try:
+                pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
+                uni_a["proxy_port"] = pp_a
+            except ProxyPortMetadataNotFound:
+                pass
+            except ProxyPortError:
+                raise
+
+            pp_z = None
+            try:
+                pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
+                uni_z["proxy_port"] = pp_z
+            except ProxyPortMetadataNotFound:
+                pass
+            except ProxyPortError:
+                raise
+
+            self._validate_proxy_ports_symmetry(evc)
+            if not pp_a and not pp_z:
+                continue
 
             if pp_a.status != EntityStatus.UP and not force:
                 dest_id = pp_a.destination.id if pp_a.destination else None
@@ -720,12 +797,16 @@ class INTManager:
         """
         for evc_id, evc in evcs.items():
             uni_a, uni_z = utils.get_evc_unis(evc)
-            pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
-            pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
-            pp_a.evc_ids.add(evc_id)
-            pp_z.evc_ids.add(evc_id)
-            self.unis_src[evc["uni_a"]["interface_id"]] = pp_a.source.id
-            self.unis_src[evc["uni_z"]["interface_id"]] = pp_z.source.id
+            try:
+                pp_a = self.get_proxy_port_or_raise(uni_a["interface_id"], evc_id)
+                pp_z = self.get_proxy_port_or_raise(uni_z["interface_id"], evc_id)
+                pp_a.evc_ids.add(evc_id)
+                pp_z.evc_ids.add(evc_id)
+                self.unis_src[evc["uni_a"]["interface_id"]] = pp_a.source.id
+                self.unis_src[evc["uni_z"]["interface_id"]] = pp_z.source.id
+            except ProxyPortMetadataNotFound:
+                if utils.is_intra_switch_evc(evc):
+                    raise
 
     def _discard_pps_evc_ids(self, evcs: dict[str, dict]) -> None:
         """Discard proxy port evc_ids.

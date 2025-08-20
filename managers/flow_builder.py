@@ -8,6 +8,7 @@ from typing import Literal
 
 from napps.kytos.telemetry_int import utils
 from napps.kytos.telemetry_int import settings
+from napps.kytos.telemetry_int.exceptions import ProxyPortRequired
 
 
 class FlowBuilder:
@@ -46,10 +47,13 @@ class FlowBuilder:
     ) -> dict[int, list[dict]]:
         """Build (old path) failover related to remove flows.
 
+        With proxy ports:
         If sink NNIs svlan are different, it'll regenerate the rest of sink loop flows.
         Otherwise, it'll just remove the same received flows except with int cookie
         value the deletion uses flow mod OFPFC_DELETE, so no need to include the
         additional INT keys in the match like nw_proto for deletion.
+
+        Without proxy ports: It'll rebuild the sink flows
         """
 
         removed_flows = defaultdict(list)
@@ -76,29 +80,39 @@ class FlowBuilder:
 
             for flow in old_flows[cookie]:
                 if not sink_a_flows and flow["switch"] == dpid_a:
-                    if (
-                        flow["flow"]["match"]["dl_vlan"] != cur_sink_a_svlan
-                        and cur_sink_a_svlan
-                    ):
+                    if "proxy_port" not in evc["uni_a"]:
                         sink_a_flows = self._build_int_sink_flows(
                             "uni_a", evc, old_flows
                         )
                     else:
-                        flow["flow"]["cookie"] = int_cookie
-                        utils.set_owner(flow)
-                        sink_a_flows = [flow]
+                        if (
+                            flow["flow"]["match"]["dl_vlan"] != cur_sink_a_svlan
+                            and cur_sink_a_svlan
+                        ):
+                            sink_a_flows = self._build_int_sink_flows(
+                                "uni_a", evc, old_flows
+                            )
+                        else:
+                            flow["flow"]["cookie"] = int_cookie
+                            utils.set_owner(flow)
+                            sink_a_flows = [flow]
                 elif not sink_z_flows and flow["switch"] == dpid_z:
-                    if (
-                        flow["flow"]["match"]["dl_vlan"] != cur_sink_z_svlan
-                        and cur_sink_z_svlan
-                    ):
+                    if "proxy_port" not in evc["uni_z"]:
                         sink_z_flows = self._build_int_sink_flows(
                             "uni_z", evc, old_flows
                         )
                     else:
-                        flow["flow"]["cookie"] = int_cookie
-                        utils.set_owner(flow)
-                        sink_z_flows = [flow]
+                        if (
+                            flow["flow"]["match"]["dl_vlan"] != cur_sink_z_svlan
+                            and cur_sink_z_svlan
+                        ):
+                            sink_z_flows = self._build_int_sink_flows(
+                                "uni_z", evc, old_flows
+                            )
+                        else:
+                            flow["flow"]["cookie"] = int_cookie
+                            utils.set_owner(flow)
+                            sink_z_flows = [flow]
                 if sink_a_flows and sink_z_flows:
                     break
 
@@ -260,6 +274,17 @@ class FlowBuilder:
         evc: dict,
         stored_flows: dict[int, list[dict]],
     ) -> list[dict]:
+        """Build INT sink flows."""
+        if "proxy_port" in evc[uni_dst_key]:
+            return self._build_int_sink_flows_proxy_port(uni_dst_key, evc, stored_flows)
+        return self._build_int_sink_flows_no_proxy_port(uni_dst_key, evc, stored_flows)
+
+    def _build_int_sink_flows_proxy_port(
+        self,
+        uni_dst_key: Literal["uni_a", "uni_z"],
+        evc: dict,
+        stored_flows: dict[int, list[dict]],
+    ) -> list[dict]:
         """
         Build INT sink flows.
 
@@ -356,6 +381,88 @@ class FlowBuilder:
                     instruction["actions"].insert(0, {"action_type": "pop_int"})
 
             new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
+            new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
+
+        return new_flows
+
+    def _build_int_sink_flows_no_proxy_port(
+        self,
+        uni_dst_key: Literal["uni_a", "uni_z"],
+        evc: dict,
+        stored_flows: dict[int, list[dict]],
+    ) -> list[dict]:
+        """
+        Build INT sink flows NO proxy port, it won't add int_metadata.
+
+        This is only supported for inter-EVCs
+
+        At the INT sink, one flow becomes many:
+
+        1. Table 0: send_report and go to table X (2 or 3)
+        2. Table X (2 or 3): pop_int, and output
+        """
+        new_flows = []
+        dst_uni = evc[uni_dst_key]
+        dpid = dst_uni["switch"]
+
+        if utils.is_intra_switch_evc(evc):
+            raise ProxyPortRequired(evc["id"], "intra-EVC must use proxy ports")
+
+        for flow in stored_flows[
+            utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)
+        ]:
+            # Only consider this sink's dpid flows
+            if flow["switch"] != dpid:
+                continue
+            # Only consider flows coming from NNI interfaces
+            if flow["flow"]["match"]["in_port"] == dst_uni["port_number"]:
+                continue
+
+            new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
+
+            if not new_int_flow_tbl_0_tcp:
+                continue
+
+            utils.set_new_cookie(new_int_flow_tbl_0_tcp)
+            utils.set_owner(new_int_flow_tbl_0_tcp)
+            utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
+            # Save flow for Table X
+            new_int_flow_tbl_x_pos = copy.deepcopy(new_int_flow_tbl_0_tcp)
+
+            new_int_flow_tbl_0_tcp["flow"]["instructions"] = []
+            new_int_flow_tbl_0_tcp["flow"]["match"]["dl_type"] = settings.IPv4
+            new_int_flow_tbl_0_tcp["flow"]["match"]["nw_proto"] = settings.TCP
+            utils.set_priority(new_int_flow_tbl_0_tcp)
+
+            # INT send_report and goto_table actions
+            table_group = self.table_group
+            new_table_id = table_group[new_int_flow_tbl_0_tcp["flow"]["table_group"]]
+            instructions = [
+                {
+                    "instruction_type": "apply_actions",
+                    "actions": [{"action_type": "send_report"}],
+                },
+                {
+                    "instruction_type": "goto_table",
+                    "table_id": new_table_id,
+                },
+            ]
+            new_int_flow_tbl_0_tcp["flow"]["instructions"] = instructions
+
+            # Prepare UDP Flow for Table 0
+            new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
+            new_int_flow_tbl_0_udp["flow"]["match"]["nw_proto"] = settings.UDP
+
+            new_flows.append(copy.deepcopy(new_int_flow_tbl_0_tcp))
+            new_flows.append(copy.deepcopy(new_int_flow_tbl_0_udp))
+
+            # Prepare Flows for Table X
+            new_int_flow_tbl_x_pos["flow"]["table_id"] = new_table_id
+
+            for instruction in new_int_flow_tbl_x_pos["flow"]["instructions"]:
+                if instruction["instruction_type"] == "apply_actions":
+                    instruction["actions"].insert(0, {"action_type": "pop_int"})
+
             new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
 
         return new_flows

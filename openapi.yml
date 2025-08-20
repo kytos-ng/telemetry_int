@@ -49,7 +49,7 @@ paths:
         '400':
           description: Invalid request payload
         '409':
-          description: Conflict resource state. For instance, when an EVC already has INT or a ProxyPort status isn't UP.
+          description: Conflict resource state. For instance, when an EVC already has INT or a ProxyPort status isn't UP or a ProxyPort configuration isn't supported.
           content:
             application/json:
               schema:
@@ -189,7 +189,7 @@ paths:
   /v1/uni/{interface_id}/proxy_port/{port_number}:
     post:
       summary: Set proxy port metadata on a UNI
-      description: Set proxy port metadata on a UNI. Each UNI should use a different proxy port. If the proxy port is being updated, INT will be redeployed. If the proxy port is being set for the first time, you will need to enable INT on EVC afterwards.
+      description: Set proxy port metadata on a UNI. Each UNI should use a different proxy port, also it validades for proxy port symmetric configuration (either both UNIs use a proxy port or not). If the proxy port is being updated, INT will be redeployed. If the proxy port is being set for the first time, you will need to enable INT on EVC afterwards.
       operationId: set_proxy_port
       parameters:
         - name: interface_id
