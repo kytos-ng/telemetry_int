@@ -29,6 +29,24 @@ def has_int_enabled(evc: dict) -> bool:
     )
 
 
+def set_proxy_port_value(evc: dict, proxy_port_enabled: Optional[bool] = None) -> dict:
+    """Set proxy_port_enabled metadata value for an existing EVC."""
+    if not evc or not isinstance(evc, dict):
+        return evc
+    if "metadata" not in evc:
+        evc["metadata"] = {}
+    evc["metadata"]["proxy_port_enabled"] = proxy_port_enabled
+    return evc
+
+
+def get_evc_proxy_port_value(evc: dict) -> Optional[bool]:
+    """Get proxy_port_enabled from EVC metadata."""
+    try:
+        return evc["metadata"]["proxy_port_enabled"]
+    except (KeyError, TypeError):
+        return None
+
+
 def get_evc_unis(evc: dict) -> tuple[dict, dict]:
     """Parse evc for unis."""
     uni_a_split = evc["uni_a"]["interface_id"].split(":")

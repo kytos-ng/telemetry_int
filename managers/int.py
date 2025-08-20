@@ -20,6 +20,8 @@ from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from kytos.core.common import EntityStatus
 from napps.kytos.telemetry_int.proxy_port import ProxyPort
 
+from tenacity import RetryError
+
 from napps.kytos.telemetry_int.exceptions import (
     EVCError,
     EVCNotFound,
@@ -27,7 +29,6 @@ from napps.kytos.telemetry_int.exceptions import (
     EVCHasNoINT,
     FlowsNotFound,
     ProxyPortAsymmetric,
-    ProxyPortConflict,
     ProxyPortMetadataNotFound,
     ProxyPortError,
     ProxyPortStatusNotUP,
@@ -36,6 +37,7 @@ from napps.kytos.telemetry_int.exceptions import (
     ProxyPortRequired,
     ProxyPortSameSourceIntraEVC,
     ProxyPortShared,
+    UnrecoverableError,
 )
 
 
@@ -231,13 +233,25 @@ class INTManager:
             if not affected_evcs:
                 return
 
+            affected_evcs_list = list(affected_evcs)
             log.info(
-                f"Handling interface metadata removed on {intf}, it'll disable INT "
-                f"falling back to mef_eline, EVC ids: {list(affected_evcs)}"
+                f"Handling topology.interfaces.metadata.removed on {intf}, it'll "
+                f"disable INT falling back to mef_eline, EVC ids: {affected_evcs_list}"
             )
-            await self.disable_int(
-                affected_evcs, force=True, reason="proxy_port_metadata_removed"
-            )
+            try:
+                await self.disable_int(
+                    affected_evcs, force=True, reason="proxy_port_metadata_removed"
+                )
+            except (EVCError, RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
+                log.error(
+                    f"Failed to disable INT, Exception: {excs}, when handling "
+                    f"topology.interfaces.metadata.removed on {intf}, {pp}. "
+                    "You need to force disable INT on these EVC ids: "
+                    f"{affected_evcs_list}"
+                )
 
     async def handle_pp_metadata_added(self, intf: Interface) -> None:
         """Handle proxy port metadata added.
@@ -272,33 +286,62 @@ class INTManager:
             if not affected_evcs:
                 return
 
+            affected_evcs_list = list(affected_evcs)
             log.info(
-                f"Handling interface metadata updated on {intf}. It'll disable the "
-                "EVCs to be safe, and then try to enable again with the updated "
-                f" proxy port {pp}, EVC ids: {list(affected_evcs)}"
-            )
-            await self.disable_int(
-                affected_evcs, force=True, reason="proxy_port_metadata_added"
+                f"Handling topology.interfaces.metadata.added on {intf}. It'll disable "
+                "the EVCs to be safe, and then try to enable again with the updated "
+                f" proxy port {pp}, EVC ids: {affected_evcs_list}"
             )
             try:
-                await self.enable_int(affected_evcs, force=True)
-            except ProxyPortConflict as exc:
-                msg = (
-                    f"Validation error when updating interface {intf}"
-                    f" EVC ids: {list(affected_evcs)}, exception {str(exc)}"
+                await self.disable_int(
+                    affected_evcs, force=True, reason="proxy_port_metadata_added"
                 )
-                log.error(msg)
+            except (EVCError, RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
+                log.error(
+                    f"Failed to disable INT, Exception: {excs}, "
+                    f"when handling topology.interfaces.metadata.added on {intf}, {pp}."
+                    " You need to force disable and then enable INT on these EVC ids: "
+                    f"{affected_evcs_list}"
+                )
+                return
+
+            try:
+                await self.enable_int(affected_evcs, force=True)
+            except (EVCError, RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
+                log.error(
+                    f"Failed to re-enable INT, Exception: {excs} when handling "
+                    f"topology.interfaces.metadata.added on {intf}, {pp}. You need to "
+                    "analyze the error, and force enable INT later on "
+                    f"EVC ids: {affected_evcs_list}"
+                )
                 metadata = {
                     "telemetry": {
                         "enabled": False,
                         "status": "DOWN",
-                        "status_reason": ["proxy_port_conflict"],
+                        "status_reason": [type(exc).__name__],
                         "status_updated_at": datetime.utcnow().strftime(
                             "%Y-%m-%dT%H:%M:%S"
                         ),
                     }
                 }
-                await api.add_evcs_metadata(affected_evcs, metadata)
+                try:
+                    await api.add_evcs_metadata(evcs, metadata)
+                except (RetryError, UnrecoverableError) as exc:
+                    excs = str(exc)
+                    if isinstance(exc, RetryError):
+                        excs = str(exc.last_attempt.exception())
+                    log.error(
+                        f"Failed to set INT metadata, Exception: {excs}, when handling"
+                        f"topology.interfaces.metadata.added on intf {intf}, {pp}. "
+                        "You need to solve the error and then force enable INT "
+                        f"on EVC ids: {affected_evcs_list} "
+                    )
 
     async def disable_int(
         self, evcs: dict[str, dict], force=False, reason="disabled"
@@ -340,12 +383,21 @@ class INTManager:
             api.add_evcs_metadata(evcs, metadata, force),
         )
 
-    async def enable_int(self, evcs: dict[str, dict], force=False) -> None:
+    async def enable_int(
+        self,
+        evcs: dict[str, dict],
+        force=False,
+        proxy_port_enabled: Optional[bool] = None,
+        set_proxy_port_metadata=False,
+    ) -> None:
         """Enable INT on EVCs.
 
         evcs is a dict of prefetched EVCs from mef_eline based on evc_ids.
 
         The force bool option, if True, will bypass the following:
+        The proxy_port_enabled option, is to overwrite at the EVC level whether
+        or not proxy_port should be enabled for the EVC regardless of interface
+        proxy_port configuration
 
         1 - EVC already has INT
         2 - ProxyPort isn't UP
@@ -353,9 +405,18 @@ class INTManager:
 
         A proxy port is only used for an inter-EVC if it's been pre-configured,
         otherwise by default it's not expected to be in place.
+
+        Before enabling INT, like mef_eline, it'll remove the INT flows first.
         """
-        evcs = self._validate_map_enable_evcs(evcs, force)
-        log.info(f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}")
+        evcs = self._validate_map_enable_evcs(evcs, force, proxy_port_enabled)
+        stored_flows = await api.get_stored_flows(
+            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
+        )
+        await self._remove_int_flows_by_cookies(stored_flows)
+        log.info(
+            f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}, "
+            f"proxy_port_enabled: {proxy_port_enabled}"
+        )
 
         metadata = {
             "telemetry": {
@@ -365,6 +426,8 @@ class INTManager:
                 "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
             }
         }
+        if set_proxy_port_metadata:
+            metadata["proxy_port_enabled"] = proxy_port_enabled
         await self.install_int_flows(evcs, metadata)
         self._add_pps_evc_ids(evcs)
 
@@ -528,6 +591,17 @@ class INTManager:
         ):
             raise ProxyPortAsymmetric(
                 evc["id"], f"proxy ports asymmetry. pp_a: {pp_a}, pp_z: {pp_z}"
+            )
+
+        if (
+            not utils.is_intra_switch_evc(evc)
+            and utils.get_evc_proxy_port_value(evc)
+            and (not pp_a or not pp_z)
+        ):
+            raise ProxyPortRequired(
+                evc["id"],
+                "with proxy_port_enabled must have both proxy ports set, "
+                f"pp_a: {pp_a}, pp_z: {pp_z}",
             )
 
         if utils.is_intra_switch_evc(evc) and not pp_a and not pp_z:
@@ -724,6 +798,7 @@ class INTManager:
         self,
         evcs: dict[str, dict],
         force=False,
+        proxy_port_enabled: Optional[bool] = None,
     ) -> dict[str, dict]:
         """Validate map enabling EVCs.
 
@@ -758,6 +833,12 @@ class INTManager:
             except ProxyPortError:
                 raise
 
+            if (
+                not utils.is_intra_switch_evc(evc)
+                and not proxy_port_enabled
+                or utils.get_evc_proxy_port_value(evc) is False
+            ):
+                continue
             self._validate_proxy_ports_symmetry(evc)
             if not pp_a and not pp_z:
                 continue

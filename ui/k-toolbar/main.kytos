@@ -91,6 +91,7 @@ module.exports = {
                 EVC_Obj["active"] = EVC_Data[EVC].active
                 EVC_Obj["id"] = EVC_Data[EVC].id
                 EVC_Obj["name"] = EVC_Data[EVC].name
+                EVC_Obj["proxy_port_enabled"] = EVC_Data[EVC].metadata.proxy_port_enabled != null ? EVC_Data[EVC].metadata.proxy_port_enabled : "N/A"
                 if (EVC_Data[EVC].metadata?.telemetry) {
                     EVC_Obj["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled.toString()
                     EVC_Obj["status"] = EVC_Data[EVC].metadata.telemetry.status

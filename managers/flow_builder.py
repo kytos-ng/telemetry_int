@@ -275,9 +275,23 @@ class FlowBuilder:
         stored_flows: dict[int, list[dict]],
     ) -> list[dict]:
         """Build INT sink flows."""
-        if "proxy_port" in evc[uni_dst_key]:
-            return self._build_int_sink_flows_proxy_port(uni_dst_key, evc, stored_flows)
-        return self._build_int_sink_flows_no_proxy_port(uni_dst_key, evc, stored_flows)
+        match utils.get_evc_proxy_port_value(evc):
+            case True:
+                return self._build_int_sink_flows_proxy_port(
+                    uni_dst_key, evc, stored_flows
+                )
+            case False:
+                return self._build_int_sink_flows_no_proxy_port(
+                    uni_dst_key, evc, stored_flows
+                )
+            case _:
+                if "proxy_port" in evc[uni_dst_key]:
+                    return self._build_int_sink_flows_proxy_port(
+                        uni_dst_key, evc, stored_flows
+                    )
+                return self._build_int_sink_flows_no_proxy_port(
+                    uni_dst_key, evc, stored_flows
+                )
 
     def _build_int_sink_flows_proxy_port(
         self,
