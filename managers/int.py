@@ -420,38 +420,11 @@ class INTManager:
         Before enabling INT, like mef_eline, it'll remove the INT flows first.
         """
         evcs = self._validate_map_enable_evcs(evcs, force, proxy_port_enabled)
-        stored_flows = await api.get_stored_flows(
-            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
-        )
-        await self._remove_int_flows_by_cookies(stored_flows)
         log.info(
             f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}, "
             f"proxy_port_enabled: {proxy_port_enabled}"
         )
 
-        metadata = {
-            "telemetry": {
-                "enabled": True,
-                "status": "UP",
-                "status_reason": [],
-                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
-            }
-        }
-        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
-        async with AsyncExitStack() as stack:
-            _ = [
-                await stack.enter_async_context(self._evcs_lock[evc_id])
-                for evc_id in evcs
-            ]
-            if set_proxy_port_metadata:
-                metadata["proxy_port_enabled"] = proxy_port_enabled
-            await self.install_int_flows(evcs, metadata)
-            self._add_pps_evc_ids(evcs)
-
-    async def remove_flows_enable_int(self, evcs: dict[str, dict], force=False) -> None:
-        """Remove flows and Enable INT on EVCs.
-        Similar behavior as mef_eline, removing flows first.
-        """
         evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             _ = [
@@ -465,7 +438,20 @@ class INTManager:
                 ]
             )
             await self._remove_int_flows_by_cookies(stored_flows)
-        await self.enable_int(evcs, force)
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "UP",
+                    "status_reason": [],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            if set_proxy_port_metadata:
+                metadata["proxy_port_enabled"] = proxy_port_enabled
+            await self.install_int_flows(evcs, metadata)
+        self._add_pps_evc_ids(evcs)
 
     async def redeploy_int(self, evcs: dict[str, dict]) -> None:
         """Redeploy INT on EVCs. It'll remove, install and update metadata.
@@ -828,12 +814,7 @@ class INTManager:
                 }
             }
             to_remove_with_err = utils.sorted_evcs_by_svc_lvl(to_remove_with_err)
-            async with AsyncExitStack() as stack:
-                _ = [
-                    await stack.enter_async_context(self._evcs_lock[evc_id])
-                    for evc_id in to_remove_with_err
-                ]
-                await self.remove_int_flows(to_remove_with_err, metadata, force=True)
+            await self.remove_int_flows(to_remove_with_err, metadata, force=True)
         if to_install:
             log.info(
                 f"Handling {event_name} flows install on EVC ids: {to_install.keys()}"
