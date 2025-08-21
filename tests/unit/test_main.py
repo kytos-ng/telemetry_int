@@ -42,16 +42,53 @@ class TestMain:
 
         endpoint = f"{self.base_endpoint}/evc/enable"
         response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
-        assert self.napp.int_manager.remove_flows_enable_int.call_count == 1
+        assert self.napp.int_manager.enable_int.call_count == 1
 
-        enable_int_args = self.napp.int_manager.remove_flows_enable_int.call_args
+        enable_int_args = self.napp.int_manager.enable_int.call_args
         # evcs arg
         assert evc_id in enable_int_args[0][0]
-        # force arg, False by default
-        assert not enable_int_args[0][1]
+        # assert the other args
+        assert enable_int_args[1] == {
+            "force": False,
+            "proxy_port_enabled": None,
+            "set_proxy_port_metadata": True,
+        }
 
         assert response.status_code == 201
         assert response.json() == [evc_id]
+
+    async def test_enable_telemetry_wrong_types(self, monkeypatch) -> None:
+        """Test enable telemetry wrong types."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evcs.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": False}}}
+        }
+
+        endpoint = f"{self.base_endpoint}/evc/enable"
+        response = await self.api_client.post(
+            endpoint, json={"evc_ids": [evc_id], "proxy_port_enabled": 1}
+        )
+        assert response.status_code == 400
+        assert (
+            "1 is not of type 'boolean' for field proxy_port_enabled"
+            in response.json()["description"]
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/enable"
+        response = await self.api_client.post(
+            endpoint, json={"evc_ids": [evc_id], "force": 2}
+        )
+        assert response.status_code == 400
+        assert (
+            "2 is not of type 'boolean' for field force"
+            in response.json()["description"]
+        )
 
     async def test_redeploy_telemetry_enabled(self, monkeypatch) -> None:
         """Test redeploy telemetry enabled."""
@@ -507,8 +544,14 @@ class TestMain:
         self.napp.int_manager.enable_int.side_effect = EVCError("no_id", "boom")
         log_mock = MagicMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
+        api_mock = AsyncMock()
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.main.api",
+            api_mock,
+        )
         await self.napp.on_evc_deployed(KytosEvent(content=content))
         assert log_mock.error.call_count == 1
+        assert api_mock.add_evcs_metadata.call_count == 1
 
     async def test_on_evc_deleted(self) -> None:
         """Test on_evc_deleted."""

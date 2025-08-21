@@ -81,8 +81,7 @@ class Main(KytosNApp):
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
             force = content.get("force", False)
-            if not isinstance(force, bool):
-                raise TypeError(f"'force' wrong type: {type(force)} expected bool")
+            proxy_port_enabled = content.get("proxy_port_enabled")
         except (TypeError, KeyError):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
@@ -98,15 +97,29 @@ class Main(KytosNApp):
             raise HTTPException(503, detail=exc_error)
 
         if evc_ids:
-            evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
+            evcs = {
+                evc_id: utils.set_proxy_port_value(
+                    evcs.get(evc_id, {}), proxy_port_enabled
+                )
+                for evc_id in evc_ids
+            }
         else:
-            evcs = {k: v for k, v in evcs.items() if not utils.has_int_enabled(v)}
+            evcs = {
+                k: utils.set_proxy_port_value(v, proxy_port_enabled)
+                for k, v in evcs.items()
+                if not utils.has_int_enabled(v)
+            }
             if not evcs:
                 # There's no non-INT EVCs to get enabled.
                 return JSONResponse(list(evcs.keys()))
 
         try:
-            await self.int_manager.remove_flows_enable_int(evcs, force)
+            await self.int_manager.enable_int(
+                evcs,
+                force=force,
+                proxy_port_enabled=proxy_port_enabled,
+                set_proxy_port_metadata=True,
+            )
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
         except (EVCHasINT, ProxyPortConflict) as exc:
@@ -134,8 +147,6 @@ class Main(KytosNApp):
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
             force = content.get("force", False)
-            if not isinstance(force, bool):
-                raise TypeError(f"'force' wrong type: {type(force)} expected bool")
         except (TypeError, KeyError):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
@@ -441,12 +452,42 @@ class Main(KytosNApp):
                 and "telemetry" not in content["metadata"]
             ):
                 log.info(f"Handling mef_eline.deployed on EVC id: {evc_id}")
-                await self.int_manager.enable_int(evcs, force=True)
-        except EVCError as exc:
+                proxy_port_enabled = content["metadata"].get("proxy_port_enabled")
+                await self.int_manager.enable_int(
+                    evcs,
+                    force=True,
+                    proxy_port_enabled=proxy_port_enabled,
+                    set_proxy_port_metadata=True,
+                )
+        except (EVCError, RetryError, UnrecoverableError) as exc:
+            excs = str(exc)
+            if isinstance(exc, RetryError):
+                excs = str(exc.last_attempt.exception())
             log.error(
-                f"Failed when handling mef_eline.deployed: {exc}. Analyze the error "
+                f"Failed when handling mef_eline.deployed: {excs}. Analyze the error "
                 f"and you'll need to enable or redeploy EVC {evc_id} later"
             )
+            metadata = {
+                "telemetry": {
+                    "enabled": False,
+                    "status": "DOWN",
+                    "status_reason": [type(exc).__name__],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            try:
+                await api.add_evcs_metadata(evcs, metadata)
+            except (RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
+                log.error(
+                    f"Failed to set INT metadata, Exception: {excs}, "
+                    f"when handling mef_eline.deployed on EVC id: {evc_id} "
+                    "You need to solve the error and then force enable INT"
+                )
 
     @alisten_to("kytos/mef_eline.undeployed")
     async def on_evc_undeployed(self, event: KytosEvent) -> None:

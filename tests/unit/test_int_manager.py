@@ -412,8 +412,8 @@ class TestINTManager:
         )
 
         int_manager = INTManager(controller)
-        int_manager.remove_int_flows = AsyncMock()
         evc_id = "3766c105686749"
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
         evcs = {
             evc_id: {
                 "active": True,
@@ -434,6 +434,7 @@ class TestINTManager:
         await int_manager.enable_int(evcs, False)
 
         assert stored_flows_mock.call_count == 1
+        assert int_manager._remove_int_flows_by_cookies.call_count == 1
         assert api_mock.add_evcs_metadata.call_count == 3
         args = api_mock.add_evcs_metadata.call_args[0]
         assert "telemetry" in args[1]
@@ -543,6 +544,14 @@ class TestINTManager:
         # symmetric case
         evc["uni_a"]["proxy_port"] = pp_a
         int_manager._validate_proxy_ports_symmetry(evc)
+
+        # cover ProxyPortRequired for inter EVC with metadata
+        evc["uni_a"].pop("proxy_port")
+        evc["uni_z"].pop("proxy_port")
+        evc["metadata"] = {"proxy_port_enabled": True}
+        with pytest.raises(exceptions.ProxyPortRequired) as exc:
+            int_manager._validate_proxy_ports_symmetry(evc)
+        assert "proxy_port_enabled" in str(exc)
 
     def test_validate_proxy_ports_symmetry_intra_evc(self) -> None:
         """Test _validate_proxy_ports_symmetry intra evc."""

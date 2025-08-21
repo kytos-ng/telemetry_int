@@ -377,3 +377,46 @@ def test_sorted_evcs_by_svc_lvl() -> None:
     sorted_evcs = utils.sorted_evcs_by_svc_lvl(evcs)
     assert list(sorted_evcs.keys()) == list(expected.keys())
     assert list(sorted_evcs.values()) == list(expected.values())
+
+
+@pytest.mark.parametrize(
+    "evc,proxy_port_enabled,expected",
+    [
+        ({"metadata": {}}, True, {"metadata": {"proxy_port_enabled": True}}),
+        (
+            {"metadata": {"other": "value"}},
+            False,
+            {"metadata": {"other": "value", "proxy_port_enabled": False}},
+        ),
+        (
+            {"metadata": {"proxy_port_enabled": True}},
+            False,
+            {"metadata": {"proxy_port_enabled": False}},
+        ),
+        ({}, True, {}),
+    ],
+)
+def test_set_proxy_port_value(evc, proxy_port_enabled, expected) -> None:
+    """Test set_proxy_port_value function."""
+    result = utils.set_proxy_port_value(evc, proxy_port_enabled)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "evc,expected",
+    [
+        ({"metadata": {"proxy_port_enabled": True}}, True),
+        ({"metadata": {"proxy_port_enabled": False}}, False),
+        ({"metadata": {"proxy_port_enabled": None}}, None),
+        ({"metadata": {}}, None),
+        ({}, None),
+        ({"metadata": {"other": "value"}}, None),
+        (None, None),
+        ("invalid", None),
+        ([], None),
+    ],
+)
+def test_get_evc_proxy_port_value(evc, expected) -> None:
+    """Test get_evc_proxy_port_value function."""
+    result = utils.get_evc_proxy_port_value(evc)
+    assert result == expected
