@@ -26,45 +26,25 @@ module.exports = {
     methods: {
         //API request for EVC data
         get_EVCs() {
-            var self = this
-            let request = $.ajax({
-                            type:"GET",
-                            dataType: "json",
-                            url: this.$kytos_server_api + "kytos/mef_eline/v2/evc/",
-                            async: true});
-            request.done(function(data) {
-                self.extract_TelemetryINTData(data)
-                self.display_InfoPanel()
-            });
-            request.fail(function(data) {
-                let notification = {
-                    icon: 'cog',
-                    title: 'Could not retrieve EVCs',
-                    description: data.status.toString() + ": " + data.responseJSON.description
-                }
-                self.$kytos.eventBus.$emit("setNotification", notification)
-            });
+            this.$http.get(this.$kytos_server_api + "kytos/mef_eline/v2/evc/")
+            .then(response => {
+              this.extract_TelemetryINTData(response.data)
+              this.display_InfoPanel()
+            })
+            .catch(error => {
+              this.$http_helpers.post_error(this, error, 'Could not retrieve EVCs');
+            })
         },
         //API request for getting Proxy Ports
         get_proxy_ports() {
-            const self = this
-            const request = $.ajax({
-                            type:"GET",
-                            dataType: "json",
-                            url: this.$kytos_server_api + "kytos/telemetry_int/v1/uni/proxy_port",
-                            async: true});
-            request.done(function(data) {
-                self.set_proxy_ports(data)
-                self.display_proxy_port_info_panel()
-            });
-            request.fail(function(data) {
-                let notification = {
-                    icon: 'cog',
-                    title: 'Could not retrieve proxy ports',
-                    description: data.status.toString() + ": " + data.responseJSON.description
-                }
-                self.$kytos.eventBus.$emit("setNotification", notification)
-            });
+            this.$http.get(this.$kytos_server_api + "kytos/telemetry_int/v1/uni/proxy_port")
+            .then(response => {
+              this.set_proxy_ports(response.data)
+              this.display_proxy_port_info_panel()
+            })
+            .catch(error => {
+              this.$http_helpers.post_error(this, error, 'Could not retrieve proxy ports');
+            })
         },
         set_proxy_ports(data){
             this.proxy_ports = data.map((obj) => 
