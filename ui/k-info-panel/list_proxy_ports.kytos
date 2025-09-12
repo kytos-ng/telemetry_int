@@ -154,30 +154,19 @@
                 const split = self.pp_intf.split(":")
                 const port_no = split[split.length - 1]
                 const uni_intf = self.uni_intf
-                const request = $.ajax({
-                                type:"POST",
-                                dataType: "json",
-                                contentType: "application/json",
-                                url: this.$kytos_server_api + `kytos/telemetry_int/v1/uni/${uni_intf}/proxy_port/${port_no}?force=${this.force_set.includes('set')}`,
-                                async: true})
-                request.done(function(data) {
+                self.$http.post(self.$kytos_server_api + `kytos/telemetry_int/v1/uni/${uni_intf}/proxy_port/${port_no}?force=${self.force_set.includes('set')}`)
+                .then(response => {
                     let notification = {
                         icon: 'check',
                         title: `Set UNI ${uni_intf} proxy_port number ${port_no}`,
-                        description: data.responseJSON
+                        description: response.data.responseJSON
                     }
                     self.$kytos.eventBus.$emit("kytos/telemetry_int/refetch-proxy-ports")
                     self.reset_inputs()
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: 'Could not set proxy_port',
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
+                .catch(error => {
+                  self.$http_helpers.post_error(self, error, 'Could not set proxy_port')
                 })
             },
             set_del_uni_intf(uni_intf) {
@@ -185,29 +174,19 @@
                 this.modal_display()
             },
             del_proxy_port(uni_intf) {
-                const request = $.ajax({
-                                type:"DELETE",
-                                dataType: "json",
-                                contentType: "application/json",
-                                url: this.$kytos_server_api + `kytos/telemetry_int/v1/uni/${uni_intf}/proxy_port?force=${this.force_del.includes('del')}`,
-                                async: true})
-                request.done(function(data) {
+                const self = this
+                self.$http.delete(self.$kytos_server_api + `kytos/telemetry_int/v1/uni/${uni_intf}/proxy_port?force=${self.force_del.includes('del')}`)
+                .then(response => {
                     let notification = {
                         icon: 'check',
                         title: `Deleted UNI ${uni_intf} proxy_port`,
-                        description: data.responseJSON
+                        description: response.data.responseJSON
                     }
                     self.$kytos.eventBus.$emit("kytos/telemetry_int/refetch-proxy-ports")
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: `Could not delete proxy_port of UNI ${uni_intf}`,
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
+                .catch(error => {
+                  self.$http_helpers.post_error(self, error, `Could not delete proxy_port of UNI ${uni_intf}`)
                 })
             },
             modal_display() {
@@ -218,13 +197,12 @@
             },
             get_topology_interfaces(){
               const self = this
-              $.ajax({
-                async: true,
-                dataType: "json",
-                url: this.$kytos_server_api + "kytos/topology/v3/interfaces",
-                success: function(data) {
-                  self.fetched_interfaces = data['interfaces']
-                }
+              self.$http.get(this.$kytos_server_api + "kytos/topology/v3/interfaces")
+              .then(response => {
+                self.fetched_interfaces = response.data['interfaces']
+              })
+              .catch(error => {
+                self.$http_helpers.post_error(self, error, 'Could not get topology interfaces');
               })
             }
         },

@@ -160,32 +160,20 @@
                 if (this.proxyPortOption !== null) {
                     payload["proxy_port_enabled"] = this.proxyPortOption
                 }
-                let request = $.ajax({
-                                type:"POST",
-                                dataType: "json",
-                                contentType: "application/json",
-                                data: JSON.stringify(payload),
-                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
-                                async: true});
-                request.done(function(data) {
-                    let notification = {
-                        icon: 'check',
-                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
-                        description: ''
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: 'Could not enable INT on EVCs',
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
+                self.$http.post(self.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable", payload)
+                .then(response => {
+                  let notification = {
+                      icon: 'check',
+                      title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
+                      description: ''
+                  }
+                  self.get_EVCs()
+                  self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+                .catch(error => {
+                  self.$http_helpers.post_error(self, error, 'Could not enable INT on EVCs')
+                  self.get_EVCs()
+                })
             },
             //API request to disable EVCs selected within UI
             disableSelectedEVCs() {
@@ -198,32 +186,20 @@
                 if (this.forceOption[0]) {
                     payload["force"] = true
                 }
-                let request = $.ajax({
-                                type:"POST",
-                                dataType: "json",
-                                contentType: "application/json",
-                                data: JSON.stringify(payload),
-                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/disable",
-                                async: true});
-                request.done(function(data) {
-                    let notification = {
-                        icon: 'check',
-                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' disabled.',
-                        description: ''
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: 'Could not disable INT on EVCs',
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
+                self.$http.post(self.$kytos_server_api + "kytos/telemetry_int/v1/evc/disable", payload)
+                .then(response => {
+                  let notification = {
+                      icon: 'check',
+                      title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' disabled.',
+                      description: ''
+                  }
+                  self.get_EVCs()
+                  self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+                .catch(error => {
+                  self.$http_helpers.post_error(self, error, 'Could not disable INT on EVCs')
+                  self.get_EVCs()
+                })
             },
             //API request to redeploy EVCs selected within UI
             redeploySelectedEVCs() {
@@ -233,53 +209,30 @@
                     evc_id.push(EVC.toString())
                 }
                 let payload = {evc_ids: this.selectedEVCs}
-                let request = $.ajax({
-                                type:"PATCH",
-                                dataType: "json",
-                                contentType: "application/json",
-                                data: JSON.stringify(payload),
-                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/redeploy",
-                                async: true});
-                request.done(function(data) {
-                    let notification = {
-                        icon: 'check',
-                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' redeployed.',
-                        description: ''
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: 'Could not redeploy INT on EVCs',
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
+                self.$http.patch(self.$kytos_server_api + "kytos/telemetry_int/v1/evc/redeploy", payload)
+                .then(response => {
+                  let notification = {
+                      icon: 'check',
+                      title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' redeployed.',
+                      description: ''
+                  }
+                  self.get_EVCs()
+                  self.$kytos.eventBus.$emit("setNotification", notification)
+                })
+                .catch(error => {
+                  self.$http_helpers.post_error(self, error, 'Could not redeploy INT on EVCs')
+                  self.get_EVCs()
+                })
             },
             //API request for EVC data
             get_EVCs() {
-                var self = this
-                let request = $.ajax({
-                                type:"GET",
-                                dataType: "json",
-                                url: this.$kytos_server_api + "kytos/mef_eline/v2/evc/",
-                                async: true});
-                request.done(function(data) {
-                    self.extract_TelemetryINTData(data)
-                });
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: 'Could not retrieve EVCs',
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
+                this.$http.get(this.$kytos_server_api + "kytos/mef_eline/v2/evc/")
+                .then(response => {
+                  this.extract_TelemetryINTData(response.data)
+                })
+                .catch(error => {
+                  this.$http_helpers.post_error(this, error, 'Could not retrieve EVCs');
+                })
             },
             /**
              * @param {Object} EVC_Data - The EVC data from mef_eline.
