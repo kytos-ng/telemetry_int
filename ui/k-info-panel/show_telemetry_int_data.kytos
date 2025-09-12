@@ -157,6 +157,9 @@
                 if (this.forceOption[0]) {
                     payload["force"] = true
                 }
+                if (this.proxyPortOption !== null) {
+                    payload["proxy_port_enabled"] = this.proxyPortOption
+                }
                 self.$http.post(self.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable", payload)
                 .then(response => {
                   let notification = {
@@ -171,35 +174,6 @@
                   self.$http_helpers.post_error(self, error, 'Could not enable INT on EVCs')
                   self.get_EVCs()
                 })
-                if (this.proxyPortOption !== null) {
-                    payload["proxy_port_enabled"] = this.proxyPortOption
-                }
-                let request = $.ajax({
-                                type:"POST",
-                                dataType: "json",
-                                contentType: "application/json",
-                                data: JSON.stringify(payload),
-                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
-                                async: true});
-                request.done(function(data) {
-                    let notification = {
-                        icon: 'check',
-                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
-                        description: ''
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
-                request.fail(function(data) {
-                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
-                    let notification = {
-                        icon: 'cog',
-                        title: 'Could not enable INT on EVCs',
-                        description: data.status.toString() + ": " + content
-                    }
-                    self.get_EVCs()
-                    self.$kytos.eventBus.$emit("setNotification", notification)
-                });
             },
             //API request to disable EVCs selected within UI
             disableSelectedEVCs() {
