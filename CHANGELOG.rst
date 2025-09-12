@@ -15,6 +15,7 @@ Changed
 =======
 - ``proxy_port`` is now optional by default for inter EVCs
 - Internal refactoring updating UI components to use ``pinia``
+- Internal UI refactoring replacing ajax with axios
 
 [2025.1.0] - 2025-04-14
 ***********************
