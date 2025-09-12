@@ -166,7 +166,7 @@
                     self.$kytos.eventBus.$emit("setNotification", notification)
                 })
                 .catch(error => {
-                  self.$http_helpers.post_error(self, error, 'Could not set proxy_port'')
+                  self.$http_helpers.post_error(self, error, 'Could not set proxy_port')
                 })
             },
             set_del_uni_intf(uni_intf) {
