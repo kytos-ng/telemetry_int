@@ -10,6 +10,8 @@
                         <k-button icon="truck-moving" title="Redeploy Selected" tooltip="Redeploy INT on selected EVCs" @click="redeploySelectedEVCs()"></k-button>
                     </k-button-group>
                     <k-checkbox title="Force" v-model:model="forceOption" :value="true"></k-checkbox>
+                    <k-dropdown class="compact-dropdown" title="Inter EVC Proxy Port Enabled: " :options="proxyPortOptions"
+                    v-model:value="proxyPortOption"></k-dropdown>
                 </k-accordion-item>
                 <!--
                     Sections/Tables:
@@ -25,13 +27,14 @@
                                     <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('id')">ID &nbsp;{{sortIdentifierList[0]}}</th>
                                     <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('name')">Name &nbsp;{{sortIdentifierList[1]}}</th>
                                     <th class="sortable-column" rowspan="2" colspan="1" @click="changeSortedColumn('active')">Active &nbsp;{{sortIdentifierList[2]}}</th>
-                                    <th rowspan="1" colspan="4">Telemetry</th>
+                                    <th rowspan="1" colspan="5">Telemetry</th>
                                 </tr>
                                 <tr>
                                     <th class="sortable-column" @click="changeSortedColumn('enabled')">Enabled &nbsp;{{sortIdentifierList[3]}}</th>
                                     <th class="sortable-column" @click="changeSortedColumn('status')">Status &nbsp;{{sortIdentifierList[4]}}</th>
                                     <th class="sortable-column" @click="changeSortedColumn('status_reason')">Status Reason &nbsp;{{sortIdentifierList[5]}}</th>
-                                    <th class="sortable-column" @click="changeSortedColumn('status_updated_at')">Status Updated At &nbsp;{{sortIdentifierList[6]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('proxy_port_enabled')">Proxy Port Enabled &nbsp;{{sortIdentifierList[6]}}</th>
+                                    <th class="sortable-column" @click="changeSortedColumn('status_updated_at')">Status Updated At &nbsp;{{sortIdentifierList[7]}}</th>
                                 </tr>
                                 <tr>
                                     <th>
@@ -57,6 +60,9 @@
                                     <th>
                                         <input v-model="EVCTextFilter[6][1]"></input>
                                     </th>
+                                    <th>
+                                        <input v-model="EVCTextFilter[7][1]"></input>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -68,6 +74,7 @@
                                     <td>{{item.enabled}}</td>
                                     <td :class="statusColor(item)">{{item.status}}</td>
                                     <td>{{item.status_reason}}</td>
+                                    <td>{{item.proxy_port_enabled}}</td>
                                     <td>{{item.status_updated_at}}</td>
                                 </tr>
                             </tbody>
@@ -96,16 +103,18 @@
                     ["enabled", ""],
                     ["status", ""],
                     ["status_reason", ""],
+                    ["proxy_port_enabled", ""],
                     ["status_updated_at", ""]
                 ],
                 selectedEVCs: [],
                 forceOption: [],
                 sortedColumnName: ["", 0],
-                sortIdentifier: {id: 0, name: 1, active: 2, enabled: 3, status: 4, status_reason: 5, status_updated_at: 6},
+                sortIdentifier: {id: 0, name: 1, active: 2, enabled: 3, status: 4, status_reason: 5, proxy_port_enabled: 6, status_updated_at: 7},
                 sortSymbols: ["▲", "▼"],
-                sortIdentifierList: ["", "", "", "", "", "", ""],
+                sortIdentifierList: ["", "", "", "", "", "", "", ""],
                 showDelModal: false,
-                currentTableData: []
+                currentTableData: [],
+                proxyPortOption: null
             }
         },
         methods: {
@@ -162,6 +171,35 @@
                   self.$http_helpers.post_error(self, error, 'Could not enable INT on EVCs')
                   self.get_EVCs()
                 })
+                if (this.proxyPortOption !== null) {
+                    payload["proxy_port_enabled"] = this.proxyPortOption
+                }
+                let request = $.ajax({
+                                type:"POST",
+                                dataType: "json",
+                                contentType: "application/json",
+                                data: JSON.stringify(payload),
+                                url: this.$kytos_server_api + "kytos/telemetry_int/v1/evc/enable",
+                                async: true});
+                request.done(function(data) {
+                    let notification = {
+                        icon: 'check',
+                        title: 'EVCs with ID: ' + self.selectedEVCs.toString() + ' enabled.',
+                        description: ''
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
+                request.fail(function(data) {
+                    const content = data.responseJSON ? data.responseJSON.description : data.responseText
+                    let notification = {
+                        icon: 'cog',
+                        title: 'Could not enable INT on EVCs',
+                        description: data.status.toString() + ": " + content
+                    }
+                    self.get_EVCs()
+                    self.$kytos.eventBus.$emit("setNotification", notification)
+                });
             },
             //API request to disable EVCs selected within UI
             disableSelectedEVCs() {
@@ -233,6 +271,7 @@
                     EVC_Obj["active"] = EVC_Data[EVC].active
                     EVC_Obj["id"] = EVC_Data[EVC].id
                     EVC_Obj["name"] = EVC_Data[EVC].name
+                    EVC_Obj["proxy_port_enabled"] = EVC_Data[EVC].metadata.proxy_port_enabled != null ? EVC_Data[EVC].metadata.proxy_port_enabled : "N/A"
                     if (EVC_Data[EVC].metadata?.telemetry) {
                         EVC_Obj["enabled"] = EVC_Data[EVC].metadata.telemetry.enabled.toString()
                         EVC_Obj["status"] = EVC_Data[EVC].metadata.telemetry.status
@@ -265,7 +304,8 @@
                     let filtered_data = current_data.filter((EVC) => {
                         for (const tableColumn of this.EVCTextFilter) {
                             let separatedFilter = tableColumn[1].toString()
-                            let separatedProperty = EVC[tableColumn[0]].toString()
+                            let propertyValue = EVC[tableColumn[0]]
+                            let separatedProperty = (propertyValue != null) ? propertyValue.toString() : ""
                             if (!(separatedProperty.includes(separatedFilter) || separatedFilter.includes(separatedProperty))) {
                                 return false
                             }
@@ -297,6 +337,14 @@
                     }
                 }
                 return current_data
+            },
+            //Proxy port dropdown values
+            proxyPortOptions(){
+              return [
+                {value: null, description: "none", selected: true},
+                {value: true, description: "true"},
+                {value: false, description: "false"}
+              ];
             }
         },
         //Extracts data from localStorage (if available) when first mounted.
@@ -380,5 +428,12 @@
     .sortable-column:hover {
         color: #eee;
         background-color: #322c5d;
+    }
+    .compact-dropdown {
+        flex: 0 0 auto !important;
+        width: 15em !important;
+        max-width: 15em !important;
+        min-width: 15em !important;
+        overflow: hidden !important;
     }
 </style>

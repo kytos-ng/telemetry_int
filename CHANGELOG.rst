@@ -16,6 +16,13 @@ Changed
 - ``proxy_port`` is now optional by default for inter EVCs
 - Internal refactoring updating UI components to use ``pinia``
 - Internal UI refactoring replacing ajax with axios
+- Improved certain log messages to be more informative
+- Refactored /v1/evc/enable to first perform the validations before removing flows to avoid unexpected side effect
+
+Added
+=====
+- EVC metadata ``proxy_port_enabled`` can overwrite whether or not a ``proxy_port`` should be used by an inter EVC. This unlocks EVPLs that shouldn't be using proxy port over UNIs that have proxy ports configured. This option is exposed on the ``POST`` /v1/evc/enable endpoint
+- Added UI for selecting ``proxy_port_enabled`` option and displaying it
 
 [2025.1.0] - 2025-04-14
 ***********************
