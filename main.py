@@ -664,8 +664,7 @@ class Main(KytosNApp):
                 f"error_code: {event.content.get('error_code')}, "
                 f"flow: {flow.as_dict()} "
             )
-
-            evcs = {evc_id: {evc_id: evc_id}}
+            evcs = evc
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
     @alisten_to("kytos/topology.interfaces.metadata.removed")

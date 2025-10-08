@@ -412,12 +412,14 @@ class TestINTManager:
         )
 
         int_manager = INTManager(controller)
+        evc_id = "3766c105686749"
         int_manager._remove_int_flows_by_cookies = AsyncMock()
         evcs = {
-            "3766c105686749": {
+            evc_id: {
                 "active": True,
                 "uni_a": MagicMock(),
                 "uni_z": MagicMock(),
+                "id": evc_id,
             }
         }
         int_manager._validate_map_enable_evcs = MagicMock()
