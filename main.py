@@ -639,12 +639,12 @@ class Main(KytosNApp):
 
         async with self._ofpt_error_lock:
             evc_id = utils.get_id_from_cookie(flow.cookie)
-            evcs = await api.get_evc(evc_id, exclude_archived=False)
+            evc = await api.get_evc(evc_id, exclude_archived=False)
             if (
-                not evcs
-                or "telemetry" not in evcs[evc_id]["metadata"]
-                or "enabled" not in evcs[evc_id]["metadata"]["telemetry"]
-                or not evcs[evc_id]["metadata"]["telemetry"]["enabled"]
+                not evc
+                or "telemetry" not in evc[evc_id]["metadata"]
+                or "enabled" not in evc[evc_id]["metadata"]["telemetry"]
+                or not evc[evc_id]["metadata"]["telemetry"]["enabled"]
             ):
                 return
 
@@ -664,7 +664,7 @@ class Main(KytosNApp):
                 f"error_code: {event.content.get('error_code')}, "
                 f"flow: {flow.as_dict()} "
             )
-
+            evcs = evc
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
     @alisten_to("kytos/topology.interfaces.metadata.removed")
