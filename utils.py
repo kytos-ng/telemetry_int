@@ -1,6 +1,6 @@
 """ Support function for main.py """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from napps.kytos.telemetry_int import settings
 
@@ -27,6 +27,33 @@ def has_int_enabled(evc: dict) -> bool:
         and "enabled" in evc["metadata"]["telemetry"]
         and evc["metadata"]["telemetry"]["enabled"]
     )
+
+
+def has_uni_vlan_type(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
+    """Check if a given EVC UNI has vlan type."""
+    try:
+        return evc[uni_key]["tag"]["tag_type"] in (1, "vlan")
+    except (TypeError, KeyError):
+        return False
+
+
+def has_vlan_translation(evc: dict) -> bool:
+    """Check if a given EVC has vlan translation."""
+    try:
+        return (
+            has_uni_vlan_type(evc, "uni_a")
+            and has_uni_vlan_type(evc, "uni_z")
+            and isinstance(evc["uni_a"]["tag"]["value"], int)
+            and isinstance(evc["uni_z"]["tag"]["value"], int)
+            and evc["uni_a"]["tag"]["value"] != evc["uni_z"]["tag"]["value"]
+        )
+    except (TypeError, KeyError):
+        return False
+
+
+def has_qinq(evc: dict) -> bool:
+    """Check if an EVC has qinq."""
+    return not has_vlan_translation(evc)
 
 
 def set_proxy_port_value(evc: dict, proxy_port_enabled: Optional[bool] = None) -> dict:

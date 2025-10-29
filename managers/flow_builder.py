@@ -170,6 +170,8 @@ class FlowBuilder:
         # The flow_manager has two outputs: instructions and actions.
         table_group = self.table_group
         new_table_id = table_group[new_int_flow_tbl_x["flow"]["table_group"]]
+        if "tag" in src_uni and isinstance(src_uni["tag"]["value"], list):
+            new_table_id = self.table_group["epl"]
         instructions = [
             {
                 "instruction_type": "apply_actions",
@@ -303,17 +305,37 @@ class FlowBuilder:
         Build INT sink flows.
 
         At the INT sink, one flow becomes many:
-        1. Before the proxy, we do add_int_metadata as an INT hop.
-        We need to keep the set_queue
-        2. After the proxy, we do send_report and pop_int and output
+        1. Before the proxy, we do add_int_metadata as an INT hop,
+        and either pop the s-vlan if it has qinq or set_vlan to its c-vlan
+        We need to keep the set_queue.
+        2. After the proxy, we do send_report, pop_int, and output for UNI flows
+        vlan range UNIs can have more than one flow.
         We only use table 0 for #1.
         We use table X (2 or 3) for #2. for pop_int and output
         """
         new_flows = []
+        uni_vlan_flows = []
+        # TODO also differentiate between any/untagged and validate cehck requirements
+        pos_proxy_flows = []
         dst_uni = evc[uni_dst_key]
         proxy_port = dst_uni["proxy_port"]
         dpid = dst_uni["switch"]
+        has_qinq = utils.has_qinq(evc)
 
+        for flow in stored_flows[
+            utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)
+        ]:
+            # Only consider this sink's dpid flows
+            if flow["switch"] != dpid:
+                continue
+            # Include UNI dl_vlan match flows
+            if (
+                flow["flow"]["match"]["in_port"] == dst_uni["port_number"]
+                and "dl_vlan" in flow["flow"]["match"]
+            ):
+                uni_vlan_flows.append(flow)
+
+        # Prepare NNI table 0 pre proxy flows
         for flow in stored_flows[
             utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)
         ]:
@@ -334,8 +356,7 @@ class FlowBuilder:
             utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
 
             # Save for pos-proxy flows
-            new_int_flow_tbl_0_pos = copy.deepcopy(new_int_flow_tbl_0_tcp)
-            new_int_flow_tbl_x_pos = copy.deepcopy(new_int_flow_tbl_0_tcp)
+            pos_proxy_flows.append(copy.deepcopy(new_int_flow_tbl_0_tcp))
 
             # Prepare TCP Flow for Table 0 PRE proxy
             if not utils.is_intra_switch_evc(evc):
@@ -354,6 +375,18 @@ class FlowBuilder:
                             remove=True,
                         )
                         actions.insert(0, {"action_type": "add_int_metadata"})
+                        if has_qinq:
+                            # pop the s-vlan before sending to the loop
+                            actions.insert(1, {"action_type": "pop_vlan"})
+                        else:
+                            # has vlan translation
+                            actions.insert(
+                                1,
+                                {
+                                    "action_type": "set_vlan",
+                                    "vlan_id": dst_uni["tag"]["value"],
+                                },
+                            )
                         actions.append(
                             {"action_type": "output", "port": output_port_no}
                         )
@@ -366,6 +399,10 @@ class FlowBuilder:
                 new_flows.append(copy.deepcopy(new_int_flow_tbl_0_tcp))
                 new_flows.append(copy.deepcopy(new_int_flow_tbl_0_udp))
 
+        for flow in pos_proxy_flows:
+            new_int_flow_tbl_0_pos = copy.deepcopy(flow)
+            new_int_flow_tbl_x_pos = copy.deepcopy(flow)
+
             # Prepare Flows for Table 0 AFTER proxy. No difference between TCP or UDP
             in_port_no = proxy_port.destination.port_number
 
@@ -374,6 +411,11 @@ class FlowBuilder:
 
             table_group = self.table_group
             new_table_id = table_group[new_int_flow_tbl_x_pos["flow"]["table_group"]]
+            if not uni_vlan_flows:
+                new_table_id = self.table_group["epl"]
+            else:
+                if isinstance(dst_uni["tag"]["value"], list):
+                    new_table_id = self.table_group["epl"]
             instructions = [
                 {
                     "instruction_type": "apply_actions",
@@ -392,10 +434,27 @@ class FlowBuilder:
 
             for instruction in new_int_flow_tbl_x_pos["flow"]["instructions"]:
                 if instruction["instruction_type"] == "apply_actions":
+                    # Keep set_queue and output
+                    instruction["actions"] = utils.modify_actions(
+                        instruction["actions"],
+                        ["pop_vlan", "push_vlan", "set_vlan"],
+                        remove=True,
+                    )
                     instruction["actions"].insert(0, {"action_type": "pop_int"})
 
-            new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
-            new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
+            if uni_vlan_flows:
+                # vlan range can have multiple dl_vlan match entries
+                for uni_vlan_flow in uni_vlan_flows:
+                    uni_vlan = uni_vlan_flow["flow"]["match"]["dl_vlan"]
+                    new_int_flow_tbl_0_pos["flow"]["match"]["dl_vlan"] = uni_vlan
+                    new_int_flow_tbl_x_pos["flow"]["match"]["dl_vlan"] = uni_vlan
+                    new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
+                    new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
+            else:
+                new_int_flow_tbl_0_pos["flow"]["match"].pop("dl_vlan", None)
+                new_int_flow_tbl_x_pos["flow"]["match"].pop("dl_vlan", None)
+                new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
+                new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
 
         return new_flows
 
