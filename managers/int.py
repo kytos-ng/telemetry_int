@@ -5,6 +5,7 @@ import copy
 from collections import defaultdict
 from datetime import datetime
 from typing import Literal, Optional
+from contextlib import AsyncExitStack
 
 from pyof.v0x04.controller2switch.table_mod import Table
 
@@ -50,6 +51,7 @@ class INTManager:
         self.flow_builder = FlowBuilder()
         self._topo_link_lock = asyncio.Lock()
         self._intf_meta_lock = asyncio.Lock()
+        self._evcs_lock: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
         # Keep track between each uni intf id and its src intf id port
         self.unis_src: dict[str, str] = {}
@@ -375,13 +377,22 @@ class INTManager:
         self, evcs: dict[str, dict], metadata: dict, force=False
     ) -> None:
         """Remove INT flows and set metadata on EVCs."""
-        stored_flows = await api.get_stored_flows(
-            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
-        )
-        await asyncio.gather(
-            self._remove_int_flows_by_cookies(stored_flows),
-            api.add_evcs_metadata(evcs, metadata, force),
-        )
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        async with AsyncExitStack() as stack:
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in evcs
+            ]
+            stored_flows = await api.get_stored_flows(
+                [
+                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                    for evc_id in evcs
+                ]
+            )
+            await asyncio.gather(
+                self._remove_int_flows_by_cookies(stored_flows),
+                api.add_evcs_metadata(evcs, metadata, force),
+            )
 
     async def enable_int(
         self,
@@ -409,26 +420,37 @@ class INTManager:
         Before enabling INT, like mef_eline, it'll remove the INT flows first.
         """
         evcs = self._validate_map_enable_evcs(evcs, force, proxy_port_enabled)
-        stored_flows = await api.get_stored_flows(
-            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
-        )
-        await self._remove_int_flows_by_cookies(stored_flows)
         log.info(
             f"Enabling INT on EVC ids: {list(evcs.keys())}, force: {force}, "
             f"proxy_port_enabled: {proxy_port_enabled}"
         )
 
-        metadata = {
-            "telemetry": {
-                "enabled": True,
-                "status": "UP",
-                "status_reason": [],
-                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        async with AsyncExitStack() as stack:
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in evcs
+            ]
+            stored_flows = await api.get_stored_flows(
+                [
+                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                    for evc_id in evcs
+                ]
+            )
+            await self._remove_int_flows_by_cookies(stored_flows)
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "UP",
+                    "status_reason": [],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
             }
-        }
-        if set_proxy_port_metadata:
-            metadata["proxy_port_enabled"] = proxy_port_enabled
-        await self.install_int_flows(evcs, metadata)
+            if set_proxy_port_metadata:
+                metadata["proxy_port_enabled"] = proxy_port_enabled
+            await self.install_int_flows(evcs, metadata)
         self._add_pps_evc_ids(evcs)
 
     async def redeploy_int(self, evcs: dict[str, dict]) -> None:
@@ -440,19 +462,30 @@ class INTManager:
         evcs = self._validate_map_enable_evcs(evcs, force=True)
         log.info(f"Redeploying INT on EVC ids: {list(evcs.keys())}, force: True")
 
-        stored_flows = await api.get_stored_flows(
-            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
-        )
-        await self._remove_int_flows_by_cookies(stored_flows)
-        metadata = {
-            "telemetry": {
-                "enabled": True,
-                "status": "UP",
-                "status_reason": [],
-                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        async with AsyncExitStack() as stack:
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in evcs
+            ]
+            stored_flows = await api.get_stored_flows(
+                [
+                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                    for evc_id in evcs
+                ]
+            )
+            await self._remove_int_flows_by_cookies(stored_flows)
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "UP",
+                    "status_reason": [],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
             }
-        }
-        await self.install_int_flows(evcs, metadata, force=True)
+            await self.install_int_flows(evcs, metadata, force=True)
 
     async def install_int_flows(
         self, evcs: dict[str, dict], metadata: dict, force=False
@@ -756,9 +789,15 @@ class INTManager:
             log.info(
                 f"Handling {event_name} flows remove on EVC ids: {to_remove.keys()}"
             )
-            await self._remove_int_flows(
-                self.flow_builder.build_failover_old_flows(to_remove, old_flows)
-            )
+            to_remove = utils.sorted_evcs_by_svc_lvl(to_remove)
+            async with AsyncExitStack() as stack:
+                _ = [
+                    await stack.enter_async_context(self._evcs_lock[evc_id])
+                    for evc_id in to_remove
+                ]
+                await self._remove_int_flows(
+                    self.flow_builder.build_failover_old_flows(to_remove, old_flows)
+                )
         if to_remove_with_err:
             log.error(
                 f"Handling {event_name} proxy_port_error falling back "
@@ -774,6 +813,7 @@ class INTManager:
                     ),
                 }
             }
+            to_remove_with_err = utils.sorted_evcs_by_svc_lvl(to_remove_with_err)
             await self.remove_int_flows(to_remove_with_err, metadata, force=True)
         if to_install:
             log.info(
@@ -792,7 +832,13 @@ class INTManager:
                 ]
                 for cookie, flows in built_flows.items()
             }
-            await self._install_int_flows(built_flows)
+            to_install = utils.sorted_evcs_by_svc_lvl(to_install)
+            async with AsyncExitStack() as stack:
+                _ = [
+                    await stack.enter_async_context(self._evcs_lock[evc_id])
+                    for evc_id in to_install
+                ]
+                await self._install_int_flows(built_flows)
 
     def _validate_map_enable_evcs(
         self,

@@ -360,6 +360,25 @@ def test_get_svlan_dpid_link(link, dpid, expected_vlan) -> None:
     assert utils.get_svlan_dpid_link(link, dpid) == expected_vlan
 
 
+def test_sorted_evcs_by_svc_lvl() -> None:
+    """Test sorted evcs by service level."""
+    evcs = {
+        "1": {"id": "1", "service_level": 7},
+        "4": {"id": "4"},
+        "3": {"id": "3"},
+        "2": {"id": "2", "service_level": 5},
+    }
+    expected = {
+        "1": {"id": "1", "service_level": 7},
+        "2": {"id": "2", "service_level": 5},
+        "3": {"id": "3"},
+        "4": {"id": "4"},
+    }
+    sorted_evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+    assert list(sorted_evcs.keys()) == list(expected.keys())
+    assert list(sorted_evcs.values()) == list(expected.values())
+
+
 @pytest.mark.parametrize(
     "evc,proxy_port_enabled,expected",
     [
