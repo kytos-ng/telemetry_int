@@ -165,6 +165,7 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            # TODO recollect?
                             {"action_type": "set_vlan", "vlan_id": 102},
                             {"action_type": "push_vlan", "tag_type": "s"},
                             {"action_type": "set_vlan", "vlan_id": 1},
@@ -359,6 +360,7 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_vlan", "vlan_id": 102},
                             {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
@@ -381,6 +383,7 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_vlan", "vlan_id": 102},
                             {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
@@ -392,7 +395,7 @@ def test_build_int_flows_inter_evpl(
             "flow": {
                 "owner": "telemetry_int",
                 "cookie": int(0xA816A76AE61B2F46),
-                "match": {"in_port": 6, "dl_vlan": 1},
+                "match": {"in_port": 6, "dl_vlan": 102},
                 "table_id": 0,
                 "table_group": "evpl",
                 "priority": 20000,
@@ -411,7 +414,7 @@ def test_build_int_flows_inter_evpl(
             "flow": {
                 "owner": "telemetry_int",
                 "cookie": int(0xA816A76AE61B2F46),
-                "match": {"in_port": 6, "dl_vlan": 1},
+                "match": {"in_port": 6, "dl_vlan": 102},
                 "table_id": 2,
                 "table_group": "evpl",
                 "priority": 20000,
@@ -422,7 +425,6 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "pop_int"},
-                            {"action_type": "pop_vlan"},
                             {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 1},
                         ],
@@ -448,6 +450,7 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_vlan", "vlan_id": 101},
                             {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
@@ -470,6 +473,7 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
+                            {"action_type": "set_vlan", "vlan_id": 101},
                             {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 5},
                         ],
@@ -481,7 +485,7 @@ def test_build_int_flows_inter_evpl(
             "flow": {
                 "owner": "telemetry_int",
                 "cookie": int(0xA816A76AE61B2F46),
-                "match": {"in_port": 6, "dl_vlan": 1},
+                "match": {"in_port": 6, "dl_vlan": 101},
                 "table_id": 0,
                 "table_group": "evpl",
                 "priority": 20000,
@@ -500,7 +504,7 @@ def test_build_int_flows_inter_evpl(
             "flow": {
                 "owner": "telemetry_int",
                 "cookie": int(0xA816A76AE61B2F46),
-                "match": {"in_port": 6, "dl_vlan": 1},
+                "match": {"in_port": 6, "dl_vlan": 101},
                 "table_id": 2,
                 "table_group": "evpl",
                 "priority": 20000,
@@ -511,7 +515,6 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "pop_int"},
-                            {"action_type": "pop_vlan"},
                             {"action_type": "set_queue", "queue_id": 1},
                             {"action_type": "output", "port": 1},
                         ],
