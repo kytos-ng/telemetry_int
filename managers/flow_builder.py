@@ -16,7 +16,21 @@ class FlowBuilder:
 
     def __init__(self):
         """Constructor of FlowBuilder."""
-        self.table_group = {"evpl": 2, "epl": 3}
+        self.table_group = {"evpl": 2, "epl": 3, "evpl_vlan_range": 3}
+
+    def get_table_id(self, flow: dict) -> int:
+        """Get a table_id X for a given flow based on its match type
+        This is to cover AmLight pipeline specifics when table_group
+        doesn't suffice."""
+        dl_vlan = flow["flow"]["match"].get("dl_vlan")
+        if isinstance(dl_vlan, int):
+            return self.table_group["evpl"]
+        elif dl_vlan is None:
+            return self.table_group["epl"]
+        elif isinstance(dl_vlan, str):
+            return self.table_group["evpl_vlan_range"]
+        else:
+            return self.table_group[flow["flow"]["table_group"]]
 
     def build_int_flows(
         self,
@@ -132,12 +146,12 @@ class FlowBuilder:
 
         At the INT source, one flow becomes 3: one for UDP on table 0,
         one for TCP on table 0, and one on table X (2 for evpl and 3 for epl by default)
+        vlan_range can have more than one ingress flow
         On table 0, we use just new instructions: push_int and goto_table
         On table X, we add add_int_metadata before the original actions
         INT flows will have higher priority.
         """
-        new_flows = []
-        new_int_flow_tbl_0_tcp = {}
+        new_flows, uni_flows = [], []
         src_uni = evc[uni_src_key]
 
         # Get the original flows
@@ -149,76 +163,69 @@ class FlowBuilder:
                 flow["switch"] == dpid
                 and flow["flow"]["match"]["in_port"] == src_uni["port_number"]
             ):
-                new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
-                break
+                uni_flows.append(flow)
 
-        if not new_int_flow_tbl_0_tcp:
+        if not uni_flows:
             return []
 
-        utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
-        utils.set_new_cookie(new_int_flow_tbl_0_tcp)
-        utils.set_owner(new_int_flow_tbl_0_tcp)
+        is_intra_switch = utils.is_intra_switch_evc(evc)
+        for flow in uni_flows:
+            new_int_flow_tbl_0_tcp = copy.deepcopy(flow)
 
-        # Deepcopy to use for table X (2 or 3 by default for EVPL or EPL respectively)
-        new_int_flow_tbl_x = copy.deepcopy(new_int_flow_tbl_0_tcp)
+            utils.set_instructions_from_actions(new_int_flow_tbl_0_tcp)
+            utils.set_new_cookie(new_int_flow_tbl_0_tcp)
+            utils.set_owner(new_int_flow_tbl_0_tcp)
 
-        # Prepare TCP Flow for Table 0
-        new_int_flow_tbl_0_tcp["flow"]["match"]["dl_type"] = settings.IPv4
-        new_int_flow_tbl_0_tcp["flow"]["match"]["nw_proto"] = settings.TCP
-        utils.set_priority(new_int_flow_tbl_0_tcp)
+            # Deepcopy to use for table X (2 or 3 by default for EVPL or EPL)
+            new_int_flow_tbl_x = copy.deepcopy(new_int_flow_tbl_0_tcp)
 
-        # The flow_manager has two outputs: instructions and actions.
-        table_group = self.table_group
-        new_table_id = table_group[new_int_flow_tbl_x["flow"]["table_group"]]
-        if "tag" in src_uni and isinstance(src_uni["tag"]["value"], list):
-            new_table_id = self.table_group["epl"]
-        instructions = [
-            {
-                "instruction_type": "apply_actions",
-                "actions": [{"action_type": "push_int"}],
-            },
-            {"instruction_type": "goto_table", "table_id": new_table_id},
-        ]
-        new_int_flow_tbl_0_tcp["flow"]["instructions"] = instructions
+            # Prepare TCP Flow for Table 0
+            new_int_flow_tbl_0_tcp["flow"]["match"]["dl_type"] = settings.IPv4
+            new_int_flow_tbl_0_tcp["flow"]["match"]["nw_proto"] = settings.TCP
+            utils.set_priority(new_int_flow_tbl_0_tcp)
 
-        # Prepare UDP Flow for Table 0. Everything the same as TCP except the nw_proto
-        new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
-        new_int_flow_tbl_0_udp["flow"]["match"]["nw_proto"] = settings.UDP
+            new_table_id = self.get_table_id(new_int_flow_tbl_0_tcp)
+            # The flow_manager has two outputs: instructions and actions.
+            instructions = [
+                {
+                    "instruction_type": "apply_actions",
+                    "actions": [{"action_type": "push_int"}],
+                },
+                {"instruction_type": "goto_table", "table_id": new_table_id},
+            ]
+            new_int_flow_tbl_0_tcp["flow"]["instructions"] = instructions
 
-        # Prepare Flows for Table X - No TCP or UDP specifics
-        new_int_flow_tbl_x["flow"]["table_id"] = new_table_id
+            # Prepare UDP Flow for Table 0.
+            # Everything the same as TCP except the nw_proto
+            new_int_flow_tbl_0_udp = copy.deepcopy(new_int_flow_tbl_0_tcp)
+            new_int_flow_tbl_0_udp["flow"]["match"]["nw_proto"] = settings.UDP
+            # Prepare Flows for Table X - No TCP or UDP specifics
+            new_int_flow_tbl_x["flow"]["table_id"] = new_table_id
 
-        # if intra-switch EVC, then output port should be the dst UNI's source port
-        if utils.is_intra_switch_evc(evc):
-            dst_uni = evc["uni_z" if uni_src_key == "uni_a" else "uni_a"]
-            proxy_port = dst_uni["proxy_port"]
-            for instruction in new_int_flow_tbl_x["flow"]["instructions"]:
-                if instruction["instruction_type"] == "apply_actions":
-                    for action in instruction["actions"]:
-                        if action["action_type"] == "output":
-                            # Since this is the INT Source, we use source
-                            # to avoid worrying about single or multi
-                            # home physical loops.
-                            # The choice for destination is at the INT Sink.
-                            action["port"] = proxy_port.source.port_number
+            # if intra-switch EVC, then output port should be the dst UNI's source port
+            if is_intra_switch:
+                dst_uni = evc["uni_z" if uni_src_key == "uni_a" else "uni_a"]
+                proxy_port = dst_uni["proxy_port"]
+                for instruction in new_int_flow_tbl_x["flow"]["instructions"]:
+                    if instruction["instruction_type"] == "apply_actions":
+                        for action in instruction["actions"]:
+                            if action["action_type"] == "output":
+                                # Since this is the INT Source, we use source
+                                # to avoid worrying about single or multi
+                                # home physical loops.
+                                # The choice for destination is at the INT Sink.
+                                action["port"] = proxy_port.source.port_number
 
-                    # remove set_vlan action if it exists, this is for
-                    # avoding a redundant set_vlan since it'll be set in the egress sink
-                    instruction["actions"] = utils.modify_actions(
-                        instruction["actions"], ["set_vlan"], remove=True
-                    )
+            instructions = utils.add_to_apply_actions(
+                new_int_flow_tbl_x["flow"]["instructions"],
+                new_instruction={"action_type": "add_int_metadata"},
+                position=0,
+            )
 
-        instructions = utils.add_to_apply_actions(
-            new_int_flow_tbl_x["flow"]["instructions"],
-            new_instruction={"action_type": "add_int_metadata"},
-            position=0,
-        )
-
-        new_int_flow_tbl_x["flow"]["instructions"] = instructions
-
-        new_flows.append(new_int_flow_tbl_0_tcp)
-        new_flows.append(new_int_flow_tbl_0_udp)
-        new_flows.append(new_int_flow_tbl_x)
+            new_int_flow_tbl_x["flow"]["instructions"] = instructions
+            new_flows.append(new_int_flow_tbl_0_tcp)
+            new_flows.append(new_int_flow_tbl_0_udp)
+            new_flows.append(new_int_flow_tbl_x)
 
         return new_flows
 
@@ -315,12 +322,13 @@ class FlowBuilder:
         """
         new_flows = []
         uni_vlan_flows = []
-        # TODO also differentiate between any/untagged and validate cehck requirements
         pos_proxy_flows = []
         dst_uni = evc[uni_dst_key]
         proxy_port = dst_uni["proxy_port"]
         dpid = dst_uni["switch"]
         has_qinq = utils.has_qinq(evc)
+        has_uni_vlan_type = utils.has_uni_vlan_type(evc, uni_dst_key)
+        has_vlan_range = utils.has_vlan_range(evc, uni_dst_key)
 
         for flow in stored_flows[
             utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)
@@ -409,13 +417,13 @@ class FlowBuilder:
             new_int_flow_tbl_0_pos["flow"]["match"]["in_port"] = in_port_no
             utils.set_priority(new_int_flow_tbl_0_tcp)
 
-            table_group = self.table_group
-            new_table_id = table_group[new_int_flow_tbl_x_pos["flow"]["table_group"]]
-            if not uni_vlan_flows:
-                new_table_id = self.table_group["epl"]
-            else:
-                if isinstance(dst_uni["tag"]["value"], list):
-                    new_table_id = self.table_group["epl"]
+            new_table_id = self.get_table_id(new_int_flow_tbl_x_pos)
+            if has_vlan_range:
+                # this overwrite is needed since s-vlan transformation
+                # happens before the POS flows, and we don't know if it'll be
+                # a wildcard match in the future we can improve mef_eline
+                # table_group to facilitate
+                new_table_id = self.table_group["evpl_vlan_range"]
             instructions = [
                 {
                     "instruction_type": "apply_actions",
@@ -451,10 +459,20 @@ class FlowBuilder:
                     new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
                     new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
             else:
-                new_int_flow_tbl_0_pos["flow"]["match"].pop("dl_vlan", None)
-                new_int_flow_tbl_x_pos["flow"]["match"].pop("dl_vlan", None)
-                new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
-                new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
+                # port based
+                if not has_uni_vlan_type:
+                    new_int_flow_tbl_0_pos["flow"]["match"].pop("dl_vlan", None)
+                    new_int_flow_tbl_x_pos["flow"]["match"].pop("dl_vlan", None)
+                    new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
+                    new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
+                else:
+                    # failover events that has partial (path-based) stored_flows
+                    for flow in evc["uni_in_flows"][dpid]:
+                        uni_vlan = flow["match"]["dl_vlan"]
+                        new_int_flow_tbl_0_pos["flow"]["match"]["dl_vlan"] = uni_vlan
+                        new_int_flow_tbl_x_pos["flow"]["match"]["dl_vlan"] = uni_vlan
+                        new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
+                        new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
 
         return new_flows
 
@@ -508,8 +526,7 @@ class FlowBuilder:
             utils.set_priority(new_int_flow_tbl_0_tcp)
 
             # INT send_report and goto_table actions
-            table_group = self.table_group
-            new_table_id = table_group[new_int_flow_tbl_0_tcp["flow"]["table_group"]]
+            new_table_id = self.get_table_id(new_int_flow_tbl_0_tcp)
             instructions = [
                 {
                     "instruction_type": "apply_actions",

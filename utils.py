@@ -37,6 +37,16 @@ def has_uni_vlan_type(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
         return False
 
 
+def has_vlan_range(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
+    """Check if a given EVC has vlan_range."""
+    try:
+        return has_uni_vlan_type(evc, uni_key) and isinstance(
+            evc[uni_key]["tag"]["value"], list
+        )
+    except (TypeError, KeyError):
+        return False
+
+
 def has_vlan_translation(evc: dict) -> bool:
     """Check if a given EVC has vlan translation."""
     try:
