@@ -458,21 +458,12 @@ class FlowBuilder:
                     new_int_flow_tbl_x_pos["flow"]["match"]["dl_vlan"] = uni_vlan
                     new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
                     new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
-            else:
+            elif not uni_vlan_flows and not has_uni_vlan_type:
                 # port based
-                if not has_uni_vlan_type:
-                    new_int_flow_tbl_0_pos["flow"]["match"].pop("dl_vlan", None)
-                    new_int_flow_tbl_x_pos["flow"]["match"].pop("dl_vlan", None)
-                    new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
-                    new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
-                else:
-                    # failover events that has partial (path-based) stored_flows
-                    for flow in evc["uni_in_flows"][dpid]:
-                        uni_vlan = flow["match"]["dl_vlan"]
-                        new_int_flow_tbl_0_pos["flow"]["match"]["dl_vlan"] = uni_vlan
-                        new_int_flow_tbl_x_pos["flow"]["match"]["dl_vlan"] = uni_vlan
-                        new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
-                        new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
+                new_int_flow_tbl_0_pos["flow"]["match"].pop("dl_vlan", None)
+                new_int_flow_tbl_x_pos["flow"]["match"].pop("dl_vlan", None)
+                new_flows.append(copy.deepcopy(new_int_flow_tbl_0_pos))
+                new_flows.append(copy.deepcopy(new_int_flow_tbl_x_pos))
 
         return new_flows
 
