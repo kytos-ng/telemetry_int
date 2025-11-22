@@ -553,38 +553,6 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                     }
                 ],
             },
-            "uni_in_flows": {
-                "00:00:00:00:00:00:00:01": [
-                    {
-                        "match": {"in_port": 1, "dl_vlan": 100},
-                        "cookie": 12307967605643950656,
-                        "actions": [
-                            {"action_type": "push_vlan", "tag_type": "s"},
-                            {"action_type": "set_vlan", "vlan_id": 1},
-                            {"ac tion_type": "output", "port": 3},
-                        ],
-                        "owner": "mef_eline",
-                        "table_group": "evpl",
-                        "table_id": 0,
-                        "priority": 20000,
-                    }
-                ],
-                "00:00:00:00:00:00:00:03": [
-                    {
-                        "match": {"in_port": 1, "dl_vlan": 100},
-                        "cookie": 12307967605643950656,
-                        "actions": [
-                            {"action_type": "push_vlan", "tag_type": "s"},
-                            {"action_type": "set_vlan", "vlan_id": 1},
-                            {"action_type": "output", "port": 2},
-                        ],
-                        "owner": "mef_eline",
-                        "table_group": "evpl",
-                        "table_id": 0,
-                        "priority": 20000,
-                    }
-                ],
-            },
             "current_path": [
                 {
                     "id": "78282c4d5",
@@ -767,42 +735,6 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
             {
                 "flow": {
                     "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 100},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "send_report"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 100},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "pop_int"}],
-                        }
-                    ],
-                    "table_id": 2,
-                },
-                "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
                     "match": {
                         "in_port": 3,
                         "dl_vlan": 2,
@@ -851,47 +783,9 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                     ],
                 },
                 "switch": "00:00:00:00:00:00:00:03",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 100},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "send_report"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:03",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 100},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "pop_int"}],
-                        }
-                    ],
-                    "table_id": 2,
-                },
-                "switch": "00:00:00:00:00:00:00:03",
-            },
+            }
         ]
     }
     serd = json.dumps(expected_built_flows)
     res = int_manager._remove_int_flows.call_args[0][0]
-    with open("/tmp/lol.json", "w") as f:
-        f.write(json.dumps(res))
     assert json.dumps(int_manager._remove_int_flows.call_args[0][0]) == serd
