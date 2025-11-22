@@ -783,9 +783,8 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                     ],
                 },
                 "switch": "00:00:00:00:00:00:00:03",
-            }
+            },
         ]
     }
     serd = json.dumps(expected_built_flows)
-    res = int_manager._remove_int_flows.call_args[0][0]
     assert json.dumps(int_manager._remove_int_flows.call_args[0][0]) == serd
