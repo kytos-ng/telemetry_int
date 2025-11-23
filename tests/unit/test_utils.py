@@ -314,52 +314,6 @@ def test_set_priority_exc() -> None:
         utils.set_priority(flow, "some_id")
 
 
-@pytest.mark.parametrize(
-    "link,dpid,expected_vlan",
-    [
-        (
-            {
-                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
-                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
-                "metadata": {"s_vlan": {"tag_type": "vlan", "value": 2}},
-            },
-            "00:00:00:00:00:00:00:01",
-            2,
-        ),
-        (
-            {
-                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
-                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
-                "metadata": {"s_vlan": {"tag_type": "vlan", "value": 2}},
-            },
-            "00:00:00:00:00:00:00:02",
-            2,
-        ),
-        (
-            {
-                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
-                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
-                "metadata": {"s_vlan": {"tag_type": "vlan", "value": 2}},
-            },
-            "00:00:00:00:00:00:00:03",
-            None,
-        ),
-        (
-            {
-                "endpoint_a": {"switch": "00:00:00:00:00:00:00:01"},
-                "endpoint_b": {"switch": "00:00:00:00:00:00:00:02"},
-                "metadata": {},
-            },
-            "00:00:00:00:00:00:00:02",
-            None,
-        ),
-    ],
-)
-def test_get_svlan_dpid_link(link, dpid, expected_vlan) -> None:
-    """Test get_svlan_dpid_link."""
-    assert utils.get_svlan_dpid_link(link, dpid) == expected_vlan
-
-
 def test_sorted_evcs_by_svc_lvl() -> None:
     """Test sorted evcs by service level."""
     evcs = {
@@ -420,3 +374,73 @@ def test_get_evc_proxy_port_value(evc, expected) -> None:
     """Test get_evc_proxy_port_value function."""
     result = utils.get_evc_proxy_port_value(evc)
     assert result == expected
+
+
+@pytest.mark.parametrize(
+    "evc,expected",
+    [
+        ({"uni_a": {"tag": {"value": [[1, 100]], "tag_type": "vlan"}}}, True),
+        ({"uni_a": {"tag": {"value": "any", "tag_type": "vlan"}}}, True),
+        ({"uni_a": {"tag": {"value": "untagged", "tag_type": "vlan"}}}, True),
+        ({"uni_a": {"tag": {"value": 1, "tag_type": "vlan"}}}, False),
+    ],
+)
+def test_has_special_dl_vlan(evc, expected) -> None:
+    """Test has_special_dl_vlan."""
+    result = utils.has_special_dl_vlan(evc, "uni_a")
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "evc,expected",
+    [
+        ({"uni_a": {"tag": {"value": 1, "tag_type": "vlan"}}}, True),
+        ({"uni_a": {"tag": {"value": 1, "tag_type": 1}}}, True),
+        ({"uni_a": {"tag": {}}}, False),
+        ({"uni_a": {}}, False),
+    ],
+)
+def test_has_uni_vlan_type(evc, expected) -> None:
+    """Test has_uni_vlan_type."""
+    result = utils.has_uni_vlan_type(evc, "uni_a")
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "evc,expected",
+    [
+        (
+            {
+                "uni_a": {"tag": {"value": 1, "tag_type": "vlan"}},
+                "uni_z": {"tag": {"value": 1, "tag_type": "vlan"}},
+            },
+            False,
+        ),
+        (
+            {
+                "uni_a": {"tag": {"value": 1, "tag_type": "vlan"}},
+                "uni_z": {"tag": {"value": 2, "tag_type": "vlan"}},
+            },
+            True,
+        ),
+        (
+            {
+                "uni_a": {},
+                "uni_z": {"tag": {"value": 2, "tag_type": "vlan"}},
+            },
+            False,
+        ),
+        (
+            {
+                "uni_a": {"tag": {"value": "any", "tag_type": "vlan"}},
+                "uni_z": {"tag": {"value": "any", "tag_type": "vlan"}},
+            },
+            False,
+        ),
+    ],
+)
+def test_has_vlan_translation(evc, expected) -> None:
+    """Test has_vlan_translation."""
+    result = utils.has_vlan_translation(evc)
+    assert result == expected
+    assert not result == utils.has_qinq(evc)

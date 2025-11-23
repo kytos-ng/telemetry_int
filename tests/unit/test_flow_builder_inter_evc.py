@@ -165,7 +165,6 @@ def test_build_int_flows_inter_evpl(
                         "instruction_type": "apply_actions",
                         "actions": [
                             {"action_type": "add_int_metadata"},
-                            # TODO recollect?
                             {"action_type": "set_vlan", "vlan_id": 102},
                             {"action_type": "push_vlan", "tag_type": "s"},
                             {"action_type": "set_vlan", "vlan_id": 1},
