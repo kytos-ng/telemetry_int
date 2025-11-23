@@ -443,4 +443,4 @@ def test_has_vlan_translation(evc, expected) -> None:
     """Test has_vlan_translation."""
     result = utils.has_vlan_translation(evc)
     assert result == expected
-    assert not result == utils.has_qinq(evc)
+    assert result != utils.has_qinq(evc)
