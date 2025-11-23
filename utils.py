@@ -37,11 +37,14 @@ def has_uni_vlan_type(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
         return False
 
 
-def has_vlan_range(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
-    """Check if a given EVC has vlan_range."""
+def has_special_dl_vlan(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
+    """Check if a given EVC has expected dl_vlan mask or dl_vlan untagged
+    match based on its type."""
     try:
-        return has_uni_vlan_type(evc, uni_key) and isinstance(
-            evc[uni_key]["tag"]["value"], list
+        return has_uni_vlan_type(evc, uni_key) and (
+            isinstance(evc[uni_key]["tag"]["value"], list)
+            or evc[uni_key]["tag"]["value"] == "any"
+            or evc[uni_key]["tag"]["value"] == "untagged"
         )
     except (TypeError, KeyError):
         return False
@@ -219,18 +222,6 @@ def set_instructions_from_actions(flow: dict) -> dict:
     flow["flow"].pop("actions", None)
     flow["flow"]["instructions"] = instructions
     return flow
-
-
-def get_svlan_dpid_link(link: dict, dpid: str) -> Optional[int]:
-    """Try to get svlan of a link if a dpid matches one of the endpoints."""
-    if any(
-        (
-            link["endpoint_a"]["switch"] == dpid and "s_vlan" in link["metadata"],
-            link["endpoint_b"]["switch"] == dpid and "s_vlan" in link["metadata"],
-        )
-    ):
-        return link["metadata"]["s_vlan"]["value"]
-    return None
 
 
 def sorted_evcs_by_svc_lvl(evcs: dict[str, dict]) -> dict[str, dict]:

@@ -23,11 +23,11 @@ class FlowBuilder:
         This is to cover AmLight pipeline specifics when table_group
         doesn't suffice."""
         dl_vlan = flow["flow"]["match"].get("dl_vlan")
-        if isinstance(dl_vlan, int):
+        if isinstance(dl_vlan, int) and dl_vlan != 0:
             return self.table_group["evpl"]
         elif dl_vlan is None:
             return self.table_group["epl"]
-        elif isinstance(dl_vlan, str):
+        elif isinstance(dl_vlan, str) or dl_vlan == 0:
             return self.table_group["evpl_vlan_range"]
         else:
             return self.table_group[flow["flow"]["table_group"]]
@@ -59,74 +59,24 @@ class FlowBuilder:
     def build_failover_old_flows(
         self, evcs: dict[str, dict], old_flows: dict[int, list[dict]]
     ) -> dict[int, list[dict]]:
-        """Build (old path) failover related to remove flows.
-
-        With proxy ports:
-        If sink NNIs svlan are different, it'll regenerate the rest of sink loop flows.
-        Otherwise, it'll just remove the same received flows except with int cookie
-        value the deletion uses flow mod OFPFC_DELETE, so no need to include the
-        additional INT keys in the match like nw_proto for deletion.
-
-        Without proxy ports: It'll rebuild the sink flows
-        """
+        """Build (old path) failover related to remove flows."""
 
         removed_flows = defaultdict(list)
         for evc_id, evc in evcs.items():
             dpid_a, dpid_z = evc["uni_a"]["switch"], evc["uni_z"]["switch"]
-
             cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
-            int_cookie = settings.INT_COOKIE_PREFIX << 56 | (cookie & 0xFFFFFFFFFFFFFF)
-            cur_sink_a_svlan, cur_sink_z_svlan = None, None
             sink_a_flows: list[dict] = []
             sink_z_flows: list[dict] = []
 
-            for link in evc["current_path"]:
-                if cur_sink_a_svlan is None and (
-                    svlan := utils.get_svlan_dpid_link(link, dpid_a)
-                ):
-                    cur_sink_a_svlan = svlan
-                if cur_sink_z_svlan is None and (
-                    svlan := utils.get_svlan_dpid_link(link, dpid_z)
-                ):
-                    cur_sink_z_svlan = svlan
-                if cur_sink_a_svlan is not None and cur_sink_z_svlan is not None:
-                    break
-
             for flow in old_flows[cookie]:
                 if not sink_a_flows and flow["switch"] == dpid_a:
-                    if "proxy_port" not in evc["uni_a"]:
-                        sink_a_flows = self._build_int_sink_flows(
-                            "uni_a", evc, old_flows
-                        )
-                    else:
-                        if (
-                            flow["flow"]["match"]["dl_vlan"] != cur_sink_a_svlan
-                            and cur_sink_a_svlan
-                        ):
-                            sink_a_flows = self._build_int_sink_flows(
-                                "uni_a", evc, old_flows
-                            )
-                        else:
-                            flow["flow"]["cookie"] = int_cookie
-                            utils.set_owner(flow)
-                            sink_a_flows = [flow]
+                    sink_a_flows = self._build_int_sink_flows(
+                        "uni_a", evc, old_flows
+                    )
                 elif not sink_z_flows and flow["switch"] == dpid_z:
-                    if "proxy_port" not in evc["uni_z"]:
-                        sink_z_flows = self._build_int_sink_flows(
-                            "uni_z", evc, old_flows
-                        )
-                    else:
-                        if (
-                            flow["flow"]["match"]["dl_vlan"] != cur_sink_z_svlan
-                            and cur_sink_z_svlan
-                        ):
-                            sink_z_flows = self._build_int_sink_flows(
-                                "uni_z", evc, old_flows
-                            )
-                        else:
-                            flow["flow"]["cookie"] = int_cookie
-                            utils.set_owner(flow)
-                            sink_z_flows = [flow]
+                    sink_z_flows = self._build_int_sink_flows(
+                        "uni_z", evc, old_flows
+                    )
                 if sink_a_flows and sink_z_flows:
                     break
 
@@ -328,7 +278,7 @@ class FlowBuilder:
         dpid = dst_uni["switch"]
         has_qinq = utils.has_qinq(evc)
         has_uni_vlan_type = utils.has_uni_vlan_type(evc, uni_dst_key)
-        has_vlan_range = utils.has_vlan_range(evc, uni_dst_key)
+        has_special_dl_vlan = utils.has_special_dl_vlan(evc, uni_dst_key)
 
         for flow in stored_flows[
             utils.get_cookie(evc["id"], settings.MEF_COOKIE_PREFIX)
@@ -418,7 +368,7 @@ class FlowBuilder:
             utils.set_priority(new_int_flow_tbl_0_tcp)
 
             new_table_id = self.get_table_id(new_int_flow_tbl_x_pos)
-            if has_vlan_range:
+            if has_special_dl_vlan:
                 # this overwrite is needed since s-vlan transformation
                 # happens before the POS flows, and we don't know if it'll be
                 # a wildcard match in the future we can improve mef_eline
