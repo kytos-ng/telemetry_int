@@ -563,6 +563,354 @@ def inter_evc_evpl_flows_data() -> None:
     return json.loads(data)
 
 
+@pytest.fixture
+def inter_evc_evpl_range_flows_data() -> None:
+    """inter evc evpl range flows data."""
+    data = """
+{
+    "00:00:00:00:00:00:00:02": [
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 2,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 3
+                    }
+                ]
+            },
+            "flow_id": "6846b3a98ad0c96999c3b828d79d551f",
+            "id": "b700ac5ee60a5b2592822b72cab7caac",
+            "inserted_at": "2025-11-23T01:56:13.499000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:02",
+            "updated_at": "2025-11-23T23:12:32.055000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 3,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 2
+                    }
+                ]
+            },
+            "flow_id": "cf2a85c8497e542e5fa45d70df26c7f2",
+            "id": "0f401a64a89d45f5296aa35a28d2fe82",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:02",
+            "updated_at": "2025-11-23T23:12:32.055000"
+        }
+    ],
+    "00:00:00:00:00:00:00:01": [
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": "910/4094"
+                },
+                "actions": [
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 3
+                    }
+                ]
+            },
+            "flow_id": "79a9fcff6ed57319028344a9f16f0750",
+            "id": "a4eadd6870e0a67df0d13950d4399408",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:01",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": "912/4088"
+                },
+                "actions": [
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 3
+                    }
+                ]
+            },
+            "flow_id": "8bc800502e21f8194e3394e6be6cb791",
+            "id": "6609d458334243a561b252a27d8a5096",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:01",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": 920
+                },
+                "actions": [
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 3
+                    }
+                ]
+            },
+            "flow_id": "38091c16e47763e9b0eda48931c22863",
+            "id": "77dbdc01cd081e10c96a494c56448500",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:01",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 3,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "pop_vlan"
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 1
+                    }
+                ]
+            },
+            "flow_id": "b2ac5ff0819d76e696cae81474c4ddc1",
+            "id": "ff01974b200b34572a59ca88d92c907b",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:01",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        }
+    ],
+    "00:00:00:00:00:00:00:03": [
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": "910/4094"
+                },
+                "actions": [
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 2
+                    }
+                ]
+            },
+            "flow_id": "7ab2e21394a6a1c4e0821ccfea58fdb1",
+            "id": "166fd19e9d1de0cab8e78e3d2a6e5e3f",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:03",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": "912/4088"
+                },
+                "actions": [
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 2
+                    }
+                ]
+            },
+            "flow_id": "5e9b1a8aafab5335758399b46a878c57",
+            "id": "ee4176ac148d69ec3fd0dc97e783622d",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:03",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 1,
+                    "dl_vlan": 920
+                },
+                "actions": [
+                    {
+                        "action_type": "push_vlan",
+                        "tag_type": "s"
+                    },
+                    {
+                        "action_type": "set_vlan",
+                        "vlan_id": 1
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 2
+                    }
+                ]
+            },
+            "flow_id": "554030a54c59a68e831048df718e6a1b",
+            "id": "da4add0aa529458cb4161d3ed54349f7",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:03",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        },
+        {
+            "flow": {
+                "table_id": 0,
+                "owner": "mef_eline",
+                "table_group": "evpl",
+                "priority": 20000,
+                "cookie": 12286212820272976711,
+                "idle_timeout": 0,
+                "hard_timeout": 0,
+                "match": {
+                    "in_port": 2,
+                    "dl_vlan": 1
+                },
+                "actions": [
+                    {
+                        "action_type": "pop_vlan"
+                    },
+                    {
+                        "action_type": "output",
+                        "port": 1
+                    }
+                ]
+            },
+            "flow_id": "e71b15954dba0cd57095dfc715f37dbf",
+            "id": "0d9c46bc386bf5944555ab724cf70133",
+            "inserted_at": "2025-11-23T23:12:32.025000",
+            "state": "installed",
+            "switch": "00:00:00:00:00:00:00:03",
+            "updated_at": "2025-11-23T23:12:32.057000"
+        }
+    ]
+}
+"""
+    return json.loads(data)
+
+
 # pylint: disable=redefined-outer-name
 @pytest.fixture
 def inter_evc_evpl_set_queue_flows_data(inter_evc_evpl_flows_data) -> dict:

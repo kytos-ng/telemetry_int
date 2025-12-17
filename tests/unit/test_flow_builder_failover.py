@@ -428,22 +428,104 @@ async def test_handle_failover_old_path_same_svlan() -> None:
             {
                 "flow": {
                     "cookie": 12163852417568094784,
-                    "match": {"in_port": 4, "dl_vlan": 1},
+                    "match": {
+                        "in_port": 4,
+                        "dl_vlan": 1,
+                        "dl_type": 2048,
+                        "nw_proto": 6,
+                    },
                     "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
+                    "priority": 21100,
                     "table_group": "evpl",
                     "owner": "telemetry_int",
+                    "instructions": [
+                        {
+                            "instruction_type": "apply_actions",
+                            "actions": [
+                                {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
+                                {"action_type": "output", "port": 5},
+                            ],
+                        }
+                    ],
                 },
                 "switch": "00:00:00:00:00:00:00:01",
             },
             {
                 "flow": {
                     "cookie": 12163852417568094784,
-                    "match": {"in_port": 3, "dl_vlan": 1},
+                    "match": {
+                        "in_port": 4,
+                        "dl_vlan": 1,
+                        "dl_type": 2048,
+                        "nw_proto": 17,
+                    },
                     "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
+                    "priority": 21100,
                     "table_group": "evpl",
                     "owner": "telemetry_int",
+                    "instructions": [
+                        {
+                            "instruction_type": "apply_actions",
+                            "actions": [
+                                {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
+                                {"action_type": "output", "port": 5},
+                            ],
+                        }
+                    ],
+                },
+                "switch": "00:00:00:00:00:00:00:01",
+            },
+            {
+                "flow": {
+                    "cookie": 12163852417568094784,
+                    "match": {
+                        "in_port": 3,
+                        "dl_vlan": 1,
+                        "dl_type": 2048,
+                        "nw_proto": 6,
+                    },
+                    "cookie_mask": 18446744073709551615,
+                    "priority": 21100,
+                    "table_group": "evpl",
+                    "owner": "telemetry_int",
+                    "instructions": [
+                        {
+                            "instruction_type": "apply_actions",
+                            "actions": [
+                                {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
+                                {"action_type": "output", "port": 5},
+                            ],
+                        }
+                    ],
+                },
+                "switch": "00:00:00:00:00:00:00:03",
+            },
+            {
+                "flow": {
+                    "cookie": 12163852417568094784,
+                    "match": {
+                        "in_port": 3,
+                        "dl_vlan": 1,
+                        "dl_type": 2048,
+                        "nw_proto": 17,
+                    },
+                    "cookie_mask": 18446744073709551615,
+                    "priority": 21100,
+                    "table_group": "evpl",
+                    "owner": "telemetry_int",
+                    "instructions": [
+                        {
+                            "instruction_type": "apply_actions",
+                            "actions": [
+                                {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
+                                {"action_type": "output", "port": 5},
+                            ],
+                        }
+                    ],
                 },
                 "switch": "00:00:00:00:00:00:00:03",
             },
@@ -698,6 +780,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                             "instruction_type": "apply_actions",
                             "actions": [
                                 {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
                                 {"action_type": "output", "port": 5},
                             ],
                         }
@@ -723,46 +806,11 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                             "instruction_type": "apply_actions",
                             "actions": [
                                 {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
                                 {"action_type": "output", "port": 5},
                             ],
                         }
                     ],
-                },
-                "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 2},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "send_report"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:01",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 2},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "pop_int"}],
-                        }
-                    ],
-                    "table_id": 2,
                 },
                 "switch": "00:00:00:00:00:00:00:01",
             },
@@ -784,6 +832,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                             "instruction_type": "apply_actions",
                             "actions": [
                                 {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
                                 {"action_type": "output", "port": 5},
                             ],
                         }
@@ -809,46 +858,11 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
                             "instruction_type": "apply_actions",
                             "actions": [
                                 {"action_type": "add_int_metadata"},
+                                {"action_type": "pop_vlan"},
                                 {"action_type": "output", "port": 5},
                             ],
                         }
                     ],
-                },
-                "switch": "00:00:00:00:00:00:00:03",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 2},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "send_report"}],
-                        },
-                        {"instruction_type": "goto_table", "table_id": 2},
-                    ],
-                },
-                "switch": "00:00:00:00:00:00:00:03",
-            },
-            {
-                "flow": {
-                    "cookie": 12163852417568094784,
-                    "match": {"in_port": 6, "dl_vlan": 2},
-                    "cookie_mask": 18446744073709551615,
-                    "priority": 21000,
-                    "table_group": "evpl",
-                    "owner": "telemetry_int",
-                    "instructions": [
-                        {
-                            "instruction_type": "apply_actions",
-                            "actions": [{"action_type": "pop_int"}],
-                        }
-                    ],
-                    "table_id": 2,
                 },
                 "switch": "00:00:00:00:00:00:00:03",
             },

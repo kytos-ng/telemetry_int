@@ -739,6 +739,13 @@ class INTManager:
         new_flows_key = "flows"
 
         for evc_id, evc in evcs_content.items():
+            if (
+                "telemetry" not in evc["metadata"]
+                and "telemetry_request" in evc["metadata"]
+            ):
+                # Bootstrap state when it was enabled fully event-based
+                evc["metadata"]["telemetry"] = {"enabled": True}
+
             if not utils.has_int_enabled(evc):
                 continue
             try:

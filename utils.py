@@ -1,6 +1,6 @@
 """ Support function for main.py """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from napps.kytos.telemetry_int import settings
 
@@ -27,6 +27,46 @@ def has_int_enabled(evc: dict) -> bool:
         and "enabled" in evc["metadata"]["telemetry"]
         and evc["metadata"]["telemetry"]["enabled"]
     )
+
+
+def has_uni_vlan_type(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
+    """Check if a given EVC UNI has vlan type."""
+    try:
+        return evc[uni_key]["tag"]["tag_type"] in (1, "vlan")
+    except (TypeError, KeyError):
+        return False
+
+
+def has_special_dl_vlan(evc: dict, uni_key: Literal["uni_a", "uni_z"]) -> bool:
+    """Check if a given EVC has expected dl_vlan mask or dl_vlan untagged
+    match based on its type."""
+    try:
+        return has_uni_vlan_type(evc, uni_key) and (
+            isinstance(evc[uni_key]["tag"]["value"], list)
+            or evc[uni_key]["tag"]["value"] == "any"
+            or evc[uni_key]["tag"]["value"] == "untagged"
+        )
+    except (TypeError, KeyError):
+        return False
+
+
+def has_vlan_translation(evc: dict) -> bool:
+    """Check if a given EVC has vlan translation."""
+    try:
+        return (
+            has_uni_vlan_type(evc, "uni_a")
+            and has_uni_vlan_type(evc, "uni_z")
+            and isinstance(evc["uni_a"]["tag"]["value"], int)
+            and isinstance(evc["uni_z"]["tag"]["value"], int)
+            and evc["uni_a"]["tag"]["value"] != evc["uni_z"]["tag"]["value"]
+        )
+    except (TypeError, KeyError):
+        return False
+
+
+def has_qinq(evc: dict) -> bool:
+    """Check if an EVC has qinq."""
+    return not has_vlan_translation(evc)
 
 
 def set_proxy_port_value(evc: dict, proxy_port_enabled: Optional[bool] = None) -> dict:
@@ -182,18 +222,6 @@ def set_instructions_from_actions(flow: dict) -> dict:
     flow["flow"].pop("actions", None)
     flow["flow"]["instructions"] = instructions
     return flow
-
-
-def get_svlan_dpid_link(link: dict, dpid: str) -> Optional[int]:
-    """Try to get svlan of a link if a dpid matches one of the endpoints."""
-    if any(
-        (
-            link["endpoint_a"]["switch"] == dpid and "s_vlan" in link["metadata"],
-            link["endpoint_b"]["switch"] == dpid and "s_vlan" in link["metadata"],
-        )
-    ):
-        return link["metadata"]["s_vlan"]["value"]
-    return None
 
 
 def sorted_evcs_by_svc_lvl(evcs: dict[str, dict]) -> dict[str, dict]:
