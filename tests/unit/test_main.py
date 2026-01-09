@@ -4,8 +4,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from napps.kytos.telemetry_int import utils
-from napps.kytos.telemetry_int.exceptions import EVCError, ProxyPortShared
+from napps.kytos.telemetry_int.exceptions import (
+    EVCError,
+    EVCNotFound,
+    FlowsNotFound,
+    ProxyPortShared,
+)
+from napps.kytos.telemetry_int.kytos_api_helper import UnrecoverableError
 from napps.kytos.telemetry_int.main import Main
+from tenacity import Future, RetryError
 
 from kytos.core.common import EntityStatus
 from kytos.core.events import KytosEvent
@@ -753,3 +760,186 @@ class TestMain:
         self.napp.int_manager = MagicMock()
         await self.napp.on_failover_old_path(event)
         self.napp.int_manager.handle_failover_flows.assert_called()
+
+    async def test_evc_expected_flows_success(self, monkeypatch) -> None:
+        """Test expected flows endpoint with specific evc_ids."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evcs.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": True}}}
+        }
+
+        expected_flows = {
+            evc_id: {
+                "count_total": 4,
+                "count_table": {"0": 2, "1": 2},
+                "flows": [
+                    {
+                        "switch": "00:00:00:00:00:00:00:01",
+                        "flow": {"table_id": 0, "priority": 20000},
+                        "flow_id": "aa84a60ca2965b52d71f",
+                        "id": "965b52d71f",
+                    }
+                ],
+            }
+        }
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            return_value=expected_flows
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 200
+        assert self.napp.int_manager.list_expected_flows.call_count == 1
+        data = response.json()
+        assert evc_id in data
+        assert data[evc_id]["count_total"] == 4
+        assert "flows" in data[evc_id]
+
+    async def test_evc_expected_flows_empty_list(self, monkeypatch) -> None:
+        """Test expected flows with empty evc_ids list."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        api_mock.get_evcs.return_value = {
+            "evc1": {"metadata": {"telemetry": {"enabled": True}}},
+            "evc2": {"metadata": {}},
+        }
+
+        expected_flows = {"evc1": {"count_total": 2, "count_table": {}, "flows": []}}
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            return_value=expected_flows
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": []})
+
+        assert response.status_code == 200
+        call_args = self.napp.int_manager.list_expected_flows.call_args[0][0]
+        assert "evc1" in call_args
+        assert "evc2" not in call_args
+
+    async def test_evc_expected_flows_single_evc(self, monkeypatch) -> None:
+        """Test expected flows with single evc_id uses get_evc."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evc.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": True}}}
+        }
+
+        expected_flows = {evc_id: {"count_total": 2, "count_table": {}, "flows": []}}
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            return_value=expected_flows
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 200
+        assert api_mock.get_evc.call_count == 1
+        assert api_mock.get_evc.call_args[0][0] == evc_id
+        assert api_mock.get_evcs.call_count == 0
+
+    async def test_evc_expected_flows_no_int_evcs(self, monkeypatch) -> None:
+        """Test expected flows with no INT-enabled EVCs."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        api_mock.get_evcs.return_value = {
+            "evc1": {"metadata": {}},
+            "evc2": {"metadata": {"telemetry": {"enabled": False}}},
+        }
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": []})
+
+        assert response.status_code == 200
+        assert response.json() == {}
+
+    async def test_evc_expected_flows_openapi_validation(self) -> None:
+        """Test expected flows OpenAPI validation."""
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+
+        response = await self.api_client.post(endpoint, json={"evc_ids": "wrong"})
+        assert response.status_code == 400
+        assert "evc_ids" in response.json()["description"]
+
+    async def test_evc_expected_flows_invalid_payload(self) -> None:
+        """Test expected flows with invalid payload."""
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+
+        response = await self.api_client.post(endpoint, json={})
+        assert response.status_code == 400
+        assert "Invalid payload" in response.json()["description"]
+
+    async def test_evc_expected_flows_evc_not_found(self, monkeypatch) -> None:
+        """Test expected flows with EVCNotFound exception."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evcs.return_value = {evc_id: {}}
+
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            side_effect=EVCNotFound(evc_id)
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["description"]
+
+    async def test_evc_expected_flows_flows_not_found(self, monkeypatch) -> None:
+        """Test expected flows with FlowsNotFound exception."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evcs.return_value = {evc_id: {}}
+
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            side_effect=FlowsNotFound(evc_id)
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 404
+        assert "flows not found" in response.json()["description"]
+
+    async def test_evc_expected_flows_retry_error_get_evcs(self, monkeypatch) -> None:
+        """Test expected flows with RetryError from get_evcs."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        future = Future(1)
+        future.set_exception(Exception("Service unavailable"))
+        api_mock.get_evcs.side_effect = RetryError(future)
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": []})
+
+        assert response.status_code == 503
+
+    async def test_evc_expected_flows_unrecoverable_error(self, monkeypatch) -> None:
+        """Test expected flows with UnrecoverableError."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evcs.return_value = {evc_id: {}}
+
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            side_effect=UnrecoverableError("Unrecoverable error")
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 500
