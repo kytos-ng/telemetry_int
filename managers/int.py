@@ -17,6 +17,8 @@ from napps.kytos.telemetry_int import settings
 from kytos.core import log
 from kytos.core.link import Link
 import napps.kytos.telemetry_int.kytos_api_helper as api
+from napps.kytos.of_core.flow import FlowFactory
+from napps.kytos.of_core.v0x04.flow import Flow as Flow04
 from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from kytos.core.common import EntityStatus
 from napps.kytos.telemetry_int.proxy_port import ProxyPort
@@ -1084,3 +1086,44 @@ class INTManager:
                         },
                     )
                 )
+
+    async def list_expected_flows(self, evcs: dict[str, dict]) -> dict[str, list[dict]]:
+        """List expected flows for given EVCs."""
+        evcs = self._validate_map_enable_evcs(evcs, force=True)
+        int_flows = {}
+
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        async with AsyncExitStack() as stack:
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in evcs
+            ]
+            stored_flows = await api.get_stored_flows(
+                utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX) for evc_id in evcs
+            )
+
+            keys_to_pop = ("inserted_at", "updated_at", "state")
+
+            built_flows = []
+            for cookie, flows in self.flow_builder.build_int_flows(
+                evcs, stored_flows
+            ).items():
+                table_count = defaultdict(int)
+                for flow in flows:
+                    switch = self.controller.get_switch_by_dpid(flow["switch"])
+                    serializer = FlowFactory.get_class(switch, Flow04)
+                    ser_flow = serializer.from_dict(flow["flow"], switch)
+                    for key in keys_to_pop:
+                        flow.pop(key, None)
+                    flow["flow_id"] = ser_flow.id
+                    flow["id"] = ser_flow.match_id
+                    table_count[ser_flow.table_id] += 1
+                    built_flows.append(flow)
+
+                evc_id = utils.get_id_from_cookie(cookie)
+                int_flows[evc_id] = {
+                    "count_total": len(built_flows),
+                    "count_table": table_count,
+                    "flows": built_flows,
+                }
+        return int_flows

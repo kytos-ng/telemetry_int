@@ -4,7 +4,7 @@
   "name": "telemetry_int",
   "description": "Napp to deploy In-band Network Telemetry for EVCs",
   "version": "2025.1.0",
-  "napp_dependencies": ["amlight/noviflow", "kytos/mef_eline"],
+  "napp_dependencies": ["amlight/noviflow", "kytos/mef_eline", "kytos/flow_manager"],
   "license": "MIT",
   "tags": ["INT"],
   "url": "https://github.com/kytos-ng/telemetry_int/"

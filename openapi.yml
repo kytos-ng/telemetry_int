@@ -157,6 +157,37 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/evc/expected_flows:
+    post:
+      summary: List expected flows for given INT EVCs.
+      operationId: expected_flows
+      requestBody:
+        description: List expected flows for given INT EVCs. If the list of evc_ids is empty, it'll include all INT EVCs.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Listed expected flows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          description: Invalid request payload
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
   /v1/evc/compare:
     get:
       summary: List compare EVCs
