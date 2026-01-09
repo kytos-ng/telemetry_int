@@ -175,15 +175,84 @@ paths:
                     type: string
       responses:
         '200':
-          description: Listed expected flows
+          description: Listed expected flows for INT-enabled EVCs. Returns an object keyed by EVC ID, where each value contains flow counts and the list of expected INT flows.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    count_total:
+                      type: integer
+                      description: Total number of flows for this EVC
+                    count_table:
+                      type: object
+                      description: Count of flows per table ID
+                      additionalProperties:
+                        type: integer
+                    flows:
+                      type: array
+                      description: List of expected INT flows
+                      items:
+                        type: object
+                        properties:
+                          switch:
+                            type: string
+                            description: Switch DPID
+                          flow:
+                            type: object
+                            description: OpenFlow flow object with match and action definitions
+                            properties:
+                              table_id:
+                                type: integer
+                              owner:
+                                type: string
+                              priority:
+                                type: integer
+                              cookie:
+                                type: integer
+                              match:
+                                type: object
+                              actions:
+                                type: array
+                          flow_id:
+                            type: string
+                            description: Flow identifier based on serialized flow
+                          id:
+                            type: string
+                            description: Match identifier
+              example:
+                "evc123":
+                  count_total: 1
+                  count_table:
+                    "0": 1
+                  flows:
+                    - switch: "00:00:00:00:00:00:00:01"
+                      flow:
+                        table_id: 0
+                        owner: "telemetry_int"
+                        priority: 20000
+                        cookie: 12345678901234567890
+                        match:
+                          in_port: 1
+                        actions:
+                          - action_type: "output"
+                            port: 2
+                      flow_id: "aa84a60ca2965b52d71f..."
+                      id: "965b52d71f..."
         '400':
           description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '404':
+          description: Dependent resource (EVC, flows or ProxyPort) not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
         '500':
           description: Internal Server Error
         '503':
