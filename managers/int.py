@@ -1116,10 +1116,10 @@ class INTManager:
         int_flows = {}
         keys_to_pop = ("inserted_at", "updated_at", "state")
 
-        built_flows = []
         for cookie, flows in self.flow_builder.build_int_flows(
             evcs, stored_flows
         ).items():
+            built_flows = []
             table_count = defaultdict(int)
             for flow in flows:
                 switch = self.controller.get_switch_by_dpid(flow["switch"])
@@ -1155,7 +1155,6 @@ class INTManager:
                 for evc_id in evcs
             ]
 
-            # TODO too big payload? debug
             cookies = [
                 utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs
             ]
