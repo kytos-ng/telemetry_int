@@ -308,7 +308,7 @@ class Main(KytosNApp):
             raise HTTPException(400, detail=f"Invalid payload: {content}")
 
         evc_ids = content.get("evc_ids", [])
-        outcome = request.query_params.get("outcome")
+        outcome = request.query_params.get("outcome", "inconsistent")
         inconsistent_action = request.query_params.get("inconsistent_action")
 
         try:

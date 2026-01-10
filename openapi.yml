@@ -267,7 +267,7 @@ paths:
           schema:
             type: string
             enum: [consistent, inconsistent]
-          description: Filter results by outcome
+          description: Filter results by outcome, by default it filters for inconsistent
         - name: inconsistent_action
           in: query
           schema:
