@@ -257,6 +257,61 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/evc/check_consistency:
+    post:
+      summary: Check consistency of INT flows
+      operationId: check_consistency
+      parameters:
+        - name: outcome
+          in: query
+          schema:
+            type: string
+            enum: [consistent, inconsistent]
+          description: Filter results by outcome
+        - name: inconsistent_action
+          in: query
+          schema:
+            type: string
+            enum: [fix, redeploy, disable]
+          description: Action to perform on inconsistent EVCs
+      requestBody:
+        description: List of EVC IDs to check. If empty, checks all INT EVCs.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Consistency check results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    outcome:
+                      type: string
+                      enum: [consistent, inconsistent]
+                    expected_flows:
+                      type: array
+                      items:
+                        type: object
+                    alien_flows:
+                      type: array
+                      items:
+                        type: object
+                    missing_flows:
+                      type: array
+                      items:
+                        type: object
+        '503':
+          description: Service unavailable
   /v1/evc/compare:
     get:
       summary: List compare EVCs
