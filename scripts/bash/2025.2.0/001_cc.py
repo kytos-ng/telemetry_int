@@ -28,11 +28,15 @@ async def check_consistency(
 
     endpoint = f"/telemetry_int/v1/evc/check_consistency?outcome={outcome}"
     if inconsistent_action:
-        endpoint = f"&inconsistent_action={inconsistent_action}"
+        endpoint = f"{endpoint}&inconsistent_action={inconsistent_action}"
     async with httpx.AsyncClient(base_url=base_url) as client:
         payload = {"evc_ids": evc_ids or []}
         resp = await client.post(endpoint, timeout=20, json=payload)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.error(resp.json())
+            raise
         return resp.json()
 
 
@@ -41,8 +45,9 @@ async def check_consistency_cmd(args: argparse.Namespace) -> str:
 
     If any coroutine fails its exception will be bubbled up.
     """
+    evc_ids = [evc_id for evc_id in args.evc_ids.split(",") if evc_id]
     evcs = await check_consistency(
-        args.base_url, args.evc_ids, args.outcome, args.inconsistent_action
+        args.base_url, evc_ids, args.outcome, args.inconsistent_action
     )
     return json.dumps(evcs)
 
