@@ -1096,6 +1096,7 @@ class INTManager:
 
     async def list_expected_flows(self, evcs: dict[str, dict]) -> dict[str, list[dict]]:
         """List expected flows for given EVCs."""
+        evcs = self._validate_map_enable_evcs(evcs, force=True)
         evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             _ = [
@@ -1108,7 +1109,6 @@ class INTManager:
         self, evcs: dict[str, dict]
     ) -> dict[str, list[dict]]:
         """List expected flows for given EVCs."""
-        evcs = self._validate_map_enable_evcs(evcs, force=True)
         stored_flows = await api.get_stored_flows(
             utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX) for evc_id in evcs
         )
@@ -1147,6 +1147,7 @@ class INTManager:
         inconsistent_action: Optional[str] = None,
     ) -> dict[str, dict]:
         """Check consistency of INT flows."""
+        evcs = self._validate_map_enable_evcs(evcs, force=True)
         evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(self._consistency_lock)
