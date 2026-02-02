@@ -201,6 +201,52 @@ class Main(KytosNApp):
             log.error(exc_error)
             raise HTTPException(500, detail=exc_error)
 
+    @rest("v1/evc/expected_flows", methods=["POST"])
+    async def evc_expected_flows(self, request: Request) -> JSONResponse:
+        """List expected flows for given INT EVCs."""
+        await avalidate_openapi_request(self.spec, request)
+        try:
+            content = await aget_json_or_400(request)
+            evc_ids = content["evc_ids"]
+        except (TypeError, KeyError):
+            raise HTTPException(400, detail=f"Invalid payload: {content}")
+
+        try:
+            evcs = (
+                await api.get_evcs()
+                if len(evc_ids) != 1
+                else await api.get_evc(evc_ids[0])
+            )
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
+
+        if evc_ids:
+            evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
+        else:
+            evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
+            if not evcs:
+                return JSONResponse({})
+
+        try:
+            int_flows = await self.int_manager.list_expected_flows(evcs)
+            return JSONResponse(int_flows)
+        except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
+            raise HTTPException(404, detail=str(exc))
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
+
     @rest("v1/evc/redeploy", methods=["PATCH"])
     async def redeploy_telemetry(self, request: Request) -> JSONResponse:
         """REST to redeploy INT on EVCs.
@@ -249,6 +295,55 @@ class Main(KytosNApp):
             raise HTTPException(500, detail=exc_error)
 
         return JSONResponse(list(evcs.keys()), status_code=201)
+
+    @rest("v1/evc/check_consistency", methods=["POST"])
+    async def check_consistency(self, request: Request) -> JSONResponse:
+        """Check consistency of INT flows."""
+        await avalidate_openapi_request(self.spec, request)
+
+        try:
+            content = await aget_json_or_400(request)
+            evc_ids = content["evc_ids"]
+        except (TypeError, KeyError):
+            raise HTTPException(400, detail=f"Invalid payload: {content}")
+
+        evc_ids = content.get("evc_ids", [])
+        outcome = request.query_params.get("outcome", "inconsistent")
+        inconsistent_action = request.query_params.get("inconsistent_action")
+
+        try:
+            evcs = (
+                await api.get_evcs()
+                if not evc_ids or len(evc_ids) != 1
+                else await api.get_evc(evc_ids[0])
+            )
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+
+        if evc_ids:
+            evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
+        else:
+            evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
+            if not evcs:
+                return JSONResponse({})
+
+        try:
+            results = await self.int_manager.check_consistency(
+                evcs, outcome, inconsistent_action
+            )
+            return JSONResponse(results)
+        except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
+            raise HTTPException(404, detail=str(exc))
+        except RetryError as exc:
+            exc_error = str(exc.last_attempt.exception())
+            log.error(exc_error)
+            raise HTTPException(503, detail=exc_error)
+        except UnrecoverableError as exc:
+            exc_error = str(exc)
+            log.error(exc_error)
+            raise HTTPException(500, detail=exc_error)
 
     @rest("v1/evc/compare")
     async def evc_compare(self, _request: Request) -> JSONResponse:

@@ -157,6 +157,161 @@ paths:
           description: Internal Server Error
         '503':
           description: Service unavailable
+  /v1/evc/expected_flows:
+    post:
+      summary: List expected flows for given INT EVCs.
+      operationId: expected_flows
+      requestBody:
+        description: List expected flows for given INT EVCs. If the list of evc_ids is empty, it'll include all INT EVCs.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Listed expected flows for INT-enabled EVCs. Returns an object keyed by EVC ID, where each value contains flow counts and the list of expected INT flows.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    count_total:
+                      type: integer
+                      description: Total number of flows for this EVC
+                    count_table:
+                      type: object
+                      description: Count of flows per table ID
+                      additionalProperties:
+                        type: integer
+                    flows:
+                      type: array
+                      description: List of expected INT flows
+                      items:
+                        type: object
+                        properties:
+                          switch:
+                            type: string
+                            description: Switch DPID
+                          flow:
+                            type: object
+                            description: OpenFlow flow object with match and action definitions
+                            properties:
+                              table_id:
+                                type: integer
+                              owner:
+                                type: string
+                              priority:
+                                type: integer
+                              cookie:
+                                type: integer
+                              match:
+                                type: object
+                              actions:
+                                type: array
+                          flow_id:
+                            type: string
+                            description: Flow identifier based on serialized flow
+                          id:
+                            type: string
+                            description: Match identifier
+              example:
+                "evc123":
+                  count_total: 1
+                  count_table:
+                    "0": 1
+                  flows:
+                    - switch: "00:00:00:00:00:00:00:01"
+                      flow:
+                        table_id: 0
+                        owner: "telemetry_int"
+                        priority: 20000
+                        cookie: 12345678901234567890
+                        match:
+                          in_port: 1
+                        actions:
+                          - action_type: "output"
+                            port: 2
+                      flow_id: "aa84a60ca2965b52d71f..."
+                      id: "965b52d71f..."
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '404':
+          description: Dependent resource (EVC, flows or ProxyPort) not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '500':
+          description: Internal Server Error
+        '503':
+          description: Service unavailable
+  /v1/evc/check_consistency:
+    post:
+      summary: Check consistency of INT flows
+      operationId: check_consistency
+      parameters:
+        - name: outcome
+          in: query
+          schema:
+            type: string
+            enum: [consistent, inconsistent]
+          description: Filter results by outcome, by default it filters for inconsistent
+        - name: inconsistent_action
+          in: query
+          schema:
+            type: string
+            enum: [fix, redeploy, disable]
+          description: Action to perform on inconsistent EVCs
+      requestBody:
+        description: List of EVC IDs to check. If empty, checks all INT EVCs.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                evc_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Consistency check results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    outcome:
+                      type: string
+                      enum: [consistent, inconsistent]
+                    expected_flows:
+                      type: array
+                      items:
+                        type: object
+                    alien_flows:
+                      type: array
+                      items:
+                        type: object
+                    missing_flows:
+                      type: array
+                      items:
+                        type: object
+        '503':
+          description: Service unavailable
   /v1/evc/compare:
     get:
       summary: List compare EVCs

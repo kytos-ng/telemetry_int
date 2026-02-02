@@ -1,12 +1,14 @@
 """Test INTManager"""
 
+# pylint: disable=too-many-lines
+
 import pytest
 
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.exceptions import ProxyPortSameSourceIntraEVC
 from napps.kytos.telemetry_int.exceptions import ProxyPortShared
 from napps.kytos.telemetry_int.managers.int import INTManager
-from napps.kytos.telemetry_int import exceptions
+from napps.kytos.telemetry_int import exceptions, settings, utils
 from kytos.core.common import EntityStatus
 
 from kytos.lib.helpers import (
@@ -724,3 +726,310 @@ class TestINTManager:
         switch_flows = {"dpid": [MagicMock()]}
         await int_manager._send_flows(switch_flows, "install")
         controller._buffers.app.aput.assert_called()
+
+    async def test_list_expected_flows_intra_evc(
+        self, monkeypatch, evcs_data, intra_evc_evpl_flows_data
+    ) -> None:
+        """Test list expected flows for intra-switch EVC."""
+        controller = get_controller_mock()
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        int_manager = INTManager(controller)
+        evc_id = "3766c105686749"
+        evcs = {evc_id: evcs_data[evc_id]}
+
+        int_manager._validate_map_enable_evcs = MagicMock(return_value=evcs)
+
+        cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+        stored_flows = {cookie: intra_evc_evpl_flows_data}
+        api_mock.get_stored_flows.return_value = stored_flows
+
+        dpid = "00:00:00:00:00:00:00:01"
+        mock_switch = get_switch_mock(dpid, 0x04)
+        mock_switch.id = dpid
+        controller.get_switch_by_dpid = MagicMock(return_value=mock_switch)
+
+        mock_flows = {
+            cookie: [
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 1,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+            ]
+        }
+        int_manager.flow_builder.build_int_flows = MagicMock(return_value=mock_flows)
+
+        result = await int_manager.list_expected_flows(evcs)
+
+        assert evc_id in result
+        assert "count_total" in result[evc_id]
+        assert "count_table" in result[evc_id]
+        assert "flows" in result[evc_id]
+        assert isinstance(result[evc_id]["count_total"], int)
+        assert isinstance(result[evc_id]["count_table"], dict)
+        assert isinstance(result[evc_id]["flows"], list)
+
+        for flow in result[evc_id]["flows"]:
+            assert "switch" in flow
+            assert "flow" in flow
+            assert "flow_id" in flow
+            assert "id" in flow
+            assert "inserted_at" not in flow
+            assert "updated_at" not in flow
+            assert "state" not in flow
+
+    async def test_list_expected_flows_inter_evc(
+        self, monkeypatch, evcs_data, inter_evc_evpl_flows_data
+    ) -> None:
+        """Test list expected flows for inter-switch EVC."""
+        controller = get_controller_mock()
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        int_manager = INTManager(controller)
+        evc_id = "16a76ae61b2f46"
+        evcs = {evc_id: evcs_data[evc_id]}
+
+        int_manager._validate_map_enable_evcs = MagicMock(return_value=evcs)
+
+        cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+        stored_flows = {cookie: inter_evc_evpl_flows_data}
+        api_mock.get_stored_flows.return_value = stored_flows
+
+        dpid1 = "00:00:00:00:00:00:00:01"
+        dpid2 = "00:00:00:00:00:00:00:02"
+        mock_switch1 = get_switch_mock(dpid1, 0x04)
+        mock_switch1.id = dpid1
+        mock_switch2 = get_switch_mock(dpid2, 0x04)
+        mock_switch2.id = dpid2
+
+        def get_switch_by_dpid(dpid):
+            return mock_switch1 if dpid == dpid1 else mock_switch2
+
+        controller.get_switch_by_dpid = MagicMock(side_effect=get_switch_by_dpid)
+
+        mock_flows = {
+            cookie: [
+                {
+                    "switch": dpid1,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+                {
+                    "switch": dpid2,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+            ]
+        }
+        int_manager.flow_builder.build_int_flows = MagicMock(return_value=mock_flows)
+
+        result = await int_manager.list_expected_flows(evcs)
+
+        assert evc_id in result
+        assert "count_total" in result[evc_id]
+        assert "count_table" in result[evc_id]
+        assert "flows" in result[evc_id]
+        assert len(result[evc_id]["flows"]) == 2
+
+        for flow in result[evc_id]["flows"]:
+            assert "switch" in flow
+            assert "flow" in flow
+            assert "flow_id" in flow
+            assert "id" in flow
+            assert "inserted_at" not in flow
+            assert "updated_at" not in flow
+            assert "state" not in flow
+
+    async def test_list_expected_flows_multiple_evcs(
+        self, monkeypatch, evcs_data, intra_evc_evpl_flows_data
+    ) -> None:
+        """Test list expected flows for multiple EVCs."""
+        controller = get_controller_mock()
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        int_manager = INTManager(controller)
+        evc_id_intra = "3766c105686749"
+        evc_id_inter = "16a76ae61b2f46"
+        evcs = {
+            evc_id_intra: evcs_data[evc_id_intra],
+            evc_id_inter: evcs_data[evc_id_inter],
+        }
+
+        int_manager._validate_map_enable_evcs = MagicMock(return_value=evcs)
+
+        cookie_intra = utils.get_cookie(evc_id_intra, settings.MEF_COOKIE_PREFIX)
+        cookie_inter = utils.get_cookie(evc_id_inter, settings.MEF_COOKIE_PREFIX)
+        stored_flows = {
+            cookie_intra: intra_evc_evpl_flows_data,
+            cookie_inter: intra_evc_evpl_flows_data,
+        }
+        api_mock.get_stored_flows.return_value = stored_flows
+
+        dpid = "00:00:00:00:00:00:00:01"
+        mock_switch = get_switch_mock(dpid, 0x04)
+        mock_switch.id = dpid
+        controller.get_switch_by_dpid = MagicMock(return_value=mock_switch)
+
+        mock_flows = {
+            cookie_intra: [
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie_intra,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                }
+            ],
+            cookie_inter: [
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie_inter,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                }
+            ],
+        }
+        int_manager.flow_builder.build_int_flows = MagicMock(return_value=mock_flows)
+
+        result = await int_manager.list_expected_flows(evcs)
+
+        assert evc_id_intra in result
+        assert evc_id_inter in result
+        assert len(result) == 2
+
+    async def test_list_expected_flows_count_tables(
+        self, monkeypatch, evcs_data, intra_evc_evpl_flows_data
+    ) -> None:
+        """Test list expected flows counts flows per table correctly."""
+        controller = get_controller_mock()
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        int_manager = INTManager(controller)
+        evc_id = "3766c105686749"
+        evcs = {evc_id: evcs_data[evc_id]}
+
+        int_manager._validate_map_enable_evcs = MagicMock(return_value=evcs)
+
+        cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+        stored_flows = {cookie: intra_evc_evpl_flows_data}
+        api_mock.get_stored_flows.return_value = stored_flows
+
+        dpid = "00:00:00:00:00:00:00:01"
+        mock_switch = get_switch_mock(dpid, 0x04)
+        mock_switch.id = dpid
+        controller.get_switch_by_dpid = MagicMock(return_value=mock_switch)
+
+        mock_flows = {
+            cookie: [
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 0,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+                {
+                    "switch": dpid,
+                    "flow": {
+                        "table_id": 1,
+                        "cookie": cookie,
+                        "priority": 20000,
+                        "match": {},
+                        "actions": [],
+                    },
+                    "inserted_at": "2023-09-15T13:11:53.162000",
+                    "updated_at": "2023-09-15T13:11:53.184000",
+                    "state": "installed",
+                },
+            ]
+        }
+        int_manager.flow_builder.build_int_flows = MagicMock(return_value=mock_flows)
+
+        result = await int_manager.list_expected_flows(evcs)
+
+        count_table = result[evc_id]["count_table"]
+        flows = result[evc_id]["flows"]
+
+        table_count = {}
+        for flow in flows:
+            table_id = flow["flow"]["table_id"]
+            table_count[table_id] = table_count.get(table_id, 0) + 1
+
+        for table_id, count in count_table.items():
+            assert table_count[table_id] == count
+
+        assert result[evc_id]["count_total"] == len(flows)

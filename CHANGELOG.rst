@@ -26,6 +26,12 @@ Added
 - EVC metadata ``proxy_port_enabled`` can overwrite whether or not a ``proxy_port`` should be used by an inter EVC. This unlocks EVPLs that shouldn't be using proxy port over UNIs that have proxy ports configured. This option is exposed on the ``POST`` /v1/evc/enable endpoint
 - Added UI for selecting ``proxy_port_enabled`` option and displaying it
 - Added support for vlan range, any and untagged EVCs
+- Added POST v1/evc/check_consistency endpoint
+- Added POST v1/evc/expected_flows endpoint
+
+General Information
+===================
+- The script ``scripts/bash/2025.2.0/001_cc.py`` can be used to trigger consistency check runs for INT EVCs, in this version, it's recommended that this script is run every few minutes if you're using ``telemetry_int`` in production. In a future version, ``telemetry_int`` consistency check will be able to run periodically
 
 [2025.1.0] - 2025-04-14
 ***********************

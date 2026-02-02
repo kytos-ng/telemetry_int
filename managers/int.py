@@ -17,6 +17,8 @@ from napps.kytos.telemetry_int import settings
 from kytos.core import log
 from kytos.core.link import Link
 import napps.kytos.telemetry_int.kytos_api_helper as api
+from napps.kytos.of_core.flow import FlowFactory
+from napps.kytos.of_core.v0x04.flow import Flow as Flow04
 from napps.kytos.telemetry_int.managers.flow_builder import FlowBuilder
 from kytos.core.common import EntityStatus
 from napps.kytos.telemetry_int.proxy_port import ProxyPort
@@ -52,6 +54,7 @@ class INTManager:
         self._topo_link_lock = asyncio.Lock()
         self._intf_meta_lock = asyncio.Lock()
         self._evcs_lock: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._consistency_lock = asyncio.Lock()
 
         # Keep track between each uni intf id and its src intf id port
         self.unis_src: dict[str, str] = {}
@@ -1047,10 +1050,16 @@ class INTManager:
 
         Removal is driven by the stored flows instead of EVC ids and dpids to also
         be able to handle the force mode when an EVC no longer exists. It also follows
-        the same pattern that mef_eline currently uses."""
+        the same pattern that mef_eline currently uses.
+
+        If cookie is set but has no cookie_mask, it'll set an all 1's mask to
+        simplify mappings for callers
+        """
         switch_flows = defaultdict(list)
         for flows in stored_flows.values():
             for flow in flows:
+                if "cookie" in flow["flow"] and "cookie_mask" not in flow["flow"]:
+                    flow["flow"]["cookie_mask"] = int(0xFFFFFFFFFFFFFFFF)
                 switch_flows[flow["switch"]].append(flow["flow"])
         await self._send_flows(switch_flows, "delete")
         return switch_flows
@@ -1084,3 +1093,150 @@ class INTManager:
                         },
                     )
                 )
+
+    async def list_expected_flows(self, evcs: dict[str, dict]) -> dict[str, list[dict]]:
+        """List expected flows for given EVCs."""
+        evcs = self._validate_map_enable_evcs(evcs, force=True)
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        async with AsyncExitStack() as stack:
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in evcs
+            ]
+            return await self._list_expected_flows(evcs)
+
+    async def _list_expected_flows(
+        self, evcs: dict[str, dict]
+    ) -> dict[str, list[dict]]:
+        """List expected flows for given EVCs."""
+        stored_flows = await api.get_stored_flows(
+            utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX) for evc_id in evcs
+        )
+
+        int_flows = {}
+        keys_to_pop = ("inserted_at", "updated_at", "state")
+
+        for cookie, flows in self.flow_builder.build_int_flows(
+            evcs, stored_flows
+        ).items():
+            built_flows = []
+            table_count = defaultdict(int)
+            for flow in flows:
+                switch = self.controller.get_switch_by_dpid(flow["switch"])
+                serializer = FlowFactory.get_class(switch, Flow04)
+                ser_flow = serializer.from_dict(flow["flow"], switch)
+                for key in keys_to_pop:
+                    flow.pop(key, None)
+                flow["flow_id"] = ser_flow.id
+                flow["id"] = ser_flow.match_id
+                table_count[ser_flow.table_id] += 1
+                built_flows.append(flow)
+
+            evc_id = utils.get_id_from_cookie(cookie)
+            int_flows[evc_id] = {
+                "count_total": len(built_flows),
+                "count_table": table_count,
+                "flows": built_flows,
+            }
+        return int_flows
+
+    async def check_consistency(
+        self,
+        evcs: dict[str, dict],
+        outcome: Optional[str] = None,
+        inconsistent_action: Optional[str] = None,
+    ) -> dict[str, dict]:
+        """Check consistency of INT flows."""
+        evcs = self._validate_map_enable_evcs(evcs, force=True)
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(self._consistency_lock)
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in evcs
+            ]
+
+            cookies = [
+                utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs
+            ]
+            expected_flows_by_evc, stored_flows_by_cookie = await asyncio.gather(
+                self._list_expected_flows(evcs), api.get_stored_flows(cookies)
+            )
+
+            to_fix_missing, to_fix_alien = defaultdict(list), defaultdict(list)
+            to_fix_missing_len, to_fix_alien_len = 0, 0
+            to_redeploy, to_disable = {}, {}
+
+            results = {}
+            for evc_id, evc in evcs.items():
+                evc_result = {}
+                # Expected
+                expected_data = expected_flows_by_evc.get(evc_id, {})
+                expected_list = expected_data.get("flows", [])
+                expected_map = {f["flow_id"]: f for f in expected_list}
+                # Stored
+                cookie = utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+                stored_list = stored_flows_by_cookie.get(cookie, [])
+                stored_map = {f["flow_id"]: f for f in stored_list}
+
+                missing_ids = set(expected_map.keys()) - set(stored_map.keys())
+                alien_ids = set(stored_map.keys()) - set(expected_map.keys())
+
+                evc_result["expected_flows"] = expected_list
+                evc_result["missing_flows"] = [expected_map[v] for v in missing_ids]
+                evc_result["alien_flows"] = [stored_map[v] for v in alien_ids]
+
+                is_consistent = not missing_ids and not alien_ids
+                evc_result["outcome"] = (
+                    "consistent" if is_consistent else "inconsistent"
+                )
+
+                if outcome and evc_result["outcome"] != outcome:
+                    continue
+
+                results[evc_id] = evc_result
+                if is_consistent:
+                    continue
+
+                if evc_result["missing_flows"]:
+                    length = len(evc_result["missing_flows"])
+                    log.warning(
+                        f"Consistency check INT: EVC {evc_id}, missing {length} flows: "
+                        f"{evc_result['missing_flows']}"
+                    )
+                    to_fix_missing_len += length
+                    if inconsistent_action == "fix":
+                        to_fix_missing[cookie].extend(evc_result["missing_flows"])
+
+                if evc_result["alien_flows"]:
+                    length = len(evc_result["alien_flows"])
+                    log.warning(
+                        f"Consistency check INT: EVC {evc_id}, {length} alien flows: "
+                        f"{evc_result['alien_flows']}"
+                    )
+                    to_fix_alien_len += length
+                    if inconsistent_action == "fix":
+                        to_fix_alien[cookie].extend(evc_result["alien_flows"])
+
+                if inconsistent_action == "redeploy":
+                    to_redeploy[evc_id] = evc
+                elif inconsistent_action == "disable":
+                    to_disable[evc_id] = evc
+
+            if to_fix_alien:
+                log.info(f"Consistency check INT: will remove {to_fix_alien_len} flows")
+                await self._remove_int_flows(to_fix_alien)
+            if to_fix_missing:
+                log.info(
+                    f"Consistency check INT: will install {to_fix_missing_len} flows"
+                )
+                await self._install_int_flows(to_fix_missing)
+
+        if to_redeploy:
+            log.info(f"Consistency check INT: will redeploy {len(to_redeploy)} EVCs")
+            await self.redeploy_int(to_redeploy)
+        if to_disable:
+            log.info(f"Consistency check INT: will disable {len(to_disable)} EVCs")
+            await self.disable_int(evcs, force=True, reason="consistency_check")
+
+        return results
