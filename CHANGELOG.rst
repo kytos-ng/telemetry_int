@@ -7,6 +7,9 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+[2025.2.0] - 2026-02-02
+***********************
+
 Fixed
 =====
 - Fixed ``get_id_from_cookie(cookie)`` utility function, now it handles EVC id with leading zeros correctly. This function is used in flow mod error handling and also in the ``GET v1/evc/compare`` endpoint
