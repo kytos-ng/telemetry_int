@@ -1114,9 +1114,7 @@ class TestINTManager:
         assert len(result[inconsistent_evc_id]["missing_flows"]) == 1
         assert result[inconsistent_evc_id]["missing_flows"][0]["flow_id"] == flow_id_b
         assert len(result[inconsistent_evc_id]["alien_flows"]) == 1
-        assert (
-            result[inconsistent_evc_id]["alien_flows"][0]["flow_id"] == flow_id_alien
-        )
+        assert result[inconsistent_evc_id]["alien_flows"][0]["flow_id"] == flow_id_alien
 
         # The consistent EVC has no missing or alien flows
         assert len(result[consistent_evc_id]["missing_flows"]) == 0
