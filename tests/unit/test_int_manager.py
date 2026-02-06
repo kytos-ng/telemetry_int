@@ -1033,3 +1033,99 @@ class TestINTManager:
             assert table_count[table_id] == count
 
         assert result[evc_id]["count_total"] == len(flows)
+
+    async def test_check_consistency_disable_only_inconsistent(
+        self, monkeypatch
+    ) -> None:
+        """Test check_consistency with inconsistent_action='disable' only
+        disables the inconsistent EVCs, not all EVCs.
+
+        Regression test for the fix where disable_int was called with all
+        evcs instead of only to_disable.
+        """
+        controller = MagicMock()
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        int_manager = INTManager(controller)
+        int_manager._validate_map_enable_evcs = MagicMock(side_effect=lambda e, **kw: e)
+        int_manager.disable_int = AsyncMock()
+
+        consistent_evc_id = "3766c105686749"
+        inconsistent_evc_id = "16a76ae61b2f46"
+        evcs = {
+            consistent_evc_id: {
+                "id": consistent_evc_id,
+                "service_level": 6,
+            },
+            inconsistent_evc_id: {
+                "id": inconsistent_evc_id,
+                "service_level": 6,
+            },
+        }
+
+        consistent_cookie = utils.get_cookie(
+            consistent_evc_id, settings.INT_COOKIE_PREFIX
+        )
+        inconsistent_cookie = utils.get_cookie(
+            inconsistent_evc_id, settings.INT_COOKIE_PREFIX
+        )
+
+        flow_id_a = "aaaa1111"
+        flow_id_b = "bbbb2222"
+        flow_id_alien = "cccc3333"
+
+        # _list_expected_flows returns expected flows per evc_id
+        async def mock_list_expected_flows(_evcs):
+            return {
+                consistent_evc_id: {
+                    "flows": [{"flow_id": flow_id_a, "flow": {}, "switch": "dpid1"}],
+                },
+                inconsistent_evc_id: {
+                    "flows": [{"flow_id": flow_id_b, "flow": {}, "switch": "dpid1"}],
+                },
+            }
+
+        int_manager._list_expected_flows = mock_list_expected_flows
+
+        # get_stored_flows returns stored flows per cookie
+        # consistent EVC: stored matches expected
+        # inconsistent EVC: stored has alien flow, missing expected flow
+        api_mock.get_stored_flows.return_value = {
+            consistent_cookie: [
+                {"flow_id": flow_id_a, "flow": {}, "switch": "dpid1"},
+            ],
+            inconsistent_cookie: [
+                {"flow_id": flow_id_alien, "flow": {}, "switch": "dpid1"},
+            ],
+        }
+
+        result = await int_manager.check_consistency(
+            evcs, inconsistent_action="disable"
+        )
+
+        # Both EVCs should be in results
+        assert consistent_evc_id in result
+        assert inconsistent_evc_id in result
+        assert result[consistent_evc_id]["outcome"] == "consistent"
+        assert result[inconsistent_evc_id]["outcome"] == "inconsistent"
+
+        # The inconsistent EVC has missing and alien flows
+        assert len(result[inconsistent_evc_id]["missing_flows"]) == 1
+        assert result[inconsistent_evc_id]["missing_flows"][0]["flow_id"] == flow_id_b
+        assert len(result[inconsistent_evc_id]["alien_flows"]) == 1
+        assert (
+            result[inconsistent_evc_id]["alien_flows"][0]["flow_id"] == flow_id_alien
+        )
+
+        # The consistent EVC has no missing or alien flows
+        assert len(result[consistent_evc_id]["missing_flows"]) == 0
+        assert len(result[consistent_evc_id]["alien_flows"]) == 0
+
+        # disable_int must only be called with the inconsistent EVC
+        assert int_manager.disable_int.call_count == 1
+        args = int_manager.disable_int.call_args
+        disabled_evcs = args[0][0]
+        assert inconsistent_evc_id in disabled_evcs
+        assert consistent_evc_id not in disabled_evcs
+        assert args[1] == {"force": True, "reason": "consistency_check"}
