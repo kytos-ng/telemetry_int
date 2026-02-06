@@ -249,7 +249,7 @@ def test_build_int_flows_intra_evpl(evcs_data, intra_evc_evpl_flows_data) -> Non
                 "match": {"in_port": 11, "dl_vlan": 200},
                 "table_id": 0,
                 "table_group": "evpl",
-                "priority": 20000,
+                "priority": 20100,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
                 "instructions": [
@@ -291,7 +291,7 @@ def test_build_int_flows_intra_evpl(evcs_data, intra_evc_evpl_flows_data) -> Non
                 "match": {"in_port": 21, "dl_vlan": 200},
                 "table_id": 0,
                 "table_group": "evpl",
-                "priority": 20000,
+                "priority": 20100,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
                 "instructions": [
@@ -573,7 +573,7 @@ def test_build_int_flows_intra_evpl_diff_cvlans(
                 "match": {"in_port": 11, "dl_vlan": 100},
                 "table_id": 0,
                 "table_group": "evpl",
-                "priority": 20000,
+                "priority": 20100,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
                 "instructions": [
@@ -615,7 +615,7 @@ def test_build_int_flows_intra_evpl_diff_cvlans(
                 "match": {"in_port": 21, "dl_vlan": 200},
                 "table_id": 0,
                 "table_group": "evpl",
-                "priority": 20000,
+                "priority": 20100,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
                 "instructions": [
@@ -886,7 +886,7 @@ def test_build_int_flows_intra_epl(evcs_data, intra_evc_epl_flows_data) -> None:
                 "match": {"in_port": 11},
                 "table_id": 0,
                 "table_group": "epl",
-                "priority": 10000,
+                "priority": 10100,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
                 "instructions": [
@@ -928,7 +928,7 @@ def test_build_int_flows_intra_epl(evcs_data, intra_evc_epl_flows_data) -> None:
                 "match": {"in_port": 21},
                 "table_id": 0,
                 "table_group": "epl",
-                "priority": 10000,
+                "priority": 10100,
                 "idle_timeout": 0,
                 "hard_timeout": 0,
                 "instructions": [

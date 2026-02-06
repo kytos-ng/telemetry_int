@@ -7,6 +7,15 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
+[2025.2.1] - 2026-02-11
+***********************
+
+Fixed
+=====
+- Fixed ``inconsistent_action`` disable on POST /v1/evc/check_consistency
+- Fixed post proxy port table 0 flows priority to be higher similarly to the rest of table 0 INT flows
+
+
 [2025.2.0] - 2026-02-02
 ***********************
 

@@ -3,7 +3,7 @@
   "username": "kytos",
   "name": "telemetry_int",
   "description": "Napp to deploy In-band Network Telemetry for EVCs",
-  "version": "2025.2.0",
+  "version": "2025.2.1",
   "napp_dependencies": ["amlight/noviflow", "kytos/mef_eline", "kytos/flow_manager"],
   "license": "MIT",
   "tags": ["INT"],
