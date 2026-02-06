@@ -38,7 +38,7 @@ async def get_evcs(**kwargs) -> dict:
             raise httpx.RequestError(response.text)
         if not response.is_success:
             raise UnrecoverableError(
-                f"Failed to get_evcs archived {archived}"
+                f"Failed to get_evcs archived {archived} "
                 f"status code {response.status_code}, response text: {response.text}"
             )
         return response.json()

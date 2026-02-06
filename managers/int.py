@@ -890,10 +890,8 @@ class INTManager:
                 raise
 
             if (
-                not utils.is_intra_switch_evc(evc)
-                and not proxy_port_enabled
-                or utils.get_evc_proxy_port_value(evc) is False
-            ):
+                not utils.is_intra_switch_evc(evc) and not proxy_port_enabled
+            ) or utils.get_evc_proxy_port_value(evc) is False:
                 continue
             self._validate_proxy_ports_symmetry(evc)
             if not pp_a and not pp_z:
@@ -1237,6 +1235,6 @@ class INTManager:
             await self.redeploy_int(to_redeploy)
         if to_disable:
             log.info(f"Consistency check INT: will disable {len(to_disable)} EVCs")
-            await self.disable_int(evcs, force=True, reason="consistency_check")
+            await self.disable_int(to_disable, force=True, reason="consistency_check")
 
         return results
