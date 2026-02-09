@@ -365,7 +365,7 @@ class FlowBuilder:
             in_port_no = proxy_port.destination.port_number
 
             new_int_flow_tbl_0_pos["flow"]["match"]["in_port"] = in_port_no
-            utils.set_priority(new_int_flow_tbl_0_tcp)
+            utils.set_priority(new_int_flow_tbl_0_pos)
 
             new_table_id = self.get_table_id(new_int_flow_tbl_x_pos)
             if has_special_dl_vlan:
