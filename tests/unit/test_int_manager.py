@@ -379,6 +379,56 @@ class TestINTManager:
         assert api_mock.add_evcs_metadata.call_count == 1
         assert log_mock.error.call_count == 1
 
+    async def test_handle_pp_metadata_added_enable_exc_only_affected_evcs(
+        self, monkeypatch
+    ):
+        """Test that only affected_evcs are passed to add_evcs_metadata."""
+        log_mock = MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.log", log_mock)
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        intf_mock.metadata = {"proxy_port": 2}
+
+        evc_a_id = "3766c105686748"
+        evc_b_id = "aabbcc112233dd"
+        evc_a_data = {
+            "uni_a": {"interface_id": "some_intf_id"},
+            "uni_z": {"interface_id": "other_intf_id"},
+        }
+        evc_b_data = {
+            "uni_a": {"interface_id": "unrelated_a"},
+            "uni_z": {"interface_id": "unrelated_z"},
+        }
+
+        int_manager.get_proxy_port_or_raise = MagicMock()
+        pp_mock.evc_ids = {evc_a_id}
+        int_manager.get_proxy_port_or_raise.return_value = pp_mock
+
+        assert "proxy_port" in intf_mock.metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {
+            evc_a_id: evc_a_data,
+            evc_b_id: evc_b_data,
+        }
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock()
+        int_manager.enable_int.side_effect = ProxyPortShared(evc_a_id, "shared")
+
+        await int_manager.handle_pp_metadata_added(intf_mock)
+
+        assert int_manager.disable_int.call_count == 1
+        assert int_manager.disable_int.call_args[0][0] == {evc_a_id: evc_a_data}
+        assert int_manager.enable_int.call_count == 1
+        assert int_manager.enable_int.call_args[0][0] == {evc_a_id: evc_a_data}
+
+        assert api_mock.add_evcs_metadata.call_count == 1
+        evcs_arg = api_mock.add_evcs_metadata.call_args[0][0]
+        assert evcs_arg == {evc_a_id: evc_a_data}
+        metadata_arg = api_mock.add_evcs_metadata.call_args[0][1]
+        assert metadata_arg["telemetry"]["enabled"] is False
+        assert metadata_arg["telemetry"]["status"] == "DOWN"
+
     async def test_disable_int_metadata(self, monkeypatch) -> None:
         """Test disable INT metadata args."""
         controller = MagicMock()
