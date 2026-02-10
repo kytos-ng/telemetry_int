@@ -283,8 +283,7 @@ class INTManager:
             affected_evcs = {
                 evc_id: evc
                 for evc_id, evc in evcs.items()
-                if pp
-                and evc_id in pp.evc_ids
+                if (pp and evc_id in pp.evc_ids)
                 or evc["uni_a"]["interface_id"] == intf.id
                 or evc["uni_z"]["interface_id"] == intf.id
             }
@@ -336,7 +335,7 @@ class INTManager:
                     }
                 }
                 try:
-                    await api.add_evcs_metadata(evcs, metadata)
+                    await api.add_evcs_metadata(affected_evcs, metadata)
                 except (RetryError, UnrecoverableError) as exc:
                     excs = str(exc)
                     if isinstance(exc, RetryError):
