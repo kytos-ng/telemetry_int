@@ -7,7 +7,15 @@ file.
 [UNRELEASED] - Under development
 ********************************
 
-[2025.2.1] - 2026-02-11
+[2025.2.2] - 2026-02-11
+***********************
+
+Fixed
+=====
+- Fixed setting the correct metadata when handling potential errors when a proxy port metadata changes
+
+
+[2025.2.1] - 2026-02-09
 ***********************
 
 Fixed
