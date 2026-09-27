@@ -59,7 +59,13 @@ class FlowBuilder:
     def build_failover_old_flows(
         self, evcs: dict[str, dict], old_flows: dict[int, list[dict]]
     ) -> dict[int, list[dict]]:
-        """Build (old path) failover related to remove flows."""
+        """Build (old path) failover related to remove flows.
+
+        Removed UNI ingress flows, as a static EVC stopping forwarding sends
+        (static.ingress_removed), also remove their INT source flows, else
+        push_int would keep sending UNI traffic into the NNIs. Other removals
+        only hold egress and NNI flows, with no INT source flows.
+        """
 
         removed_flows = defaultdict(list)
         for evc_id, evc in evcs.items():
@@ -70,19 +76,21 @@ class FlowBuilder:
 
             for flow in old_flows[cookie]:
                 if not sink_a_flows and flow["switch"] == dpid_a:
-                    sink_a_flows = self._build_int_sink_flows(
-                        "uni_a", evc, old_flows
-                    )
+                    sink_a_flows = self._build_int_sink_flows("uni_a", evc, old_flows)
                 elif not sink_z_flows and flow["switch"] == dpid_z:
-                    sink_z_flows = self._build_int_sink_flows(
-                        "uni_z", evc, old_flows
-                    )
+                    sink_z_flows = self._build_int_sink_flows("uni_z", evc, old_flows)
                 if sink_a_flows and sink_z_flows:
                     break
 
             hop_flows = self._build_int_hop_flows(evc, old_flows)
             removed_flows[cookie] = list(
-                itertools.chain(sink_a_flows, hop_flows, sink_z_flows)
+                itertools.chain(
+                    self._build_int_source_flows("uni_a", evc, old_flows),
+                    self._build_int_source_flows("uni_z", evc, old_flows),
+                    sink_a_flows,
+                    hop_flows,
+                    sink_z_flows,
+                )
             )
         return removed_flows
 

@@ -379,12 +379,12 @@ class INTManager:
         self, evcs: dict[str, dict], metadata: dict, force=False
     ) -> None:
         """Remove INT flows and set metadata on EVCs."""
-        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             _ = [
                 await stack.enter_async_context(self._evcs_lock[evc_id])
-                for evc_id in evcs
+                for evc_id in sorted(evcs)
             ]
+            evcs = utils.sorted_evcs_by_svc_lvl(evcs)
             stored_flows = await api.get_stored_flows(
                 [
                     utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
@@ -427,12 +427,12 @@ class INTManager:
             f"proxy_port_enabled: {proxy_port_enabled}"
         )
 
-        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             _ = [
                 await stack.enter_async_context(self._evcs_lock[evc_id])
-                for evc_id in evcs
+                for evc_id in sorted(evcs)
             ]
+            evcs = utils.sorted_evcs_by_svc_lvl(evcs)
             stored_flows = await api.get_stored_flows(
                 [
                     utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
@@ -464,12 +464,12 @@ class INTManager:
         evcs = self._validate_map_enable_evcs(evcs, force=True)
         log.info(f"Redeploying INT on EVC ids: {list(evcs.keys())}, force: True")
 
-        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             _ = [
                 await stack.enter_async_context(self._evcs_lock[evc_id])
-                for evc_id in evcs
+                for evc_id in sorted(evcs)
             ]
+            evcs = utils.sorted_evcs_by_svc_lvl(evcs)
             stored_flows = await api.get_stored_flows(
                 [
                     utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
@@ -723,17 +723,19 @@ class INTManager:
                     raise ProxyPortShared(evc["id"], msg)
                 seen_src_unis[pp.source.id] = uni_id
 
-    async def handle_failover_flows(
+    async def handle_partial_flows(
         self, evcs_content: dict[str, dict], event_name: str
-    ) -> None:
-        """Handle failover flows. This method will generate the subset
-        of INT flows. EVCs with 'flows' key will be installed, and
-        'old_flows' will be removed.
+    ) -> set[str]:
+        """Handle a subset of an EVC's flows. This method will generate the
+        subset of INT flows. EVCs with 'flows' key will be installed, and
+        'removed_flows' will be removed.
 
         If a given proxy port has an unexpected state INT will be
-        removed falling back to mef_eline flows.
+        removed falling back to mef_eline flows. Returns the ids of the EVCs
+        that fell back.
         """
         to_install, to_remove, to_remove_with_err = {}, {}, {}
+        to_update_status: dict[str, dict] = {}
         new_flows: dict[int, list[dict]] = defaultdict(list)
         old_flows: dict[int, list[dict]] = defaultdict(list)
 
@@ -773,6 +775,12 @@ class INTManager:
                 to_remove_with_err[evc_id] = evc
                 continue
 
+            if event_name in {
+                "kytos/mef_eline.static.ingress_installed",
+                "kytos/mef_eline.static.ingress_removed",
+            }:
+                to_update_status[evc_id] = evc
+
             for dpid, flows in evc.get(new_flows_key, {}).items():
                 for flow in flows:
                     new_flows[flow["cookie"]].append({"flow": flow, "switch": dpid})
@@ -794,19 +802,32 @@ class INTManager:
                 to_remove[evc_id] = evc
                 evc.pop(old_flows_key, None)
 
-        if to_remove:
-            log.info(
-                f"Handling {event_name} flows remove on EVC ids: {to_remove.keys()}"
-            )
-            to_remove = utils.sorted_evcs_by_svc_lvl(to_remove)
+        if to_remove or to_install or to_update_status:
+            locked = {**to_remove, **to_install, **to_update_status}
             async with AsyncExitStack() as stack:
                 _ = [
                     await stack.enter_async_context(self._evcs_lock[evc_id])
-                    for evc_id in to_remove
+                    for evc_id in sorted(locked)
                 ]
-                await self._remove_int_flows(
-                    self.flow_builder.build_failover_old_flows(to_remove, old_flows)
-                )
+                if to_remove:
+                    log.info(
+                        f"Handling {event_name} flows remove on EVC ids: "
+                        f"{to_remove.keys()}"
+                    )
+                    await self._remove_int_flows(
+                        self.flow_builder.build_failover_old_flows(
+                            utils.sorted_evcs_by_svc_lvl(to_remove), old_flows
+                        )
+                    )
+                if to_install:
+                    log.info(
+                        f"Handling {event_name} flows install on EVC ids: "
+                        f"{to_install.keys()}"
+                    )
+                    await self._install_int_flows(
+                        self._built_install_flows(to_install, new_flows)
+                    )
+                await self._update_int_status(event_name, to_update_status)
         if to_remove_with_err:
             log.error(
                 f"Handling {event_name} proxy_port_error falling back "
@@ -824,30 +845,77 @@ class INTManager:
             }
             to_remove_with_err = utils.sorted_evcs_by_svc_lvl(to_remove_with_err)
             await self.remove_int_flows(to_remove_with_err, metadata, force=True)
-        if to_install:
+        return set(to_remove_with_err)
+
+    async def _update_int_status(
+        self, event_name: str, evcs: dict[str, dict]
+    ) -> None:
+        """Mirror an EVC stopping or resuming forwarding on its INT status.
+
+        A static EVC with no usable configured path is deactivated with its
+        UNI ingress removed (static.ingress_removed) instead of being
+        undeployed, and it resumes with an ingress install on a configured or
+        dynamic path (static.ingress_installed) instead of a redeploy
+        (mef_eline EP041), so neither error_redeploy_link_down nor
+        redeployed_link_* tells it. Their content, built once mef_eline
+        changed its state, carries 'active'.
+
+        A DOWN set for another reason (proxy_port_error, uni_down...) is kept,
+        told apart by its reason. Every other EVC gets the status its 'active'
+        implies, written even when it already looks set, so a read that
+        predates an earlier write can't leave it stale. The two possible
+        payloads are written in one call each.
+        """
+        by_status: dict[str, dict[str, dict]] = defaultdict(dict)
+        for evc_id, evc in evcs.items():
+            telemetry = evc["metadata"]["telemetry"]
+            if (
+                telemetry.get("status") == "DOWN"
+                and telemetry.get("status_reason") != ["link_down_no_path"]
+            ):
+                continue
+            by_status["UP" if evc["active"] else "DOWN"][evc_id] = evc
+
+        for status, status_evcs in by_status.items():
             log.info(
-                f"Handling {event_name} flows install on EVC ids: {to_install.keys()}"
+                f"Handling {event_name}, telemetry status {status} on EVC "
+                f"ids: {list(status_evcs)}"
             )
-            built_flows = self.flow_builder.build_int_flows(to_install, new_flows)
-            built_flows = {
-                cookie: [
-                    flow
-                    for flow in flows
-                    if not utils.has_instruction_and_action_type(
-                        flow.get("flow", {}).get("instructions", []),
-                        "apply_actions",
-                        "push_int",
-                    )
-                ]
-                for cookie, flows in built_flows.items()
-            }
-            to_install = utils.sorted_evcs_by_svc_lvl(to_install)
-            async with AsyncExitStack() as stack:
-                _ = [
-                    await stack.enter_async_context(self._evcs_lock[evc_id])
-                    for evc_id in to_install
-                ]
-                await self._install_int_flows(built_flows)
+            await api.add_evcs_metadata(
+                status_evcs,
+                {
+                    "telemetry": {
+                        "enabled": True,
+                        "status": status,
+                        "status_reason": (
+                            [] if status == "UP" else ["link_down_no_path"]
+                        ),
+                        "status_updated_at": datetime.utcnow().strftime(
+                            "%Y-%m-%dT%H:%M:%S"
+                        ),
+                    }
+                },
+            )
+
+    def _built_install_flows(
+        self, to_install: dict[str, dict], new_flows: dict[int, list[dict]]
+    ) -> dict[int, list[dict]]:
+        """INT flows to install, dropping the ones already pushing INT."""
+        built_flows = self.flow_builder.build_int_flows(
+            utils.sorted_evcs_by_svc_lvl(to_install), new_flows
+        )
+        return {
+            cookie: [
+                flow
+                for flow in flows
+                if not utils.has_instruction_and_action_type(
+                    flow.get("flow", {}).get("instructions", []),
+                    "apply_actions",
+                    "push_int",
+                )
+            ]
+            for cookie, flows in built_flows.items()
+        }
 
     def _validate_map_enable_evcs(
         self,
@@ -1094,12 +1162,12 @@ class INTManager:
     async def list_expected_flows(self, evcs: dict[str, dict]) -> dict[str, list[dict]]:
         """List expected flows for given EVCs."""
         evcs = self._validate_map_enable_evcs(evcs, force=True)
-        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             _ = [
                 await stack.enter_async_context(self._evcs_lock[evc_id])
-                for evc_id in evcs
+                for evc_id in sorted(evcs)
             ]
+            evcs = utils.sorted_evcs_by_svc_lvl(evcs)
             return await self._list_expected_flows(evcs)
 
     async def _list_expected_flows(
@@ -1145,13 +1213,13 @@ class INTManager:
     ) -> dict[str, dict]:
         """Check consistency of INT flows."""
         evcs = self._validate_map_enable_evcs(evcs, force=True)
-        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(self._consistency_lock)
             _ = [
                 await stack.enter_async_context(self._evcs_lock[evc_id])
-                for evc_id in evcs
+                for evc_id in sorted(evcs)
             ]
+            evcs = utils.sorted_evcs_by_svc_lvl(evcs)
 
             cookies = [
                 utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs

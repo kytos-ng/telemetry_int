@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """Test Main methods."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -740,26 +741,28 @@ class TestMain:
         await self.napp.on_intf_metadata_added(event)
         self.napp.int_manager.handle_pp_metadata_added.assert_called_with(intf)
 
-    async def test_on_failover_deployed(self):
-        """Test on_failover_deployed."""
-        event = KytosEvent(content={})
+    @pytest.mark.parametrize(
+        "event_name",
+        [
+            "kytos/mef_eline.failover_deployed",
+            "kytos/mef_eline.failover_link_down",
+            "kytos/mef_eline.failover_old_path",
+            "kytos/mef_eline.static.standby_installed",
+            "kytos/mef_eline.static.ingress_installed",
+            "kytos/mef_eline.static.ingress_removed",
+            "kytos/mef_eline.static.ingress_swapped",
+        ],
+    )
+    async def test_on_partial_flows(self, event_name):
+        """Every mef_eline event carrying a flow subset is handled, and the
+        event name is passed through."""
+        event = KytosEvent(name=event_name, content={})
         self.napp.int_manager = MagicMock()
-        await self.napp.on_failover_deployed(event)
-        self.napp.int_manager.handle_failover_flows.assert_called()
-
-    async def test_on_failover_link_down(self):
-        """Test on_failover_link_down."""
-        event = KytosEvent(content={})
-        self.napp.int_manager = MagicMock()
-        await self.napp.on_failover_link_down(event)
-        self.napp.int_manager.handle_failover_flows.assert_called()
-
-    async def test_on_failover_old_path(self):
-        """Test on_failover_old_path."""
-        event = KytosEvent(content={})
-        self.napp.int_manager = MagicMock()
-        await self.napp.on_failover_old_path(event)
-        self.napp.int_manager.handle_failover_flows.assert_called()
+        self.napp.int_manager.handle_partial_flows = AsyncMock(return_value=set())
+        await self.napp.on_partial_flows(event)
+        self.napp.int_manager.handle_partial_flows.assert_called_with(
+            {}, event_name=event_name
+        )
 
     async def test_evc_expected_flows_success(self, monkeypatch) -> None:
         """Test expected flows endpoint with specific evc_ids."""
