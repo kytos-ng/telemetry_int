@@ -723,15 +723,16 @@ class INTManager:
                     raise ProxyPortShared(evc["id"], msg)
                 seen_src_unis[pp.source.id] = uni_id
 
-    async def handle_failover_flows(
+    async def handle_partial_flows(
         self, evcs_content: dict[str, dict], event_name: str
-    ) -> None:
-        """Handle failover flows. This method will generate the subset
-        of INT flows. EVCs with 'flows' key will be installed, and
-        'old_flows' will be removed.
+    ) -> set[str]:
+        """Handle a subset of an EVC's flows. This method will generate the
+        subset of INT flows. EVCs with 'flows' key will be installed, and
+        'removed_flows' will be removed.
 
         If a given proxy port has an unexpected state INT will be
-        removed falling back to mef_eline flows.
+        removed falling back to mef_eline flows. Returns the ids of the EVCs
+        that fell back.
         """
         to_install, to_remove, to_remove_with_err = {}, {}, {}
         new_flows: dict[int, list[dict]] = defaultdict(list)
@@ -848,6 +849,7 @@ class INTManager:
                     for evc_id in to_install
                 ]
                 await self._install_int_flows(built_flows)
+        return set(to_remove_with_err)
 
     def _validate_map_enable_evcs(
         self,

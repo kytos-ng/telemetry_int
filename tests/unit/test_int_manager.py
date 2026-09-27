@@ -136,6 +136,29 @@ class TestINTManager:
             "3766c105686748",
         }
 
+    async def test_handle_partial_flows_returns_fell_back(self):
+        """EVCs whose proxy port is in an unexpected state fall back to
+        mef_eline flows and are returned, so their status isn't changed
+        again afterwards."""
+        int_manager = INTManager(MagicMock())
+        int_manager.remove_int_flows = AsyncMock()
+        int_manager.get_proxy_port_or_raise = MagicMock(
+            side_effect=exceptions.ProxyPortError("1", "bad")
+        )
+        evc = {
+            "active": True,
+            "metadata": {"telemetry": {"enabled": True}},
+            "uni_a": {"interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"interface_id": "00:00:00:00:00:00:00:03:1"},
+            "service_level": 0,
+            "creation_time": "2024-01-01T00:00:00",
+        }
+        fell_back = await int_manager.handle_partial_flows(
+            {"1": evc}, "kytos/mef_eline.static.ingress_installed"
+        )
+        assert fell_back == {"1"}
+        assert int_manager.remove_int_flows.call_count == 1
+
     async def test_handle_pp_link_down(self, monkeypatch):
         """Test test_handle_pp_link_down."""
         int_manager = INTManager(MagicMock())

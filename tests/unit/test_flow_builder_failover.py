@@ -5,6 +5,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int.managers.int import INTManager
 from napps.kytos.telemetry_int.proxy_port import ProxyPort
+from napps.kytos.telemetry_int import settings, utils
 from kytos.lib.helpers import get_controller_mock, get_switch_mock, get_interface_mock
 from kytos.core.common import EntityStatus
 
@@ -147,7 +148,7 @@ async def test_handle_failover_link_down() -> None:
     int_manager._install_int_flows = AsyncMock()
     int_manager._remove_int_flows = AsyncMock()
     int_manager.remove_int_flows = AsyncMock()
-    await int_manager.handle_failover_flows(evcs_data, "failover_link_down")
+    await int_manager.handle_partial_flows(evcs_data, "failover_link_down")
     assert int_manager._install_int_flows.call_count == 1
     assert int_manager._remove_int_flows.call_count == 0
     assert int_manager.remove_int_flows.call_count == 0
@@ -418,7 +419,7 @@ async def test_handle_failover_old_path_same_svlan() -> None:
     int_manager._install_int_flows = AsyncMock()
     int_manager._remove_int_flows = AsyncMock()
     int_manager.remove_int_flows = AsyncMock()
-    await int_manager.handle_failover_flows(evcs_data, "failover_old_path")
+    await int_manager.handle_partial_flows(evcs_data, "failover_old_path")
     assert int_manager._install_int_flows.call_count == 0
     assert int_manager._remove_int_flows.call_count == 1
     assert int_manager.remove_int_flows.call_count == 0
@@ -755,7 +756,7 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
     int_manager._install_int_flows = AsyncMock()
     int_manager._remove_int_flows = AsyncMock()
     int_manager.remove_int_flows = AsyncMock()
-    await int_manager.handle_failover_flows(evcs_data, "failover_deployed")
+    await int_manager.handle_partial_flows(evcs_data, "failover_deployed")
     assert int_manager._install_int_flows.call_count == 0
     assert int_manager._remove_int_flows.call_count == 1
     assert int_manager.remove_int_flows.call_count == 0
@@ -870,3 +871,88 @@ async def test_handle_failover_old_path_diff_svlan() -> None:
     }
     serd = json.dumps(expected_built_flows)
     assert json.dumps(int_manager._remove_int_flows.call_args[0][0]) == serd
+
+
+def test_build_failover_old_flows_removed_ingress() -> None:
+    """Removed UNI ingress flows (mef_eline static.ingress_removed) also
+    remove their INT source flows: TCP and UDP push_int on table 0 and the
+    table X flow, on each UNI switch, so UNI traffic stops at the UNI."""
+    int_manager = INTManager(get_controller_mock())
+    evc_id = "ceaf53b16c3a40"
+    cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+    int_cookie = utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+    dpid_a, dpid_z = "00:00:00:00:00:00:00:01", "00:00:00:00:00:00:00:03"
+    evc = {
+        "id": evc_id,
+        "metadata": {"telemetry": {"enabled": True}},
+        "uni_a": {
+            "interface_id": f"{dpid_a}:1",
+            "switch": dpid_a,
+            "port_number": 1,
+            "proxy_port": MagicMock(),
+        },
+        "uni_z": {
+            "interface_id": f"{dpid_z}:1",
+            "switch": dpid_z,
+            "port_number": 1,
+            "proxy_port": MagicMock(),
+        },
+    }
+
+    def ingress(dpid: str) -> dict:
+        # as handle_partial_flows prepares a removed flow
+        return {
+            "switch": dpid,
+            "flow": {
+                "cookie": cookie,
+                "cookie_mask": 0xFFFFFFFFFFFFFFFF,
+                "owner": "mef_eline",
+                "match": {"in_port": 1, "dl_vlan": 100},
+                "priority": 21000,
+                "table_group": "evpl",
+            },
+        }
+
+    old_flows = {cookie: [ingress(dpid_a), ingress(dpid_z)]}
+    removed = int_manager.flow_builder.build_failover_old_flows(
+        {evc_id: evc}, old_flows
+    )
+
+    flows = [(f["switch"], f["flow"]) for f in removed[cookie]]
+    assert len(flows) == 6
+    for dpid in (dpid_a, dpid_z):
+        on_switch = [flow for switch, flow in flows if switch == dpid]
+        assert all(flow["cookie"] == int_cookie for flow in on_switch)
+        assert sorted(flow["match"].get("nw_proto", 0) for flow in on_switch) == [
+            0,
+            settings.TCP,
+            settings.UDP,
+        ]
+        table_x = [flow for flow in on_switch if "nw_proto" not in flow["match"]]
+        assert table_x[0]["table_id"] == int_manager.flow_builder.table_group["evpl"]
+
+
+def test_build_failover_old_flows_no_ingress() -> None:
+    """Removed egress and NNI flows only, as failover_old_path sends, remove
+    no INT source flows."""
+    int_manager = INTManager(get_controller_mock())
+    evc_id = "ceaf53b16c3a40"
+    cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+    evc = {
+        "id": evc_id,
+        "uni_a": {"switch": "00:00:00:00:00:00:00:01", "port_number": 1},
+        "uni_z": {"switch": "00:00:00:00:00:00:00:03", "port_number": 1},
+    }
+    nni = {
+        "switch": "00:00:00:00:00:00:00:02",
+        "flow": {
+            "cookie": cookie,
+            "match": {"in_port": 2, "dl_vlan": 1},
+            "priority": 21000,
+            "table_group": "evpl",
+        },
+    }
+    source = int_manager.flow_builder._build_int_source_flows(
+        "uni_a", evc, {cookie: [nni]}
+    )
+    assert not source

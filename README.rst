@@ -33,14 +33,24 @@ Events
 
 Subscribed
 ----------
-- ``kytos/of_multi_table.enable_table``
+- ``kytos/mef_eline.evcs_loaded``
 - ``kytos/mef_eline.deleted``
-- ``kytos/flow_manager.flow.error``
+- ``kytos/mef_eline.deployed``
 - ``kytos/mef_eline.undeployed``
 - ``kytos/mef_eline.(redeployed_link_down|redeployed_link_up)``
 - ``kytos/mef_eline.error_redeploy_link_down``
 - ``kytos/mef_eline.uni_active_updated``
-- ``kytos/mef_eline.deployed``
+- ``kytos/mef_eline.(failover.*|static.*)``
+- ``kytos/topology.link_up``
+- ``kytos/topology.link_down``
+- ``kytos/topology.interfaces.metadata.added``
+- ``kytos/topology.interfaces.metadata.removed``
+- ``kytos/flow_manager.flow.error``
+- ``kytos/of_multi_table.enable_table``
+
+The ``kytos/mef_eline.(failover.*|static.*)`` pattern covers every mef_eline
+event that carries a subset of an EVC's flows, so INT flows are kept mirrored
+as paths converge.
 
 Published
 ---------

@@ -53,6 +53,8 @@ class Main(KytosNApp):
 
         self.int_manager = INTManager(self.controller)
         self._ofpt_error_lock = asyncio.Lock()
+        # EVC ids whose DOWN status was set from their partial flows events
+        self._status_down: set[str] = set()
 
     def execute(self):
         """Run after the setup method execution.
@@ -657,26 +659,81 @@ class Main(KytosNApp):
             )
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
-    @alisten_to("kytos/mef_eline.failover_link_down")
-    async def on_failover_link_down(self, event: KytosEvent):
-        """Handle kytos/mef_eline.failover_link_down."""
-        await self.int_manager.handle_failover_flows(
-            copy.deepcopy(event.content), event_name="failover_link_down"
+    @alisten_to("kytos/mef_eline.(failover.*|static.*)")
+    async def on_partial_flows(self, event: KytosEvent):
+        """Handle mef_eline events carrying a subset of an EVC's flows.
+
+        The failover_* events concern a dynamic failover_path, the static.*
+        ones a static path whose ingress moved. Either way the content holds
+        the installed flows in 'flows' and the removed ones in
+        'removed_flows'.
+        """
+        fell_back = await self.int_manager.handle_partial_flows(
+            copy.deepcopy(event.content), event_name=event.name
+        )
+        await self.update_status_from_partial_flows(
+            event.name, event.content, fell_back
         )
 
-    @alisten_to("kytos/mef_eline.failover_old_path")
-    async def on_failover_old_path(self, event: KytosEvent):
-        """Handle kytos/mef_eline.failover_old_path."""
-        await self.int_manager.handle_failover_flows(
-            copy.deepcopy(event.content), event_name="failover_old_path"
-        )
+    async def update_status_from_partial_flows(
+        self,
+        event_name: str,
+        evcs_content: dict[str, dict],
+        fell_back: set[str],
+    ) -> None:
+        """Mirror an EVC stopping or resuming forwarding on its INT status.
 
-    @alisten_to("kytos/mef_eline.failover_deployed")
-    async def on_failover_deployed(self, event: KytosEvent):
-        """Handle kytos/mef_eline.failover_deployed."""
-        await self.int_manager.handle_failover_flows(
-            copy.deepcopy(event.content), event_name="failover_deployed"
-        )
+        A static EVC with no usable configured path is deactivated with its
+        UNI ingress removed instead of being undeployed, and it resumes on an
+        ingress install, a standby swap or a dynamic escape instead of a
+        redeploy (mef_eline EP041), so neither error_redeploy_link_down nor
+        redeployed_link_* tells it. Their content, built once mef_eline
+        changed its state, carries 'active':
+
+        - not active: status DOWN (link_down_no_path), unless already DOWN for
+          any reason, which isn't overwritten
+        - active: status UP again, only if that DOWN was set here, so a DOWN
+          for another reason (proxy_port_error, uni_down...) is kept
+
+        EVCs that just fell back to mef_eline flows on a proxy port error are
+        left with that status.
+        """
+        for evc_id, evc in evcs_content.items():
+            if (
+                evc_id in (fell_back or set())
+                or "active" not in evc
+                or not utils.has_int_enabled(evc)
+            ):
+                continue
+            telemetry = evc["metadata"]["telemetry"]
+            if not evc["active"]:
+                if telemetry.get("status") == "DOWN":
+                    continue
+                status, status_reason = "DOWN", ["link_down_no_path"]
+                self._status_down.add(evc_id)
+            elif evc_id in self._status_down or (
+                telemetry.get("status") == "DOWN"
+                and telemetry.get("status_reason") == ["link_down_no_path"]
+            ):
+                status, status_reason = "UP", []
+                self._status_down.discard(evc_id)
+            else:
+                continue
+            metadata = {
+                "telemetry": {
+                    "enabled": True,
+                    "status": status,
+                    "status_reason": status_reason,
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            log.info(
+                f"Handling {event_name}, telemetry status {status} on EVC "
+                f"id: {evc_id}"
+            )
+            await api.add_evcs_metadata({evc_id: evc}, metadata)
 
     @alisten_to("kytos/topology.link_down")
     async def on_link_down(self, event):

@@ -1,3 +1,4 @@
+# pylint: disable=too-many-lines
 """Test Main methods."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -740,26 +741,117 @@ class TestMain:
         await self.napp.on_intf_metadata_added(event)
         self.napp.int_manager.handle_pp_metadata_added.assert_called_with(intf)
 
-    async def test_on_failover_deployed(self):
-        """Test on_failover_deployed."""
-        event = KytosEvent(content={})
+    @pytest.mark.parametrize(
+        "event_name",
+        [
+            "kytos/mef_eline.failover_deployed",
+            "kytos/mef_eline.failover_link_down",
+            "kytos/mef_eline.failover_old_path",
+            "kytos/mef_eline.static.standby_installed",
+            "kytos/mef_eline.static.ingress_installed",
+            "kytos/mef_eline.static.ingress_removed",
+            "kytos/mef_eline.static.ingress_swapped",
+        ],
+    )
+    async def test_on_partial_flows(self, event_name):
+        """Every mef_eline event carrying a flow subset is handled, and the
+        event name is passed through."""
+        event = KytosEvent(name=event_name, content={})
         self.napp.int_manager = MagicMock()
-        await self.napp.on_failover_deployed(event)
-        self.napp.int_manager.handle_failover_flows.assert_called()
+        self.napp.int_manager.handle_partial_flows = AsyncMock(return_value=set())
+        await self.napp.on_partial_flows(event)
+        self.napp.int_manager.handle_partial_flows.assert_called_with(
+            {}, event_name=event_name
+        )
 
-    async def test_on_failover_link_down(self):
-        """Test on_failover_link_down."""
-        event = KytosEvent(content={})
-        self.napp.int_manager = MagicMock()
-        await self.napp.on_failover_link_down(event)
-        self.napp.int_manager.handle_failover_flows.assert_called()
+    @staticmethod
+    def _int_evc(active: bool, status="UP", status_reason=None) -> dict:
+        """An INT enabled EVC event content."""
+        return {
+            "active": active,
+            "metadata": {
+                "telemetry": {
+                    "enabled": True,
+                    "status": status,
+                    "status_reason": status_reason or [],
+                }
+            },
+        }
 
-    async def test_on_failover_old_path(self):
-        """Test on_failover_old_path."""
-        event = KytosEvent(content={})
+    async def _partial_flows(self, event_name: str, content: dict) -> None:
+        """Handle a partial flows event with a mocked INT manager."""
+        await self.napp.on_partial_flows(KytosEvent(name=event_name, content=content))
+
+    @pytest.mark.parametrize(
+        "event_name",
+        [
+            "kytos/mef_eline.static.ingress_removed",
+            "kytos/mef_eline.failover_link_down",
+            "kytos/mef_eline.failover_old_path",
+        ],
+    )
+    async def test_partial_flows_status_down_then_up(
+        self, monkeypatch, event_name
+    ) -> None:
+        """An EVC no longer forwarding goes DOWN, and UP again once a later
+        event reports it forwarding, e.g. after a dynamic escape or a
+        standby swap, which aren't undeploys or redeploys (mef_eline EP041)."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
         self.napp.int_manager = MagicMock()
-        await self.napp.on_failover_old_path(event)
-        self.napp.int_manager.handle_failover_flows.assert_called()
+        self.napp.int_manager.handle_partial_flows = AsyncMock(return_value=set())
+
+        await self._partial_flows(event_name, {"1": self._int_evc(False)})
+        evcs, metadata = api_mock.add_evcs_metadata.call_args[0]
+        assert list(evcs) == ["1"]
+        assert metadata["telemetry"]["status"] == "DOWN"
+        assert metadata["telemetry"]["status_reason"] == ["link_down_no_path"]
+
+        # forwarding again, e.g. escaped: back UP, even if the content was
+        # built before that DOWN was stored
+        await self._partial_flows(
+            "kytos/mef_eline.failover_link_down", {"1": self._int_evc(True)}
+        )
+        assert api_mock.add_evcs_metadata.call_count == 2
+        metadata = api_mock.add_evcs_metadata.call_args[0][1]
+        assert metadata["telemetry"]["status"] == "UP"
+        assert metadata["telemetry"]["status_reason"] == []
+
+        # already UP and forwarding: nothing to write
+        await self._partial_flows(
+            "kytos/mef_eline.static.ingress_swapped",
+            {"1": self._int_evc(True)},
+        )
+        assert api_mock.add_evcs_metadata.call_count == 2
+
+    async def test_partial_flows_status_keeps_other_down(self, monkeypatch) -> None:
+        """A DOWN set for another reason is never overwritten, neither by a
+        DOWN nor by an UP; one set here survives a restart through its
+        reason; EVCs without INT or that just fell back are skipped."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        self.napp.int_manager = MagicMock()
+        self.napp.int_manager.handle_partial_flows = AsyncMock(return_value={"3"})
+        name = "kytos/mef_eline.static.ingress_installed"
+
+        await self._partial_flows(
+            name,
+            {
+                "1": self._int_evc(True, "DOWN", ["proxy_port_error"]),
+                "2": self._int_evc(False, "DOWN", ["uni_down"]),
+                "3": self._int_evc(True, "DOWN", ["link_down_no_path"]),
+                "4": {"active": False, "metadata": {}},
+            },
+        )
+        api_mock.add_evcs_metadata.assert_not_called()
+
+        # its own DOWN after a restart (no memory of it)
+        self.napp.int_manager.handle_partial_flows = AsyncMock(return_value=set())
+        await self._partial_flows(
+            name, {"1": self._int_evc(True, "DOWN", ["link_down_no_path"])}
+        )
+        metadata = api_mock.add_evcs_metadata.call_args[0][1]
+        assert metadata["telemetry"]["status"] == "UP"
 
     async def test_evc_expected_flows_success(self, monkeypatch) -> None:
         """Test expected flows endpoint with specific evc_ids."""
