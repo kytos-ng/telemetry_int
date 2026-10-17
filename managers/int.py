@@ -825,7 +825,11 @@ class INTManager:
                         f"{to_install.keys()}"
                     )
                     await self._install_int_flows(
-                        self._built_install_flows(to_install, new_flows)
+                        self._built_install_flows(
+                            to_install,
+                            new_flows,
+                            event_name == "kytos/mef_eline.static.ingress_installed",
+                        )
                     )
                 await self._update_int_status(event_name, to_update_status)
         if to_remove_with_err:
@@ -898,12 +902,19 @@ class INTManager:
             )
 
     def _built_install_flows(
-        self, to_install: dict[str, dict], new_flows: dict[int, list[dict]]
+        self,
+        to_install: dict[str, dict],
+        new_flows: dict[int, list[dict]],
+        with_source: bool = False,
     ) -> dict[int, list[dict]]:
-        """INT flows to install, dropping the ones already pushing INT."""
+        """INT flows to install, dropping the ones already pushing INT, unless
+        with_source: a resumed ingress (static.ingress_installed) had its INT
+        source flows removed along with it."""
         built_flows = self.flow_builder.build_int_flows(
             utils.sorted_evcs_by_svc_lvl(to_install), new_flows
         )
+        if with_source:
+            return built_flows
         return {
             cookie: [
                 flow

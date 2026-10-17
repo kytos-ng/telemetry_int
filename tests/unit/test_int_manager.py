@@ -287,6 +287,49 @@ class TestINTManager:
         metadata = api_mock.add_evcs_metadata.call_args[0][1]
         assert metadata["telemetry"]["status"] == "UP"
 
+    async def test_handle_partial_flows_source_flows_by_event(self) -> None:
+        """INT source flows are installed again only on an ingress resume,
+        as an ingress removal took them out; a swap leaves them in place."""
+        int_manager = INTManager(MagicMock())
+        int_manager.get_proxy_port_or_raise = MagicMock()
+        int_manager._install_int_flows = AsyncMock()
+        int_manager._update_int_status = AsyncMock()
+        source, table_x = (
+            {
+                "flow": {
+                    "instructions": [
+                        {
+                            "instruction_type": "apply_actions",
+                            "actions": [{"action_type": action_type}],
+                        }
+                    ]
+                }
+            }
+            for action_type in ("push_int", "add_int_metadata")
+        )
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={1: [source, table_x]}
+        )
+
+        def evc() -> dict:
+            return {
+                "active": True,
+                "metadata": {"telemetry": {"enabled": True}},
+                "uni_a": {"interface_id": "00:00:00:00:00:00:00:01:1"},
+                "uni_z": {"interface_id": "00:00:00:00:00:00:00:03:1"},
+                "flows": {"00:00:00:00:00:00:00:01": [{"cookie": 1}]},
+            }
+
+        await int_manager.handle_partial_flows(
+            {"1": evc()}, "kytos/mef_eline.static.ingress_swapped"
+        )
+        assert int_manager._install_int_flows.call_args[0][0] == {1: [table_x]}
+
+        await int_manager.handle_partial_flows(
+            {"1": evc()}, "kytos/mef_eline.static.ingress_installed"
+        )
+        assert int_manager._install_int_flows.call_args[0][0] == {1: [source, table_x]}
+
     async def test_handle_partial_flows_returns_fell_back(self):
         """EVCs whose proxy port is in an unexpected state fall back to
         mef_eline flows and are returned, so their status isn't changed
