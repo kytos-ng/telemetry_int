@@ -13,6 +13,15 @@ Fixed
 - Fixed post proxy port table 0 flows priority to be higher similarly to the rest of table 0 INT flows
 - Fixed setting the correct metadata when handling potential errors when a proxy port metadata changes
 
+Changed
+=======
+- Replaced the three ``kytos/mef_eline.failover_*`` listeners with a single ``kytos/mef_eline.(failover.*|static.*)`` listener
+- EVC locks are now always acquired in EVC id order, so concurrent operations over overlapping EVCs can no longer acquire them in different orders, while EVCs are still processed by service level
+
+Added
+=====
+- Added support for the new mef_eline ``static.*`` EVC convergence events, so INT flows are mirrored as static paths converge
+
 [2025.2.0] - 2026-02-02
 ***********************
 
