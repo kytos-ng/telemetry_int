@@ -88,7 +88,7 @@ paths:
                   description: Force INT to get disabled again. It will try to disable even if the EVC isn't found or it doesn't have INT.
                   default: false
       responses:
-        '201':
+        '200':
           description: INT disabled on EVCs
           content:
             application/json:
@@ -253,6 +253,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrResp'
+        '409':
+          description: Conflict resource state. For instance, when a ProxyPort status isn't UP or it's shared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
         '500':
           description: Internal Server Error
         '503':
@@ -310,6 +316,24 @@ paths:
                       type: array
                       items:
                         type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '404':
+          description: Dependent resource (EVC, flows or ProxyPort) not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
+        '409':
+          description: Conflict resource state. For instance, when a ProxyPort status isn't UP or it's shared.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrResp'
         '503':
           description: Service unavailable
   /v1/evc/compare:

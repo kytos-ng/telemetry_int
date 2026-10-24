@@ -238,6 +238,8 @@ class Main(KytosNApp):
             return JSONResponse(int_flows)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
+        except ProxyPortConflict as exc:
+            raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
             log.error(exc_error)
@@ -335,6 +337,8 @@ class Main(KytosNApp):
             return JSONResponse(results)
         except (EVCNotFound, FlowsNotFound, ProxyPortNotFound) as exc:
             raise HTTPException(404, detail=str(exc))
+        except ProxyPortConflict as exc:
+            raise HTTPException(409, detail=str(exc))
         except RetryError as exc:
             exc_error = str(exc.last_attempt.exception())
             log.error(exc_error)
