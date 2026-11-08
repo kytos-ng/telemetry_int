@@ -913,6 +913,42 @@ class TestMain:
         assert response.status_code == 404
         assert "flows not found" in response.json()["description"]
 
+    async def test_evc_expected_flows_proxy_port_conflict(self, monkeypatch) -> None:
+        """Test expected flows with ProxyPortConflict exception."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evcs.return_value = {evc_id: {}}
+
+        self.napp.int_manager.list_expected_flows = AsyncMock(
+            side_effect=ProxyPortShared(evc_id, "boom")
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/expected_flows"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 409
+        assert "boom" in response.json()["description"]
+
+    async def test_check_consistency_proxy_port_conflict(self, monkeypatch) -> None:
+        """Test check consistency with ProxyPortConflict exception."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evcs.return_value = {evc_id: {}}
+
+        self.napp.int_manager.check_consistency = AsyncMock(
+            side_effect=ProxyPortShared(evc_id, "boom")
+        )
+
+        endpoint = f"{self.base_endpoint}/evc/check_consistency"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 409
+        assert "boom" in response.json()["description"]
+
     async def test_evc_expected_flows_retry_error_get_evcs(self, monkeypatch) -> None:
         """Test expected flows with RetryError from get_evcs."""
         api_mock = AsyncMock()
