@@ -741,6 +741,42 @@ class TestINTManager:
         assert pp.evc_ids.discard.call_count == 2
         pp.evc_ids.discard.assert_called_with(evc_id)
 
+    def test__discard_pps_evc_ids_evc_not_found(self):
+        """test_discard_pps_evc_ids with an EVC not found."""
+        evc_id = "3766c105686749"
+        controller = get_controller_mock()
+        int_manager = INTManager(controller)
+        pp = MagicMock()
+        int_manager.srcs_pp["a"] = pp
+        int_manager._discard_pps_evc_ids({evc_id: {}})
+        assert not pp.evc_ids.discard.call_count
+
+    async def test_disable_int_force_evc_not_found(self, monkeypatch) -> None:
+        """Test force disable INT on an EVC not found."""
+        controller = MagicMock()
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {}
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+
+        evc_id = "aaaaaaaaaaaaaa"
+        int_manager = INTManager(controller)
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
+        await int_manager.disable_int({evc_id: {}}, force=True)
+
+        api_mock.get_stored_flows.assert_awaited_with(
+            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)]
+        )
+        assert int_manager._remove_int_flows_by_cookies.call_count == 1
+        assert api_mock.add_evcs_metadata.call_count == 1
+        assert api_mock.add_evcs_metadata.call_args[0][0] == {evc_id: {}}
+        assert api_mock.add_evcs_metadata.call_args[0][2] is True
+
+    async def test_disable_int_evc_not_found(self) -> None:
+        """Test disable INT on an EVC not found without force."""
+        int_manager = INTManager(MagicMock())
+        with pytest.raises(exceptions.EVCNotFound):
+            await int_manager.disable_int({"aaaaaaaaaaaaaa": {}}, force=False)
+
     def test_validate_evc_stored_flows(self) -> None:
         """Test validate evc stored flows."""
         controller = MagicMock()

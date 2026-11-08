@@ -14,6 +14,8 @@ Fixed
 - Fixed setting the correct metadata when handling potential errors when a proxy port metadata changes
 - Fixed ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency`` to return 409 instead of an unhandled error when a proxy port conflict is raised
 - Fixed OpenAPI spec for ``POST /v1/evc/disable`` to document the success status code as 200 instead of 201, and documented the 409 (and 400, 404 on check_consistency) responses of ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
+- Fixed ``POST /v1/evc/disable`` with ``force: true`` returning 500 for an EVC id that doesn't exist
+- Validated ``evc_ids`` format, 14 lowercase hex characters, on ``POST /v1/evc/enable``, ``POST /v1/evc/disable``, ``PATCH /v1/evc/redeploy``, ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
 
 [2025.2.0] - 2026-02-02
 ***********************
