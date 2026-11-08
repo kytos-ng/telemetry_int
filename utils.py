@@ -230,8 +230,6 @@ def sorted_evcs_by_svc_lvl(evcs: dict[str, dict]) -> dict[str, dict]:
     EVC order processing.
     """
     return {
-        evc["id"]: evc
-        for evc in sorted(
-            evcs.values(), key=lambda evc: (-evc.get("service_level", 0), evc["id"])
-        )
+        k: evcs[k]
+        for k in sorted(evcs, key=lambda k: (-evcs[k].get("service_level", 0), k))
     }
