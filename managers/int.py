@@ -215,7 +215,11 @@ class INTManager:
                 return
 
     async def handle_pp_metadata_removed(self, intf: Interface) -> None:
-        """Handle proxy port metadata removed."""
+        """Handle proxy port metadata removed.
+
+        Any INT EVC on this proxy port is disabled regardless of its telemetry
+        status, for instance, it might be DOWN due to proxy_port_down.
+        """
         if "proxy_port" in intf.metadata:
             return
         try:
@@ -229,7 +233,6 @@ class INTManager:
             evcs = await api.get_evcs(
                 **{
                     "metadata.telemetry.enabled": "true",
-                    "metadata.telemetry.status": "UP",
                 }
             )
             affected_evcs = {

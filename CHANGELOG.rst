@@ -16,6 +16,7 @@ Fixed
 - Fixed OpenAPI spec for ``POST /v1/evc/disable`` to document the success status code as 200 instead of 201, and documented the 409 (and 400, 404 on check_consistency) responses of ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
 - Fixed ``POST /v1/evc/disable`` with ``force: true`` returning 500 for an EVC id that doesn't exist
 - Validated ``evc_ids`` format, 14 lowercase hex characters, on ``POST /v1/evc/enable``, ``POST /v1/evc/disable``, ``PATCH /v1/evc/redeploy``, ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
+- Fixed proxy port metadata removal (for instance, a forced ``DELETE /v1/uni/{interface_id}/proxy_port``) to also disable INT on EVCs whose telemetry status was ``DOWN``, such as when the proxy port was down, which used to leave INT flows behind
 
 Changed
 =======
