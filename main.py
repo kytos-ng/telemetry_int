@@ -15,7 +15,7 @@ from tenacity import RetryError
 
 from kytos.core import KytosEvent, KytosNApp, log, rest
 from kytos.core.common import EntityStatus
-from kytos.core.helpers import alisten_to, avalidate_openapi_request, load_spec
+from kytos.core.helpers import alisten_to, avalidate_openapi, load_spec
 from kytos.core.rest_api import HTTPException, JSONResponse, Request, aget_json_or_400
 
 from .exceptions import (
@@ -70,13 +70,12 @@ class Main(KytosNApp):
         """
 
     @rest("v1/evc/enable", methods=["POST"])
+    @avalidate_openapi(spec)
     async def enable_telemetry(self, request: Request) -> JSONResponse:
         """REST to enable INT flows on EVCs.
 
         If a list of evc_ids is empty, it'll enable on non-INT EVCs.
         """
-        await avalidate_openapi_request(self.spec, request)
-
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
@@ -136,13 +135,12 @@ class Main(KytosNApp):
         return JSONResponse(list(evcs.keys()), status_code=201)
 
     @rest("v1/evc/disable", methods=["POST"])
+    @avalidate_openapi(spec)
     async def disable_telemetry(self, request: Request) -> JSONResponse:
         """REST to disable/remove INT flows for an EVC_ID
 
         If a list of evc_ids is empty, it'll disable on all INT EVCs.
         """
-        await avalidate_openapi_request(self.spec, request)
-
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
@@ -202,9 +200,9 @@ class Main(KytosNApp):
             raise HTTPException(500, detail=exc_error)
 
     @rest("v1/evc/expected_flows", methods=["POST"])
+    @avalidate_openapi(spec)
     async def evc_expected_flows(self, request: Request) -> JSONResponse:
         """List expected flows for given INT EVCs."""
-        await avalidate_openapi_request(self.spec, request)
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
@@ -250,13 +248,12 @@ class Main(KytosNApp):
             raise HTTPException(500, detail=exc_error)
 
     @rest("v1/evc/redeploy", methods=["PATCH"])
+    @avalidate_openapi(spec)
     async def redeploy_telemetry(self, request: Request) -> JSONResponse:
         """REST to redeploy INT on EVCs.
 
         If a list of evc_ids is empty, it'll redeploy on all INT EVCs.
         """
-        await avalidate_openapi_request(self.spec, request)
-
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
@@ -299,10 +296,9 @@ class Main(KytosNApp):
         return JSONResponse(list(evcs.keys()), status_code=201)
 
     @rest("v1/evc/check_consistency", methods=["POST"])
+    @avalidate_openapi(spec)
     async def check_consistency(self, request: Request) -> JSONResponse:
         """Check consistency of INT flows."""
-        await avalidate_openapi_request(self.spec, request)
-
         try:
             content = await aget_json_or_400(request)
             evc_ids = content["evc_ids"]
