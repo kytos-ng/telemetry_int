@@ -657,25 +657,17 @@ class Main(KytosNApp):
             )
             await self.int_manager.remove_int_flows(evcs, metadata, force=True)
 
-    @alisten_to("kytos/mef_eline.failover_link_down")
-    async def on_failover_link_down(self, event: KytosEvent):
-        """Handle kytos/mef_eline.failover_link_down."""
-        await self.int_manager.handle_failover_flows(
-            copy.deepcopy(event.content), event_name="failover_link_down"
-        )
+    @alisten_to("kytos/mef_eline.(failover.*|static.*)")
+    async def on_partial_flows(self, event: KytosEvent):
+        """Handle mef_eline events carrying a subset of an EVC's flows.
 
-    @alisten_to("kytos/mef_eline.failover_old_path")
-    async def on_failover_old_path(self, event: KytosEvent):
-        """Handle kytos/mef_eline.failover_old_path."""
-        await self.int_manager.handle_failover_flows(
-            copy.deepcopy(event.content), event_name="failover_old_path"
-        )
-
-    @alisten_to("kytos/mef_eline.failover_deployed")
-    async def on_failover_deployed(self, event: KytosEvent):
-        """Handle kytos/mef_eline.failover_deployed."""
-        await self.int_manager.handle_failover_flows(
-            copy.deepcopy(event.content), event_name="failover_deployed"
+        The failover_* events concern a dynamic failover_path, the static.*
+        ones a static path whose ingress moved. Either way the content holds
+        the installed flows in 'flows' and the removed ones in
+        'removed_flows'.
+        """
+        await self.int_manager.handle_partial_flows(
+            copy.deepcopy(event.content), event_name=event.name
         )
 
     @alisten_to("kytos/topology.link_down")

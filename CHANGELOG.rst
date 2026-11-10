@@ -17,6 +17,15 @@ Fixed
 - Fixed ``POST /v1/evc/disable`` with ``force: true`` returning 500 for an EVC id that doesn't exist
 - Validated ``evc_ids`` format, 14 lowercase hex characters, on ``POST /v1/evc/enable``, ``POST /v1/evc/disable``, ``PATCH /v1/evc/redeploy``, ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
 
+Changed
+=======
+- Replaced the three ``kytos/mef_eline.failover_*`` listeners with a single ``kytos/mef_eline.(failover.*|static.*)`` listener
+- EVC locks are now always acquired in EVC id order, so concurrent operations over overlapping EVCs can no longer acquire them in different orders, while EVCs are still processed by service level
+
+Added
+=====
+- Added support for the new mef_eline ``static.*`` EVC convergence events, so INT flows are mirrored as static paths converge
+
 [2025.2.0] - 2026-02-02
 ***********************
 
