@@ -1,5 +1,6 @@
 """Test Main methods."""
 
+# pylint: disable=too-many-lines
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -153,6 +154,66 @@ class TestMain:
         response = await self.api_client.post(endpoint, json={"evc_ids": 1})
         assert response.status_code == 400
         assert "evc_ids" in response.json()["description"]
+
+    @pytest.mark.parametrize(
+        "path,method,payload",
+        [
+            ("evc/disable", "post", {"force": True}),
+            ("evc/enable", "post", {"force": True}),
+            ("evc/redeploy", "patch", {}),
+            ("evc/expected_flows", "post", {}),
+            ("evc/check_consistency", "post", {}),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "evc_id",
+        [
+            f"{0x02_3766C105686749:016x}",
+            f"{-0x1:x}",
+            "zzzzzzzzzzzzzz",
+            f"{0x3766C105686749:014X}",
+            f"{0x3766C10568674:013x}",
+            f"{0x3766C1056867490:015x}",
+        ],
+    )
+    async def test_invalid_evc_id_format(
+        self, monkeypatch, path, method, payload, evc_id
+    ) -> None:
+        # pylint: disable=too-many-arguments
+        """Test that malformed EVC ids are rejected before any processing."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        self.napp.int_manager = AsyncMock()
+
+        endpoint = f"{self.base_endpoint}/{path}"
+        response = await getattr(self.api_client, method)(
+            endpoint, json={"evc_ids": [evc_id], **payload}
+        )
+        assert response.status_code == 400
+        assert not api_mock.get_evc.call_count
+        assert not api_mock.get_evcs.call_count
+        assert not self.napp.int_manager.mock_calls
+
+    async def test_disable_telemetry_force_evc_not_found(self, monkeypatch) -> None:
+        """Test force disable telemetry on an EVC not found."""
+        api_mock = AsyncMock()
+        api_mock.get_evc.return_value = {}
+        api_mock.get_stored_flows.return_value = {}
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        self.napp.int_manager._remove_int_flows_by_cookies = AsyncMock()
+
+        evc_id = "aaaaaaaaaaaaaa"
+        endpoint = f"{self.base_endpoint}/evc/disable"
+        response = await self.api_client.post(
+            endpoint, json={"evc_ids": [evc_id], "force": True}
+        )
+        assert response.status_code == 200
+        assert response.json() == [evc_id]
+        assert api_mock.add_evcs_metadata.call_count == 1
+
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+        assert response.status_code == 404
 
     async def test_disable_telemetry(self, monkeypatch) -> None:
         """Test disable telemetry."""

@@ -333,6 +333,33 @@ def test_sorted_evcs_by_svc_lvl() -> None:
     assert list(sorted_evcs.values()) == list(expected.values())
 
 
+def test_sorted_evcs_by_svc_lvl_not_found_evcs() -> None:
+    """Test sorted evcs by service level with not found (empty) EVCs."""
+    evcs = {
+        "3": {},
+        "1": {"id": "1", "service_level": 7},
+        "2": {},
+    }
+    sorted_evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+    assert list(sorted_evcs.keys()) == ["1", "2", "3"]
+    assert sorted_evcs["2"] == {}
+    assert sorted_evcs["3"] == {}
+
+
+@pytest.mark.parametrize(
+    "evc_id,cookie_prefix,expected",
+    [
+        ("3766c105686749", 0xA8, 0xA83766C105686749),
+        ("3766c105686749", 0xAA, 0xAA3766C105686749),
+        ("00000000000001", 0xA8, 0xA800000000000001),
+        ("ffffffffffffff", 0xA8, 0xA8FFFFFFFFFFFFFF),
+    ],
+)
+def test_get_cookie(evc_id, cookie_prefix, expected) -> None:
+    """Test get_cookie."""
+    assert utils.get_cookie(evc_id, cookie_prefix) == expected
+
+
 @pytest.mark.parametrize(
     "evc,proxy_port_enabled,expected",
     [

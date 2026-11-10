@@ -945,9 +945,12 @@ class INTManager:
     def _discard_pps_evc_ids(self, evcs: dict[str, dict]) -> None:
         """Discard proxy port evc_ids.
 
-        This is meant to be called when an EVC is disabled.
+        This is meant to be called when an EVC is disabled, not found
+        EVCs are ignored to work well when force disabling.
         """
         for evc_id, evc in evcs.items():
+            if not evc:
+                continue
             uni_a, uni_z = utils.get_evc_unis(evc)
             try:
                 pp_a = self.srcs_pp[self.unis_src[uni_a["interface_id"]]]

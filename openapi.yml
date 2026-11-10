@@ -33,6 +33,7 @@ paths:
                   type: array
                   items:
                     type: string
+                    pattern: '^[0-9a-f]{14}$'
                 force:
                   type: boolean
                   description: Force INT to get enabled again. It will enable even if the EVC already has INT or if a ProxyPort isn't UP.
@@ -83,6 +84,7 @@ paths:
                   type: array
                   items:
                     type: string
+                    pattern: '^[0-9a-f]{14}$'
                 force:
                   type: boolean
                   description: Force INT to get disabled again. It will try to disable even if the EVC isn't found or it doesn't have INT.
@@ -130,6 +132,7 @@ paths:
                   type: array
                   items:
                     type: string
+                    pattern: '^[0-9a-f]{14}$'
       responses:
         '201':
           description: INT redeployed
@@ -173,6 +176,7 @@ paths:
                   type: array
                   items:
                     type: string
+                    pattern: '^[0-9a-f]{14}$'
       responses:
         '200':
           description: Listed expected flows for INT-enabled EVCs. Returns an object keyed by EVC ID, where each value contains flow counts and the list of expected INT flows.
@@ -291,6 +295,7 @@ paths:
                   type: array
                   items:
                     type: string
+                    pattern: '^[0-9a-f]{14}$'
       responses:
         '200':
           description: Consistency check results
