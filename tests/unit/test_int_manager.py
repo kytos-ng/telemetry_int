@@ -449,11 +449,42 @@ class TestINTManager:
         assert api_mock.get_evcs.call_count == 1
         assert api_mock.get_evcs.call_args[1] == {
             "metadata.telemetry.enabled": "true",
-            "metadata.telemetry.status": "UP",
         }
         assert int_manager.disable_int.call_count == 1
         args = int_manager.disable_int.call_args[0]
         assert evc_id in args[0]
+
+    async def test_handle_pp_metadata_removed_pp_down(self, monkeypatch):
+        """Test handle_pp_metadata_removed on an EVC DOWN due to proxy_port_down."""
+        int_manager = INTManager(MagicMock())
+        api_mock, intf_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        intf_mock.id = "some_intf_id"
+        intf_mock.metadata = {}
+        source_id = "some_source_id"
+        evc_id, other_evc_id = "3766c105686748", "3766c105686749"
+        int_manager.unis_src[intf_mock.id] = source_id
+        int_manager.srcs_pp[source_id] = pp_mock
+        pp_mock.evc_ids = {evc_id}
+
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        telemetry_down = {
+            "enabled": True,
+            "status": "DOWN",
+            "status_reason": ["proxy_port_down"],
+        }
+        evcs = {
+            _id: {"id": _id, "metadata": {"telemetry": telemetry_down}}
+            for _id in (evc_id, other_evc_id)
+        }
+        api_mock.get_evcs.return_value = evcs
+        int_manager.disable_int = AsyncMock()
+
+        await int_manager.handle_pp_metadata_removed(intf_mock)
+        assert api_mock.get_evcs.call_args[1] == {"metadata.telemetry.enabled": "true"}
+        assert int_manager.disable_int.call_count == 1
+        args, kwargs = int_manager.disable_int.call_args
+        assert list(args[0]) == [evc_id]
+        assert kwargs == {"force": True, "reason": "proxy_port_metadata_removed"}
 
     async def test_handle_pp_metadata_added(self, monkeypatch):
         """Test handle_pp_metadata_added."""
