@@ -155,9 +155,7 @@ class TestINTManager:
         event reports it forwarding, e.g. after a resume on a configured path
         or a dynamic escape, which aren't redeploys (mef_eline EP041)."""
         api_mock = AsyncMock()
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.api", api_mock
-        )
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
 
         await int_manager._update_int_status("ev", {"1": self._int_evc(False)})
@@ -174,16 +172,12 @@ class TestINTManager:
         await int_manager._update_int_status("ev", {"1": self._int_evc(True)})
         assert api_mock.add_evcs_metadata.call_count == 3
 
-    async def test_update_int_status_keeps_foreign_down(
-        self, monkeypatch
-    ) -> None:
+    async def test_update_int_status_keeps_foreign_down(self, monkeypatch) -> None:
         """A DOWN set for another reason is never overwritten, neither by a
         DOWN nor by an UP; one set here survives a restart through its
         reason."""
         api_mock = AsyncMock()
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.api", api_mock
-        )
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
         foreign = {"status": "DOWN", "status_reason": ["proxy_port_error"]}
 
@@ -200,14 +194,10 @@ class TestINTManager:
         metadata = api_mock.add_evcs_metadata.call_args[0][1]
         assert metadata["telemetry"]["status"] == "UP"
 
-    async def test_update_int_status_batched_per_status(
-        self, monkeypatch
-    ) -> None:
+    async def test_update_int_status_batched_per_status(self, monkeypatch) -> None:
         """EVCs are written one call per status, not one per EVC."""
         api_mock = AsyncMock()
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.api", api_mock
-        )
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
 
         await int_manager._update_int_status(
@@ -233,9 +223,7 @@ class TestINTManager:
         bootstrapped while its flows are handled, still gets its status
         mirrored, even with no flows in the event."""
         api_mock = AsyncMock()
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.api", api_mock
-        )
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
         int_manager.get_proxy_port_or_raise = MagicMock()
         evc = {
@@ -256,9 +244,7 @@ class TestINTManager:
     async def test_handle_partial_flows_status_by_event(self, monkeypatch) -> None:
         """Only an ingress install or removal mirrors the EVC status."""
         api_mock = AsyncMock()
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.api", api_mock
-        )
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
         int_manager.get_proxy_port_or_raise = MagicMock()
 
