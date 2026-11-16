@@ -28,7 +28,7 @@ async def test_handle_failover_link_down() -> None:
 
     controller = get_controller_mock()
     int_manager = INTManager(controller)
-    get_proxy_port_or_raise = MagicMock()
+    get_proxy_port_or_raise = MagicMock(return_value=MagicMock(status=EntityStatus.UP))
     int_manager.get_proxy_port_or_raise = get_proxy_port_or_raise
 
     dpid_a = "00:00:00:00:00:00:00:01"

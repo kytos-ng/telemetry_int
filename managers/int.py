@@ -152,7 +152,13 @@ class INTManager:
         if not pp or not pp.evc_ids:
             return
 
-        async with self._topo_link_lock:
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(self._topo_link_lock)
+            evc_ids = set(pp.evc_ids)
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in sorted(evc_ids)
+            ]
             if link.status != EntityStatus.UP or link.status_reason:
                 return
             evcs = await api.get_evcs(
@@ -168,7 +174,7 @@ class INTManager:
                     (
                         not evc["active"],
                         evc["archived"],
-                        evc_id not in pp.evc_ids,
+                        evc_id not in evc_ids,
                         evc["uni_a"]["interface_id"] not in self.unis_src,
                         evc["uni_z"]["interface_id"] not in self.unis_src,
                     )
@@ -387,17 +393,20 @@ class INTManager:
                 await stack.enter_async_context(self._evcs_lock[evc_id])
                 for evc_id in sorted(evcs)
             ]
-            evcs = utils.sorted_evcs_by_svc_lvl(evcs)
-            stored_flows = await api.get_stored_flows(
-                [
-                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
-                    for evc_id in evcs
-                ]
-            )
-            await asyncio.gather(
-                self._remove_int_flows_by_cookies(stored_flows),
-                api.add_evcs_metadata(evcs, metadata, force),
-            )
+            await self._remove_evcs_int_flows(evcs, metadata, force)
+
+    async def _remove_evcs_int_flows(
+        self, evcs: dict[str, dict], metadata: dict, force=False
+    ) -> None:
+        """Remove all INT flows and set metadata on EVCs, holding their locks."""
+        evcs = utils.sorted_evcs_by_svc_lvl(evcs)
+        stored_flows = await api.get_stored_flows(
+            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
+        )
+        await asyncio.gather(
+            self._remove_int_flows_by_cookies(stored_flows),
+            api.add_evcs_metadata(evcs, metadata, force),
+        )
 
     async def enable_int(
         self,
@@ -508,21 +517,26 @@ class INTManager:
         self._validate_evcs_stored_flows(evcs, stored_flows)
 
         active_evcs, inactive_evcs, pp_down_evcs = {}, {}, {}
+        fallen_back_cookies = set()
         for evc_id, evc in evcs.items():
-            if not evc["active"]:
+            pp_down = self._has_proxy_port_down(evc)
+            if pp_down and settings.FALLBACK_TO_MEF_LOOP_DOWN:
+                fallen_back_cookies.add(
+                    utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+                )
+            elif not evc["active"]:
                 inactive_evcs[evc_id] = evc
                 continue
-            if any(
-                (
-                    "proxy_port" in evc["uni_a"]
-                    and evc["uni_a"]["proxy_port"].status != EntityStatus.UP,
-                    "proxy_port" in evc["uni_z"]
-                    and evc["uni_z"]["proxy_port"].status != EntityStatus.UP,
-                )
-            ):
+            if pp_down:
                 pp_down_evcs[evc_id] = evc
                 continue
             active_evcs[evc_id] = evc
+
+        stored_flows = {
+            cookie: flows
+            for cookie, flows in stored_flows.items()
+            if cookie not in fallen_back_cookies
+        }
 
         inactive_metadata = copy.deepcopy(metadata)
         inactive_metadata["telemetry"]["status"] = "DOWN"
@@ -535,6 +549,15 @@ class INTManager:
             api.add_evcs_metadata(inactive_evcs, inactive_metadata, force),
             api.add_evcs_metadata(pp_down_evcs, pp_down_metadata, force),
             api.add_evcs_metadata(active_evcs, metadata, force),
+        )
+
+    @staticmethod
+    def _has_proxy_port_down(evc: dict) -> bool:
+        """Whether an EVC uses a proxy port that isn't UP."""
+        return utils.get_evc_proxy_port_value(evc) is not False and any(
+            evc[uni]["proxy_port"].status != EntityStatus.UP
+            for uni in ("uni_a", "uni_z")
+            if "proxy_port" in evc[uni]
         )
 
     def get_proxy_port_or_raise(
@@ -812,6 +835,9 @@ class INTManager:
                     await stack.enter_async_context(self._evcs_lock[evc_id])
                     for evc_id in sorted(locked)
                 ]
+                to_fall_back, to_reinstall = self._pop_pp_evcs(
+                    event_name, locked, to_install, to_update_status
+                )
                 if to_remove:
                     log.info(
                         f"Handling {event_name} flows remove on EVC ids: "
@@ -835,6 +861,10 @@ class INTManager:
                         )
                     )
                 await self._update_int_status(event_name, to_update_status)
+                if to_fall_back:
+                    await self._fall_back_pp_down(event_name, to_fall_back)
+                if to_reinstall:
+                    await self._reinstall_pp_recovered(event_name, to_reinstall)
         if to_remove_with_err:
             log.error(
                 f"Handling {event_name} proxy_port_error falling back "
@@ -853,6 +883,83 @@ class INTManager:
             to_remove_with_err = utils.sorted_evcs_by_svc_lvl(to_remove_with_err)
             await self.remove_int_flows(to_remove_with_err, metadata, force=True)
         return set(to_remove_with_err)
+
+    def _pop_pp_evcs(
+        self, event_name: str, evcs: dict[str, dict], *evc_groups: dict[str, dict]
+    ) -> tuple[dict[str, dict], dict[str, dict]]:
+        """Pop from evc_groups the EVCs to fall back to mef_eline and the ones
+        to reinstall, returning them. Removals are always kept.
+
+        It's called holding the EVC locks. The live proxy port status is used,
+        the event content could predate a proxy port link down or up handled
+        meanwhile, or have its status overwritten:
+
+        - A proxy port isn't UP, with FALLBACK_TO_MEF_LOOP_DOWN: fall back,
+          as handle_pp_link_down does, whether or not it already did.
+        - Its status says it fell back for a proxy port that's UP again, and
+          it resumes forwarding (static.ingress_installed): reinstall, since
+          handle_pp_link_up skips EVCs that aren't active, and the event only
+          carries the ingress flows.
+        """
+        to_fall_back, to_reinstall = {}, {}
+        for evc_id, evc in evcs.items():
+            telemetry = evc["metadata"]["telemetry"]
+            if settings.FALLBACK_TO_MEF_LOOP_DOWN and self._has_proxy_port_down(evc):
+                to_fall_back[evc_id] = evc
+            elif (
+                event_name == "kytos/mef_eline.static.ingress_installed"
+                and evc["active"]
+                and telemetry.get("status") == "DOWN"
+                and telemetry.get("status_reason")
+                in (["proxy_port_down"], ["proxy_port_error"])
+                and not self._has_proxy_port_down(evc)
+            ):
+                to_reinstall[evc_id] = evc
+            else:
+                continue
+            for evc_group in evc_groups:
+                evc_group.pop(evc_id, None)
+        return to_fall_back, to_reinstall
+
+    async def _fall_back_pp_down(self, event_name: str, evcs: dict[str, dict]) -> None:
+        """Remove all INT flows of EVCs with a proxy port down, falling back to
+        mef_eline, holding their locks."""
+        log.info(
+            f"Handling {event_name}, proxy port down, removing INT flows falling "
+            f"back to mef_eline, EVC ids: {list(evcs)}"
+        )
+        metadata = {
+            "telemetry": {
+                "enabled": True,
+                "status": "DOWN",
+                "status_reason": ["proxy_port_down"],
+                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+        }
+        await self._remove_evcs_int_flows(evcs, metadata, force=True)
+
+    async def _reinstall_pp_recovered(
+        self, event_name: str, evcs: dict[str, dict]
+    ) -> None:
+        """Reinstall INT on EVCs resuming forwarding (static.ingress_installed)
+        that fell back to mef_eline for a proxy port that's UP again, every
+        INT flow is built again from the stored flows."""
+        log.info(
+            f"Handling {event_name}, proxy ports UP, reinstalling INT on EVC "
+            f"ids: {list(evcs)}"
+        )
+        metadata = {
+            "telemetry": {
+                "enabled": True,
+                "status": "UP",
+                "status_reason": [],
+                "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+        }
+        try:
+            await self.install_int_flows(utils.sorted_evcs_by_svc_lvl(evcs), metadata)
+        except FlowsNotFound as exc:
+            log.exception(f"FlowsNotFound {str(exc)}")
 
     async def _update_int_status(
         self, event_name: str, evcs: dict[str, dict]
