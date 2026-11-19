@@ -10,7 +10,6 @@ from contextlib import AsyncExitStack
 from pyof.v0x04.controller2switch.table_mod import Table
 
 from kytos.core.controller import Controller
-from kytos.core.events import KytosEvent
 from kytos.core.interface import Interface
 from napps.kytos.telemetry_int import utils
 from napps.kytos.telemetry_int import settings
@@ -1267,21 +1266,29 @@ class INTManager:
     async def _send_flows(
         self, switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]
     ):
-        """
-        Send batched flows by dpid to flow_manager.
-        """
-        for dpid, flows in switch_flows.items():
-            if flows:
-                await self.controller.buffers.app.aput(
-                    KytosEvent(
-                        f"kytos.flow_manager.flows.single.{cmd}",
-                        content={
-                            "dpid": dpid,
-                            "force": True,
-                            "flow_dict": {"flows": flows},
-                        },
-                    )
-                )
+        """Send batched flows by dpid to flow_manager, returning once it has
+        stored them, so callers holding EVC locks only release them after."""
+        try:
+            await api.send_flows(switch_flows, cmd)
+        except (RetryError, UnrecoverableError) as exc:
+            excs = str(exc)
+            if isinstance(exc, RetryError):
+                excs = str(exc.last_attempt.exception())
+            evc_ids = sorted(
+                {
+                    utils.get_id_from_cookie(flow["cookie"])
+                    for flows in switch_flows.values()
+                    for flow in flows
+                    if "cookie" in flow
+                }
+            )
+            log.error(
+                f"Failed to {cmd} INT flows, Exception: {excs}, EVC ids: {evc_ids}. "
+                "On the ones with INT enabled, POST /v1/evc/check_consistency "
+                "with inconsistent_action fix or redeploy recovers them, on the "
+                "others force disable INT to remove any INT flows left"
+            )
+            raise
 
     async def list_expected_flows(self, evcs: dict[str, dict]) -> dict[str, list[dict]]:
         """List expected flows for given EVCs."""

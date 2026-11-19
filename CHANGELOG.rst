@@ -17,8 +17,9 @@ Fixed
 - Fixed ``POST /v1/evc/disable`` with ``force: true`` returning 500 for an EVC id that doesn't exist
 - Validated ``evc_ids`` format, 14 lowercase hex characters, on ``POST /v1/evc/enable``, ``POST /v1/evc/disable``, ``PATCH /v1/evc/redeploy``, ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
 - Fixed proxy port metadata removal (for instance, a forced ``DELETE /v1/uni/{interface_id}/proxy_port``) to also disable INT on EVCs whose telemetry status was ``DOWN``, such as when the proxy port was down, which used to leave INT flows behind
-- Fixed INT flows being installed on an EVC whose proxy port is down, on enable and on ``kytos/mef_eline.(failover.*|static.*)`` events, with ``FALLBACK_TO_MEF_LOOP_DOWN`` it now falls back to mef_eline as on a proxy port link down; on ``static.ingress_installed`` with its proxy ports UP again INT is now fully reinstalled. An EVC with ``proxy_port_enabled: false`` is no longer set ``DOWN`` ``proxy_port_down`` on enable
+- Fixed INT flows being installed on an EVC whose proxy port is down, on enable, on redeploy and on ``kytos/mef_eline.(failover.*|static.*)`` events, with ``FALLBACK_TO_MEF_LOOP_DOWN`` it now falls back to mef_eline as on a proxy port link down; on ``static.ingress_installed`` with its proxy ports UP again INT is now fully reinstalled. An EVC with ``proxy_port_enabled: false`` is no longer set ``DOWN`` ``proxy_port_down`` on enable
 - Fixed proxy port link up reinstalling INT without holding the EVC locks
+- Fixed INT flows left behind when an EVC operation, such as a disable, followed an install on the same EVC before flow_manager stored its flows. INT flows are now sent with ``POST|DELETE v2/flows_by_switch`` instead of ``kytos.flow_manager.flows.single.*`` events, so they're stored before the EVC locks are released. A failure to send them is now logged with the affected EVC ids and raised, ``POST /v1/evc/check_consistency`` recovers INT enabled EVCs
 
 Changed
 =======
