@@ -3,10 +3,12 @@
 # pylint: disable=too-many-lines
 
 import asyncio
+import copy
 
 import pytest
 
 from unittest.mock import AsyncMock, MagicMock
+from tenacity import RetryError
 from napps.kytos.telemetry_int.exceptions import ProxyPortSameSourceIntraEVC
 from napps.kytos.telemetry_int.exceptions import ProxyPortShared
 from napps.kytos.telemetry_int.managers.int import INTManager
@@ -1196,12 +1198,12 @@ class TestINTManager:
             int_manager._validate_dedicated_proxy_port_evcs({evc["id"]: evc})
 
     async def test__remove_int_flows_by_cookies(
-        self, inter_evc_evpl_flows_data
+        self, inter_evc_evpl_flows_data, monkeypatch
     ) -> None:
         """test _remove_int_flows_by_cookies."""
-        controller = get_controller_mock()
-        controller._buffers.app.aput = AsyncMock()
-        int_manager = INTManager(controller)
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(get_controller_mock())
         assert len(inter_evc_evpl_flows_data) == 3
         res = await int_manager._remove_int_flows_by_cookies(inter_evc_evpl_flows_data)
         assert len(res) == 3
@@ -1211,29 +1213,31 @@ class TestINTManager:
                 assert flow["cookie_mask"] == int(0xFFFFFFFFFFFFFFFF)
                 assert flow["table_id"] == 0xFF
                 assert flow["owner"] == "telemetry_int"
-        assert controller._buffers.app.aput.call_count == 3
+        api_mock.send_flows.assert_awaited_once_with(res, "delete")
 
-    async def test__remove_int_flows(self, inter_evc_evpl_flows_data) -> None:
+    async def test__remove_int_flows(
+        self, inter_evc_evpl_flows_data, monkeypatch
+    ) -> None:
         """test _remove_int_flows."""
-        controller = get_controller_mock()
-        controller._buffers.app.aput = AsyncMock()
-        int_manager = INTManager(controller)
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(get_controller_mock())
         assert len(inter_evc_evpl_flows_data) == 3
         res = await int_manager._remove_int_flows(inter_evc_evpl_flows_data)
         assert len(res) == 3
-        assert controller._buffers.app.aput.call_count == 3
+        api_mock.send_flows.assert_awaited_once_with(res, "delete")
 
     async def test__install_int_flows(self, inter_evc_evpl_flows_data, monkeypatch):
         """test__install_int_flows."""
         sleep_mock = AsyncMock()
         monkeypatch.setattr("asyncio.sleep", sleep_mock)
-        controller = get_controller_mock()
-        controller._buffers.app.aput = AsyncMock()
-        int_manager = INTManager(controller)
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(get_controller_mock())
         assert len(inter_evc_evpl_flows_data) == 3
         res = await int_manager._install_int_flows(inter_evc_evpl_flows_data)
         assert len(res) == 3
-        assert controller._buffers.app.aput.call_count == 3
+        api_mock.send_flows.assert_awaited_once_with(res, "install")
         assert sleep_mock.call_count == 0
 
     def test__add_pps_evc_ids(self):
@@ -1343,18 +1347,111 @@ class TestINTManager:
         evcs["3766c105686749"]["active"] = False
         int_manager._validate_evcs_stored_flows(evcs, {})
 
-    async def test__send_flows(self) -> None:
+    async def test__send_flows(self, monkeypatch) -> None:
         """Test _send_flows."""
-        controller = get_controller_mock()
-        controller._buffers.app.aput = AsyncMock()
-        int_manager = INTManager(controller)
-        switch_flows = {"dpid": []}
-        await int_manager._send_flows(switch_flows, "install")
-        controller._buffers.app.aput.assert_not_called()
-
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(get_controller_mock())
         switch_flows = {"dpid": [MagicMock()]}
         await int_manager._send_flows(switch_flows, "install")
-        controller._buffers.app.aput.assert_called()
+        api_mock.send_flows.assert_awaited_once_with(switch_flows, "install")
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            exceptions.UnrecoverableError("404 dpid not found"),
+            RetryError(MagicMock()),
+        ],
+    )
+    async def test__send_flows_error_logged_and_raised(self, monkeypatch, exc):
+        """A failed send logs the EVC ids of its flows and is raised."""
+        api_mock, log_mock = AsyncMock(), MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.log", log_mock)
+        api_mock.send_flows.side_effect = exc
+        int_manager = INTManager(get_controller_mock())
+        switch_flows = {
+            "dpid_a": [{"cookie": 0xA83766C105686749}, {"cookie": 0xA83766C105686748}],
+            "dpid_b": [{"cookie": 0xA83766C105686749}],
+        }
+        with pytest.raises(type(exc)):
+            await int_manager._send_flows(switch_flows, "delete")
+        assert log_mock.error.call_count == 1
+        msg = log_mock.error.call_args[0][0]
+        assert "Failed to delete INT flows" in msg
+        assert "['3766c105686748', '3766c105686749']" in msg
+
+    async def test_disable_int_waits_enable_flows_stored(self, monkeypatch) -> None:
+        """A disable_int waiting on the EVC lock while enable_int installs only
+        reads the stored flows once flow_manager has stored the installed ones,
+        so it removes them all (kytos-ng/telemetry_int#189).
+
+        flow_manager is modeled storing the flows only when the gate opens."""
+        api_mock, stored_flows_mock = AsyncMock(), AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.utils.get_found_stored_flows", stored_flows_mock
+        )
+        int_manager = INTManager(MagicMock())
+        evc_id, dpid = "3766c105686749", "00:00:00:00:00:00:00:01"
+        int_cookie = utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+        mef_cookie = utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+        int_flow = {"cookie": int_cookie, "table_id": 0, "priority": 20100}
+        evc = {
+            "id": evc_id,
+            "active": True,
+            "uni_a": MagicMock(),
+            "uni_z": MagicMock(),
+        }
+        int_manager._validate_map_enable_evcs = MagicMock(return_value={evc_id: evc})
+        int_manager._add_pps_evc_ids = MagicMock()
+        int_manager._discard_pps_evc_ids = MagicMock()
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={mef_cookie: [{"switch": dpid, "flow": int_flow}]}
+        )
+
+        stored, sent, gate = {}, [], asyncio.Event()
+
+        async def send_flows(switch_flows, cmd):
+            if not any(switch_flows.values()):
+                return
+            assert int_manager._evcs_lock[evc_id].locked()
+            await gate.wait()
+            sent.append((cmd, copy.deepcopy(dict(switch_flows))))
+            if cmd == "install":
+                stored[int_cookie] = [
+                    {"switch": sw, "flow": flow}
+                    for sw, flows in switch_flows.items()
+                    for flow in flows
+                ]
+            else:
+                stored.clear()
+
+        async def get_stored_flows(cookies):
+            return {k: list(v) for k, v in stored.items() if k in cookies}
+
+        api_mock.send_flows.side_effect = send_flows
+        api_mock.get_stored_flows.side_effect = get_stored_flows
+
+        enable = asyncio.create_task(int_manager.enable_int({evc_id: evc}))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        disable = asyncio.create_task(
+            int_manager.disable_int({evc_id: evc}, force=True)
+        )
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert api_mock.get_stored_flows.call_count == 1
+        assert not sent
+
+        gate.set()
+        await asyncio.gather(enable, disable)
+
+        assert api_mock.get_stored_flows.call_count == 2
+        assert [cmd for cmd, _ in sent] == ["install", "delete"]
+        assert sent[0][1] == {dpid: [int_flow]}
+        assert [flow["cookie"] for flow in sent[1][1][dpid]] == [int_cookie]
+        assert not stored
 
     async def test_list_expected_flows_intra_evc(
         self, monkeypatch, evcs_data, intra_evc_evpl_flows_data

@@ -1,7 +1,10 @@
 """Test kytos_api_helper.py"""
 
+import pytest
 from httpx import Response
 from unittest.mock import AsyncMock, MagicMock
+from tenacity import RetryError, stop_after_attempt
+from napps.kytos.telemetry_int.exceptions import UnrecoverableError
 from napps.kytos.telemetry_int.kytos_api_helper import (
     add_evcs_metadata,
     add_proxy_port_metadata,
@@ -9,6 +12,7 @@ from napps.kytos.telemetry_int.kytos_api_helper import (
     get_evc,
     get_stored_flows,
     get_evcs,
+    send_flows,
 )
 
 
@@ -131,3 +135,53 @@ async def test_delete_proxy_port_metadata(monkeypatch):
     intf_id = "00:00:00:00:00:00:00:01:1"
     data = await delete_proxy_port_metadata(intf_id)
     assert data
+
+
+@pytest.mark.parametrize("cmd,method", [("install", "POST"), ("delete", "DELETE")])
+async def test_send_flows(monkeypatch, cmd, method):
+    """test send_flows sends non empty switch flows by switch, forced."""
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.request.return_value = Response(
+        202, json={"response": "FlowMod Messages Sent"}, request=MagicMock()
+    )
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    flow = {"cookie": 0xA83766C105686749, "table_id": 0}
+
+    await send_flows({"dpid_a": [flow], "dpid_b": []}, cmd)
+
+    assert aclient_mock.request.call_count == 1
+    args, kwargs = aclient_mock.request.call_args
+    assert args == (method, "/flows_by_switch/?force=true")
+    assert kwargs["json"] == {"dpid_a": {"flows": [flow]}}
+
+
+async def test_send_flows_empty(monkeypatch):
+    """test send_flows doesn't send a request without flows."""
+    awith_mock = MagicMock()
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    await send_flows({"dpid_a": []}, "install")
+    awith_mock.assert_not_called()
+
+
+async def test_send_flows_errors(monkeypatch):
+    """test send_flows raises UnrecoverableError on 4xx, retries on 5xx."""
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    switch_flows = {"dpid_a": [{"cookie": 0xA83766C105686749}]}
+
+    aclient_mock.request.return_value = Response(
+        404, json={"description": "dpid not found."}, request=MagicMock()
+    )
+    with pytest.raises(UnrecoverableError):
+        await send_flows(switch_flows, "install")
+
+    aclient_mock.request.return_value = Response(
+        500, json={"description": "error"}, request=MagicMock()
+    )
+    with pytest.raises(RetryError):
+        await send_flows.retry_with(stop=stop_after_attempt(2), wait=None)(
+            switch_flows, "install"
+        )
+    assert aclient_mock.request.call_count == 3

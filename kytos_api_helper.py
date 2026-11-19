@@ -2,7 +2,7 @@
 other kytos napps' APIs """
 
 from collections import defaultdict
-from typing import Union
+from typing import Literal, Union
 
 import httpx
 from napps.kytos.telemetry_int import settings
@@ -114,6 +114,33 @@ async def get_stored_flows(
                 f"status code {response.status_code}, response text: {response.text}"
             )
         return _map_stored_flows_by_cookies(response.json())
+
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
+    before_sleep=before_sleep,
+    retry=retry_if_exception_type(httpx.RequestError),
+)
+async def send_flows(
+    switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]
+) -> None:
+    """Install or delete flows by switch on flow_manager, forced."""
+    content = {dpid: {"flows": flows} for dpid, flows in switch_flows.items() if flows}
+    if not content:
+        return
+    method = "POST" if cmd == "install" else "DELETE"
+    async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
+        response = await client.request(
+            method, "/flows_by_switch/?force=true", json=content, timeout=60
+        )
+        if response.is_server_error:
+            raise httpx.RequestError(response.text)
+        if not response.is_success:
+            raise UnrecoverableError(
+                f"Failed to send_flows {cmd} on dpids {list(content)} "
+                f"status code {response.status_code}, response text: {response.text}"
+            )
 
 
 def _map_stored_flows_by_cookies(stored_flows: dict) -> dict[int, list[dict]]:
