@@ -1,10 +1,13 @@
 """ Support function for main.py """
 
-from typing import Literal, Optional
+from typing import Awaitable, Literal, Optional
 
 from napps.kytos.telemetry_int import settings
+from tenacity import RetryError
 
-from .exceptions import FlowsNotFound, PriorityOverflow
+from kytos.core import log
+
+from .exceptions import FlowsNotFound, PriorityOverflow, UnrecoverableError
 from .kytos_api_helper import get_stored_flows as _get_stored_flows
 
 
@@ -16,6 +19,33 @@ async def get_found_stored_flows(cookies: list[int] = None) -> dict[int, list[di
         if not flows:
             raise FlowsNotFound(get_id_from_cookie(cookie))
     return stored_flows
+
+
+async def await_maybe_log_errors(awaitable: Awaitable, context: str) -> None:
+    """Await, logging RetryError and UnrecoverableError instead of raising
+    them, for event handlers, which have no caller to report them to.
+
+    EVCs left inconsistent by a logged error can still be recovered, the
+    consistency check, POST /v1/evc/check_consistency, will eventually also
+    be able to try to recover the ones with INT enabled."""
+    try:
+        await awaitable
+    except (RetryError, UnrecoverableError) as exc:
+        excs = str(exc)
+        if isinstance(exc, RetryError):
+            excs = str(exc.last_attempt.exception())
+        log.error(f"Failed when handling {context}, Exception: {excs}")
+
+
+def has_flows_failed(evc: dict) -> bool:
+    """Check if evc has INT enabled DOWN since sending its INT flows failed."""
+    telemetry = evc.get("metadata", {}).get("telemetry", {})
+    return (
+        bool(telemetry.get("enabled"))
+        and telemetry.get("status") == "DOWN"
+        and telemetry.get("status_reason")
+        in (["flows_install_failed"], ["flows_remove_failed"])
+    )
 
 
 def has_int_enabled(evc: dict) -> bool:

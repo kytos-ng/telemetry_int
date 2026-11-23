@@ -4,7 +4,12 @@ import pytest
 from httpx import Response
 from unittest.mock import AsyncMock, MagicMock
 from napps.kytos.telemetry_int import utils
-from napps.kytos.telemetry_int.exceptions import FlowsNotFound, PriorityOverflow
+from napps.kytos.telemetry_int.exceptions import (
+    FlowsNotFound,
+    PriorityOverflow,
+    UnrecoverableError,
+)
+from tenacity import RetryError
 
 
 @pytest.mark.parametrize(
@@ -471,3 +476,69 @@ def test_has_vlan_translation(evc, expected) -> None:
     result = utils.has_vlan_translation(evc)
     assert result == expected
     assert result != utils.has_qinq(evc)
+
+
+@pytest.mark.parametrize(
+    "exc,logged",
+    [
+        (None, 0),
+        (UnrecoverableError("boom"), 1),
+        (RetryError(MagicMock()), 1),
+    ],
+)
+async def test_await_maybe_log_errors(monkeypatch, exc, logged) -> None:
+    """RetryError and UnrecoverableError are logged instead of raised."""
+    log_mock = MagicMock()
+    monkeypatch.setattr("napps.kytos.telemetry_int.utils.log", log_mock)
+    awaitable = AsyncMock(side_effect=exc)
+    await utils.await_maybe_log_errors(awaitable(), "some_event")
+    assert log_mock.error.call_count == logged
+    if logged:
+        assert "some_event" in log_mock.error.call_args[0][0]
+
+
+async def test_await_maybe_log_errors_other_raised() -> None:
+    """Other exceptions are still raised."""
+    with pytest.raises(ValueError):
+        await utils.await_maybe_log_errors(AsyncMock(side_effect=ValueError())(), "ev")
+
+
+@pytest.mark.parametrize(
+    "telemetry,expected",
+    [
+        (
+            {
+                "enabled": True,
+                "status": "DOWN",
+                "status_reason": ["flows_install_failed"],
+            },
+            True,
+        ),
+        (
+            {
+                "enabled": True,
+                "status": "DOWN",
+                "status_reason": ["flows_remove_failed"],
+            },
+            True,
+        ),
+        (
+            {
+                "enabled": False,
+                "status": "DOWN",
+                "status_reason": ["flows_remove_failed"],
+            },
+            False,
+        ),
+        (
+            {"enabled": True, "status": "DOWN", "status_reason": ["proxy_port_down"]},
+            False,
+        ),
+        ({"enabled": True, "status": "UP", "status_reason": []}, False),
+        ({}, False),
+    ],
+)
+def test_has_flows_failed(telemetry, expected) -> None:
+    """INT enabled DOWN since sending its INT flows failed."""
+    assert utils.has_flows_failed({"metadata": {"telemetry": telemetry}}) == expected
+    assert not utils.has_flows_failed({})

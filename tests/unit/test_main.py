@@ -10,6 +10,7 @@ from napps.kytos.telemetry_int.exceptions import (
     EVCError,
     EVCNotFound,
     FlowsNotFound,
+    FlowsSendError,
     ProxyPortShared,
 )
 from napps.kytos.telemetry_int.kytos_api_helper import UnrecoverableError
@@ -630,6 +631,21 @@ class TestMain:
         assert log_mock.error.call_count == 1
         assert api_mock.add_evcs_metadata.call_count == 1
 
+    async def test_on_evc_deployed_flows_failed(self, monkeypatch) -> None:
+        """If deploying fails sending the INT flows, INT is kept enabled DOWN
+        with the failed status, it isn't disabled."""
+        content = {"metadata": {"telemetry": {"enabled": True}}, "id": "some_id"}
+        api_mock, log_mock = AsyncMock(), MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.log", log_mock)
+        self.napp.int_manager.redeploy_int = AsyncMock(
+            side_effect=FlowsSendError("boom")
+        )
+        await self.napp.on_evc_deployed(KytosEvent(content=content))
+        api_mock.add_evcs_metadata.assert_not_called()
+        assert log_mock.error.call_count == 1
+        assert "check_consistency" in log_mock.error.call_args[0][0]
+
     async def test_on_evc_deleted(self) -> None:
         """Test on_evc_deleted."""
         content = {"metadata": {"telemetry": {"enabled": True}}, "id": "some_id"}
@@ -730,6 +746,65 @@ class TestMain:
         self.napp.int_manager.handle_pp_link_up = AsyncMock()
         await self.napp.on_link_up(KytosEvent(content={"link": MagicMock()}))
         assert self.napp.int_manager.handle_pp_link_up.call_count == 1
+
+    @pytest.mark.parametrize(
+        "exc", [UnrecoverableError("boom"), RetryError(MagicMock())]
+    )
+    @pytest.mark.parametrize(
+        "handler,method,content",
+        [
+            ("on_evc_deleted", "disable_int", {"enabled": True}),
+            ("on_evc_undeployed", "remove_int_flows", {"enabled": False}),
+            ("on_evc_redeployed_link", "redeploy_int", {"enabled": True}),
+            (
+                "on_evc_error_redeployed_link_down",
+                "remove_int_flows",
+                {"enabled": True},
+            ),
+            ("on_partial_flows", "handle_partial_flows", {}),
+            ("on_link_down", "handle_pp_link_down", {"link": MagicMock()}),
+            ("on_link_up", "handle_pp_link_up", {"link": MagicMock()}),
+        ],
+    )
+    async def test_on_event_errors_logged(
+        self, monkeypatch, handler, method, content, exc
+    ) -> None:
+        """Event handlers log RetryError and UnrecoverableError, such as a
+        failure to send INT flows to flow_manager, instead of raising."""
+        main_log, utils_log = MagicMock(), MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.log", main_log)
+        monkeypatch.setattr("napps.kytos.telemetry_int.utils.log", utils_log)
+        content = {
+            "id": "some_id",
+            "metadata": {"telemetry": {"enabled": True}},
+            **content,
+        }
+        setattr(self.napp.int_manager, method, AsyncMock(side_effect=exc))
+        await getattr(self.napp, handler)(KytosEvent(content=content))
+        getattr(self.napp.int_manager, method).assert_awaited_once()
+        assert main_log.error.call_count + utils_log.error.call_count == 1
+
+    async def test_on_flow_mod_error_errors_logged(self, monkeypatch) -> None:
+        """A failure to remove the INT flows on an OFPT_ERROR is logged."""
+        api_mock, flow, utils_log = AsyncMock(), MagicMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.utils.log", utils_log)
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        api_mock.get_evc.return_value = {
+            evc_id: {"metadata": {"telemetry": {"enabled": True}}, "id": evc_id}
+        }
+        self.napp.int_manager.remove_int_flows = AsyncMock(
+            side_effect=UnrecoverableError("boom")
+        )
+        event = KytosEvent(content={"flow": flow, "error_command": "add"})
+        await self.napp.on_flow_mod_error(event)
+        self.napp.int_manager.remove_int_flows.assert_awaited_once()
+        assert self.napp.int_manager.remove_int_flows.call_args[1] == {
+            "force": True,
+            "failed_enabled": False,
+        }
+        assert utils_log.error.call_count == 1
 
     async def test_on_table_enabled_error(self, monkeypatch) -> None:
         """Test on_table_enabled error case."""

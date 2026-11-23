@@ -321,6 +321,11 @@ paths:
                       type: array
                       items:
                         type: object
+                    status_reason:
+                      type: array
+                      items:
+                        type: string
+                      description: EVC telemetry status_reason. An EVC with flows_install_failed or flows_remove_failed is always returned, with inconsistent_action fix or redeploy only its status is set if its flows are consistent, otherwise, or if it falls back to mef_eline for a proxy port down, it's redeployed
         '400':
           description: Invalid request payload
           content:

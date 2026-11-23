@@ -460,6 +460,57 @@ class TestINTManager:
         int_manager._remove_int_flows_by_cookies.assert_not_called()
         api_mock.add_evcs_metadata.assert_not_called()
 
+    async def test_handle_partial_flows_steps_run_after_errors(
+        self, monkeypatch
+    ) -> None:
+        """A failing step doesn't skip the next ones, which can concern other
+        EVCs of the event. EVCs with flows in a failed remove or install are
+        set DOWN flows_remove_failed or flows_install_failed, and their status
+        isn't updated from the event afterwards."""
+        failed_id, ok_id = "3766c105686748", "3766c105686749"
+        cookie = utils.get_cookie(failed_id, settings.INT_COOKIE_PREFIX)
+        int_manager, api_mock = self._pp_int_manager(monkeypatch, EntityStatus.UP)
+        int_manager.flow_builder.build_failover_old_flows = MagicMock(
+            return_value={cookie: [{"flow": {}}]}
+        )
+        int_manager._built_install_flows = MagicMock(
+            return_value={cookie: [{"flow": {}}]}
+        )
+        int_manager._remove_int_flows.side_effect = exceptions.FlowsSendError(
+            "1", {failed_id}
+        )
+        int_manager._install_int_flows.side_effect = exceptions.FlowsSendError(
+            "2", {failed_id}
+        )
+        int_manager._update_int_status = AsyncMock()
+        int_manager._pop_pp_evcs = MagicMock(
+            return_value=({"2": self._pp_evc()}, {"3": self._pp_evc()})
+        )
+        int_manager._fall_back_pp_down = AsyncMock(
+            side_effect=exceptions.UnrecoverableError("3")
+        )
+        int_manager._reinstall_pp_recovered = AsyncMock()
+
+        await int_manager.handle_partial_flows(
+            {failed_id: self._pp_evc(), ok_id: self._pp_evc()},
+            "kytos/mef_eline.static.ingress_removed",
+        )
+
+        int_manager._remove_int_flows.assert_awaited_once()
+        int_manager._install_int_flows.assert_awaited_once()
+        int_manager._fall_back_pp_down.assert_awaited_once()
+        int_manager._reinstall_pp_recovered.assert_awaited_once()
+        reasons = [
+            (list(args[0]), args[1]["telemetry"])
+            for args, _ in api_mock.add_evcs_metadata.call_args_list
+        ]
+        assert [(ids, t["status_reason"]) for ids, t in reasons] == [
+            ([failed_id], ["flows_remove_failed"]),
+            ([failed_id], ["flows_install_failed"]),
+        ]
+        assert all(t["enabled"] and t["status"] == "DOWN" for _, t in reasons)
+        assert list(int_manager._update_int_status.call_args[0][1]) == [ok_id]
+
     @pytest.mark.parametrize(
         "status_reason", [["proxy_port_down"], ["proxy_port_error"]]
     )
@@ -603,19 +654,35 @@ class TestINTManager:
         pp_mock.evc_ids = {evc_id}
 
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
-        api_mock.get_evcs.return_value = {evc_id: {}}
+        down_id, failed_id = "3766c105686749", "3766c10568674a"
+        pp_mock.evc_ids = {evc_id, down_id, failed_id}
+        api_mock.get_evcs.return_value = {
+            evc_id: {"metadata": {"telemetry": {"status": "UP"}}},
+            down_id: {
+                "metadata": {
+                    "telemetry": {"status": "DOWN", "status_reason": ["uni_down"]}
+                }
+            },
+            failed_id: {
+                "metadata": {
+                    "telemetry": {
+                        "enabled": True,
+                        "status": "DOWN",
+                        "status_reason": ["flows_install_failed"],
+                    }
+                }
+            },
+        }
         int_manager.remove_int_flows = AsyncMock()
 
         await int_manager.handle_pp_link_down(link_mock)
         assert api_mock.get_evcs.call_count == 1
-        assert api_mock.get_evcs.call_count == 1
         assert api_mock.get_evcs.call_args[1] == {
             "metadata.telemetry.enabled": "true",
-            "metadata.telemetry.status": "UP",
         }
         assert int_manager.remove_int_flows.call_count == 1
         args = int_manager.remove_int_flows.call_args[0]
-        assert evc_id in args[0]
+        assert sorted(args[0]) == sorted([evc_id, failed_id])
         assert "telemetry" in args[1]
         telemetry = args[1]["telemetry"]
         assert telemetry["enabled"]
@@ -1360,8 +1427,11 @@ class TestINTManager:
             "dpid_a": [{"cookie": 0xA83766C105686749}, {"cookie": 0xA83766C105686748}],
             "dpid_b": [{"cookie": 0xA83766C105686749}],
         }
-        with pytest.raises(type(exc)):
+        with pytest.raises(exceptions.FlowsSendError) as raised:
             await int_manager._send_flows(switch_flows, "delete")
+        assert raised.value.__cause__ is exc
+        assert raised.value.evc_ids == {"3766c105686748", "3766c105686749"}
+        assert "['3766c105686748', '3766c105686749']" in str(raised.value)
         assert log_mock.error.call_count == 1
         msg = log_mock.error.call_args[0][0]
         assert "Failed to delete INT flows" in msg
@@ -1839,3 +1909,578 @@ class TestINTManager:
         assert inconsistent_evc_id in disabled_evcs
         assert consistent_evc_id not in disabled_evcs
         assert args[1] == {"force": True, "reason": "consistency_check"}
+
+    @staticmethod
+    def _wait_gate(gate: asyncio.Event):
+        """An async side effect waiting for gate."""
+
+        async def wait(*_) -> None:
+            await gate.wait()
+
+        return wait
+
+    @staticmethod
+    def _metadata_calls(api_mock) -> list[tuple[list[str], dict]]:
+        """add_evcs_metadata calls with EVCs, as (EVC ids, telemetry)."""
+        return [
+            (sorted(args[0]), args[1]["telemetry"])
+            for args, _ in api_mock.add_evcs_metadata.call_args_list
+            if args[0]
+        ]
+
+    async def test__remove_evcs_int_flows_metadata_after_flows(
+        self, monkeypatch
+    ) -> None:
+        """Metadata is only set once the INT flows are removed."""
+        gate = asyncio.Event()
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._remove_int_flows_by_cookies = AsyncMock(
+            side_effect=self._wait_gate(gate)
+        )
+        evcs = {"3766c105686748": self._pp_evc()}
+        metadata = {"telemetry": {"enabled": False, "status": "DOWN"}}
+
+        task = asyncio.create_task(int_manager._remove_evcs_int_flows(evcs, metadata))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        api_mock.add_evcs_metadata.assert_not_called()
+        gate.set()
+        await task
+
+        assert self._metadata_calls(api_mock) == [
+            (["3766c105686748"], metadata["telemetry"])
+        ]
+
+    async def test__remove_evcs_int_flows_failed(self, monkeypatch) -> None:
+        """If removing fails, the EVCs with INT flows stored are set INT
+        enabled DOWN flows_remove_failed instead of their metadata, the
+        others still get it, and the error is raised."""
+        failed_id, ok_id = "3766c105686748", "3766c105686749"
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {
+            utils.get_cookie(failed_id, settings.INT_COOKIE_PREFIX): [{"flow": {}}],
+        }
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._remove_int_flows_by_cookies = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom", {failed_id})
+        )
+        evcs = {failed_id: self._pp_evc(), ok_id: self._pp_evc()}
+        metadata = {"telemetry": {"enabled": False, "status": "DOWN"}}
+
+        with pytest.raises(exceptions.FlowsSendError):
+            await int_manager._remove_evcs_int_flows(evcs, metadata)
+
+        calls = self._metadata_calls(api_mock)
+        assert [ids for ids, _ in calls] == [[failed_id], [ok_id]]
+        assert calls[0][1]["enabled"] is True
+        assert calls[0][1]["status"] == "DOWN"
+        assert calls[0][1]["status_reason"] == ["flows_remove_failed"]
+        assert calls[1][1] == metadata["telemetry"]
+
+    async def test_install_int_flows_metadata_after_flows(self, monkeypatch) -> None:
+        """Metadata is only set once the INT flows are installed."""
+        gate = asyncio.Event()
+        evc_id = "3766c105686748"
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(utils, "get_found_stored_flows", AsyncMock())
+        int_manager = INTManager(MagicMock())
+        int_manager._install_int_flows = AsyncMock(side_effect=self._wait_gate(gate))
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={
+                utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX): [{"flow": {}}]
+            }
+        )
+        metadata = {"telemetry": {"enabled": True, "status": "UP", "status_reason": []}}
+
+        task = asyncio.create_task(
+            int_manager.install_int_flows({evc_id: self._pp_evc()}, metadata)
+        )
+        for _ in range(5):
+            await asyncio.sleep(0)
+        api_mock.add_evcs_metadata.assert_not_called()
+        gate.set()
+        await task
+
+        assert self._metadata_calls(api_mock) == [([evc_id], metadata["telemetry"])]
+
+    async def test_install_int_flows_failed(self, monkeypatch) -> None:
+        """If installing fails, the EVCs with INT flows in it are set INT
+        enabled DOWN flows_install_failed instead of their metadata, the
+        others still get theirs, and the error is raised."""
+        failed_id, inactive_id = "3766c105686748", "3766c105686749"
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(utils, "get_found_stored_flows", AsyncMock())
+        int_manager = INTManager(MagicMock())
+        int_manager._install_int_flows = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom", {failed_id})
+        )
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={
+                utils.get_cookie(failed_id, settings.MEF_COOKIE_PREFIX): [{"flow": {}}]
+            }
+        )
+        inactive = self._pp_evc()
+        inactive["active"] = False
+        evcs = {failed_id: self._pp_evc(), inactive_id: inactive}
+        metadata = {"telemetry": {"enabled": True, "status": "UP", "status_reason": []}}
+
+        with pytest.raises(exceptions.FlowsSendError):
+            await int_manager.install_int_flows(evcs, metadata)
+
+        calls = self._metadata_calls(api_mock)
+        assert [(ids, t["status"], t["status_reason"]) for ids, t in calls] == [
+            ([failed_id], "DOWN", ["flows_install_failed"]),
+            ([inactive_id], "DOWN", ["no_flows"]),
+        ]
+        assert all(t["enabled"] for _, t in calls)
+
+    async def test__set_flows_failed_metadata_error_logged(self, monkeypatch) -> None:
+        """Failing to set the failed status is logged, not raised."""
+        evc_id = "3766c105686748"
+        api_mock, log_mock = AsyncMock(), MagicMock()
+        api_mock.add_evcs_metadata.side_effect = exceptions.UnrecoverableError("x")
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.utils.log", log_mock)
+        int_manager = INTManager(MagicMock())
+
+        failed = await int_manager._set_flows_failed(
+            {evc_id: self._pp_evc(), "3766c105686749": self._pp_evc()},
+            {evc_id},
+            "flows_remove_failed",
+        )
+
+        assert list(failed) == [evc_id]
+        assert log_mock.error.call_count == 1
+        assert "flows_remove_failed" in log_mock.error.call_args[0][0]
+
+    @pytest.mark.parametrize("method", ["enable_int", "redeploy_int"])
+    async def test_remove_before_install_failed(self, monkeypatch, method) -> None:
+        """If removing the INT flows before installing them fails, the EVCs
+        are set INT enabled DOWN flows_remove_failed, nothing is installed,
+        and the error is raised. An enabled EVC still gets its proxy ports
+        tracked, so a proxy port link down still falls it back."""
+        evc_id = "3766c105686748"
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {
+            utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX): [{"flow": {}}],
+        }
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._validate_map_enable_evcs = MagicMock(
+            side_effect=lambda e, *_, **__: e
+        )
+        int_manager._validate_has_int = MagicMock()
+        int_manager._add_pps_evc_ids = MagicMock()
+        int_manager._remove_int_flows_by_cookies = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom", {evc_id})
+        )
+        int_manager.install_int_flows = AsyncMock()
+        evc, other = self._pp_evc(), self._pp_evc()
+
+        with pytest.raises(exceptions.FlowsSendError):
+            await getattr(int_manager, method)({evc_id: evc, "3766c105686749": other})
+
+        int_manager.install_int_flows.assert_not_called()
+        calls = self._metadata_calls(api_mock)
+        assert [(ids, t["status_reason"]) for ids, t in calls] == [
+            ([evc_id], ["flows_remove_failed"])
+        ]
+        if method == "enable_int":
+            int_manager._add_pps_evc_ids.assert_called_once_with({evc_id: evc})
+
+    async def test_enable_int_evc_error_pps_not_tracked(self, monkeypatch) -> None:
+        """An EVC that fails validation while installing, e.g. FlowsNotFound,
+        has nothing to fall back, so its proxy ports aren't tracked."""
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {}
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._validate_map_enable_evcs = MagicMock(
+            side_effect=lambda e, *_, **__: e
+        )
+        int_manager._add_pps_evc_ids = MagicMock()
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
+        int_manager.install_int_flows = AsyncMock(
+            side_effect=exceptions.FlowsNotFound("3766c105686748")
+        )
+
+        with pytest.raises(exceptions.FlowsNotFound):
+            await int_manager.enable_int({"3766c105686748": self._pp_evc()})
+
+        int_manager._add_pps_evc_ids.assert_not_called()
+
+    @staticmethod
+    def _consistency_int_manager(monkeypatch, evc_id, status_reason, stored=True):
+        """An INTManager whose EVC expects one INT flow, stored or not, with
+        an INT status_reason, and its api mock."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._validate_map_enable_evcs = MagicMock(side_effect=lambda e, **_: e)
+        int_manager.redeploy_int = AsyncMock()
+        int_manager._install_int_flows = AsyncMock()
+        int_manager._remove_int_flows = AsyncMock()
+        flow = {"flow_id": "aaaa1111", "flow": {}, "switch": "dpid1"}
+        int_manager._list_expected_flows = AsyncMock(
+            return_value={evc_id: {"flows": [flow]}}
+        )
+        cookie = utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
+        api_mock.get_stored_flows.return_value = {cookie: [flow] if stored else []}
+        evc = {
+            "id": evc_id,
+            "service_level": 6,
+            "active": True,
+            "uni_a": {"interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"interface_id": "00:00:00:00:00:00:00:03:1"},
+            "metadata": {
+                "telemetry": {
+                    "enabled": True,
+                    "status": "DOWN" if status_reason else "UP",
+                    "status_reason": status_reason,
+                }
+            },
+        }
+        return int_manager, api_mock, {evc_id: evc}
+
+    @pytest.mark.parametrize("active", [True, False])
+    @pytest.mark.parametrize("action", [None, "fix", "redeploy", "disable"])
+    @pytest.mark.parametrize(
+        "status_reason", [["flows_install_failed"], ["flows_remove_failed"]]
+    )
+    async def test_check_consistency_flows_failed_flows_match(
+        self, monkeypatch, action, status_reason, active
+    ) -> None:
+        """An EVC whose INT flows failed to be sent but match is consistent,
+        it's still returned, filtering for inconsistent ones, since its status
+        is wrong. With inconsistent_action fix or redeploy only its status is
+        set, the one installing its INT flows sets, no flow is sent."""
+        evc_id = "3766c105686748"
+        int_manager, api_mock, evcs = self._consistency_int_manager(
+            monkeypatch, evc_id, status_reason
+        )
+        evcs[evc_id]["active"] = active
+        int_manager.disable_int = AsyncMock()
+
+        result = await int_manager.check_consistency(
+            evcs, outcome="inconsistent", inconsistent_action=action
+        )
+
+        assert result[evc_id]["outcome"] == "consistent"
+        assert result[evc_id]["status_reason"] == status_reason
+        int_manager._install_int_flows.assert_not_called()
+        int_manager._remove_int_flows.assert_not_called()
+        int_manager.redeploy_int.assert_not_called()
+        int_manager.disable_int.assert_not_called()
+        calls = self._metadata_calls(api_mock)
+        if action in ("fix", "redeploy"):
+            status = ("UP", []) if active else ("DOWN", ["no_flows"])
+            assert [(ids, t["status"], t["status_reason"]) for ids, t in calls] == [
+                ([evc_id], *status)
+            ]
+            assert calls[0][1]["enabled"] is True
+        else:
+            assert not calls
+
+    @pytest.mark.parametrize("fallback", [True, False])
+    @pytest.mark.parametrize("action", ["fix", "redeploy"])
+    async def test_check_consistency_flows_failed_flows_match_pp_down(
+        self, monkeypatch, action, fallback
+    ) -> None:
+        """An EVC whose INT flows failed to be sent but match, with a proxy
+        port down, is redeployed with FALLBACK_TO_MEF_LOOP_DOWN, so it falls
+        back to mef_eline removing its INT flows, else only its status is set
+        DOWN proxy_port_down."""
+        evc_id = "3766c105686748"
+        int_manager, api_mock, evcs = self._consistency_int_manager(
+            monkeypatch, evc_id, ["flows_install_failed"]
+        )
+        monkeypatch.setattr(settings, "FALLBACK_TO_MEF_LOOP_DOWN", fallback)
+        pp = MagicMock(status=EntityStatus.DOWN)
+        evcs[evc_id]["uni_a"]["proxy_port"] = pp
+        evcs[evc_id]["uni_z"]["proxy_port"] = pp
+
+        result = await int_manager.check_consistency(
+            evcs, outcome="inconsistent", inconsistent_action=action
+        )
+
+        assert result[evc_id]["outcome"] == "consistent"
+        int_manager._install_int_flows.assert_not_called()
+        int_manager._remove_int_flows.assert_not_called()
+        calls = self._metadata_calls(api_mock)
+        if fallback:
+            int_manager.redeploy_int.assert_awaited_once_with(evcs)
+            assert not calls
+        else:
+            int_manager.redeploy_int.assert_not_called()
+            assert [(ids, t["status"], t["status_reason"]) for ids, t in calls] == [
+                ([evc_id], "DOWN", ["proxy_port_down"])
+            ]
+
+    @pytest.mark.parametrize("action", [None, "fix", "redeploy"])
+    async def test_check_consistency_flows_failed_flows_mismatch(
+        self, monkeypatch, action
+    ) -> None:
+        """An EVC whose INT flows failed to be sent and don't match is
+        inconsistent, and it's redeployed with inconsistent_action fix or
+        redeploy, which also sets its status, instead of fixing its flows."""
+        evc_id = "3766c105686748"
+        int_manager, api_mock, evcs = self._consistency_int_manager(
+            monkeypatch, evc_id, ["flows_install_failed"], stored=False
+        )
+
+        result = await int_manager.check_consistency(
+            evcs, outcome="inconsistent", inconsistent_action=action
+        )
+
+        assert result[evc_id]["outcome"] == "inconsistent"
+        assert result[evc_id]["status_reason"] == ["flows_install_failed"]
+        int_manager._install_int_flows.assert_not_called()
+        api_mock.add_evcs_metadata.assert_not_called()
+        if action:
+            int_manager.redeploy_int.assert_awaited_once_with(evcs)
+        else:
+            int_manager.redeploy_int.assert_not_called()
+
+    async def test_check_consistency_consistent_status_reason(
+        self, monkeypatch
+    ) -> None:
+        """An EVC with its flows and no failed status is consistent."""
+        evc_id = "3766c105686748"
+        int_manager, _, evcs = self._consistency_int_manager(monkeypatch, evc_id, [])
+
+        result = await int_manager.check_consistency(
+            evcs, outcome="consistent", inconsistent_action="fix"
+        )
+
+        assert result[evc_id]["outcome"] == "consistent"
+        assert result[evc_id]["status_reason"] == []
+        int_manager.redeploy_int.assert_not_called()
+
+    async def test_check_consistency_fix_failed(self, monkeypatch) -> None:
+        """If installing the missing flows fails, the EVC is set INT enabled
+        DOWN flows_install_failed, so the next fix redeploys it, and the error
+        is raised."""
+        evc_id = "3766c105686748"
+        int_manager, api_mock, evcs = self._consistency_int_manager(
+            monkeypatch, evc_id, [], stored=False
+        )
+        int_manager._install_int_flows.side_effect = exceptions.FlowsSendError(
+            "x", {evc_id}
+        )
+
+        with pytest.raises(exceptions.FlowsSendError):
+            await int_manager.check_consistency(evcs, inconsistent_action="fix")
+
+        calls = self._metadata_calls(api_mock)
+        assert [(ids, t["status_reason"]) for ids, t in calls] == [
+            ([evc_id], ["flows_install_failed"])
+        ]
+
+    @pytest.mark.parametrize(
+        "exc", [exceptions.UnrecoverableError("boom"), RetryError(MagicMock())]
+    )
+    async def test__send_flows_or_set_failed_other_errors(
+        self, monkeypatch, exc
+    ) -> None:
+        """Only a failure to send the flows sets the EVCs failed, other errors
+        are raised as they are."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        evc_id = "3766c105686748"
+
+        with pytest.raises(type(exc)):
+            await int_manager._send_flows_or_set_failed(
+                AsyncMock(side_effect=exc)(),
+                {evc_id: self._pp_evc()},
+                "flows_install_failed",
+            )
+
+        api_mock.add_evcs_metadata.assert_not_called()
+
+    async def test_handle_pp_metadata_added_enable_flows_failed(
+        self, monkeypatch
+    ) -> None:
+        """If re-enabling fails sending the flows, INT is kept enabled DOWN
+        with the failed status, it isn't disabled."""
+        api_mock, log_mock = AsyncMock(), MagicMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.log", log_mock)
+        int_manager = INTManager(MagicMock())
+        intf = MagicMock(id="00:00:00:00:00:00:00:01:1", metadata={"proxy_port": 2})
+        pp = MagicMock(evc_ids={"3766c105686748"})
+        int_manager.get_proxy_port_or_raise = MagicMock(return_value=pp)
+        api_mock.get_evcs.return_value = {"3766c105686748": self._pp_evc()}
+        int_manager.disable_int = AsyncMock()
+        int_manager.enable_int = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom")
+        )
+
+        await int_manager.handle_pp_metadata_added(intf)
+
+        int_manager.enable_int.assert_awaited_once()
+        api_mock.add_evcs_metadata.assert_not_called()
+        assert "flows_install_failed" in log_mock.error.call_args[0][0]
+
+    @pytest.mark.parametrize(
+        "failing,tracked",
+        [
+            ("install", ["3766c105686748", "3766c105686749"]),
+            ("stored_flows", None),
+        ],
+    )
+    async def test_enable_int_failed_pps_tracked(
+        self, monkeypatch, failing, tracked
+    ) -> None:
+        """A failed install still sets every EVC INT enabled, the failed ones
+        DOWN, so all get their proxy ports tracked, a failure before anything
+        was sent tracks none."""
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {}
+        if failing == "stored_flows":
+            api_mock.get_stored_flows.side_effect = RetryError(MagicMock())
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._validate_map_enable_evcs = MagicMock(
+            side_effect=lambda e, *_, **__: e
+        )
+        int_manager._add_pps_evc_ids = MagicMock()
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
+        int_manager.install_int_flows = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom", {"3766c105686748"})
+        )
+        evcs = {"3766c105686748": self._pp_evc(), "3766c105686749": self._pp_evc()}
+
+        with pytest.raises((exceptions.FlowsSendError, RetryError)):
+            await int_manager.enable_int(evcs)
+
+        if tracked is None:
+            int_manager._add_pps_evc_ids.assert_not_called()
+        else:
+            assert sorted(int_manager._add_pps_evc_ids.call_args[0][0]) == tracked
+
+    async def test_disable_int_failed_pps_discarded(self, monkeypatch) -> None:
+        """If removing fails, only the EVCs that weren't in the failed send,
+        which got disabled, have their proxy ports discarded."""
+        int_manager = INTManager(MagicMock())
+        int_manager.remove_int_flows = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom", {"3766c105686748"})
+        )
+        int_manager._discard_pps_evc_ids = MagicMock()
+        evcs = {"3766c105686748": self._pp_evc(), "3766c105686749": self._pp_evc()}
+
+        with pytest.raises(exceptions.FlowsSendError):
+            await int_manager.disable_int(evcs, force=True)
+
+        assert list(int_manager._discard_pps_evc_ids.call_args[0][0]) == [
+            "3766c105686749"
+        ]
+
+    async def test__remove_evcs_int_flows_failed_kept_disabled(
+        self, monkeypatch
+    ) -> None:
+        """An unrecoverable removal, such as on an OFPT_ERROR, that fails sets
+        the EVC DOWN flows_remove_failed with INT disabled, so a consistency
+        check doesn't redeploy it."""
+        evc_id = "3766c105686748"
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {
+            utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX): [{"flow": {}}],
+        }
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        int_manager._remove_int_flows_by_cookies = AsyncMock(
+            side_effect=exceptions.FlowsSendError("boom", {evc_id})
+        )
+        metadata = {"telemetry": {"enabled": False, "status": "DOWN"}}
+
+        with pytest.raises(exceptions.FlowsSendError):
+            await int_manager.remove_int_flows(
+                {evc_id: self._pp_evc()}, metadata, force=True, failed_enabled=False
+            )
+
+        calls = self._metadata_calls(api_mock)
+        assert [(ids, t["enabled"], t["status_reason"]) for ids, t in calls] == [
+            ([evc_id], False, ["flows_remove_failed"])
+        ]
+
+    @pytest.mark.parametrize("active", [True, False])
+    async def test_handle_partial_flows_flows_failed_redeployed(
+        self, monkeypatch, active
+    ) -> None:
+        """An EVC whose INT flows failed to be sent isn't installed only the
+        event's INT flows, which could leave an INT source without its sink.
+        It's redeployed if active, else it keeps its status, and its status
+        isn't updated from the event."""
+        failed_id, ok_id = "3766c105686748", "3766c105686749"
+        int_manager, api_mock = self._pp_int_manager(monkeypatch, EntityStatus.UP)
+        int_manager._redeploy_evcs_int_flows = AsyncMock()
+        int_manager._built_install_flows = MagicMock(return_value={})
+        failed = self._pp_evc("DOWN", ["flows_install_failed"])
+        failed["active"] = active
+
+        await int_manager.handle_partial_flows(
+            {failed_id: failed, ok_id: self._pp_evc()},
+            "kytos/mef_eline.static.ingress_installed",
+        )
+
+        assert list(int_manager._built_install_flows.call_args[0][0]) == [ok_id]
+        if active:
+            redeployed = int_manager._redeploy_evcs_int_flows.call_args[0][0]
+            assert list(redeployed) == [failed_id]
+        else:
+            int_manager._redeploy_evcs_int_flows.assert_not_called()
+        written = [
+            evc_id
+            for args, _ in api_mock.add_evcs_metadata.call_args_list
+            for evc_id in args[0]
+        ]
+        assert written == [ok_id]
+
+    async def test_install_int_flows_metadata_groups_concurrent(
+        self, monkeypatch
+    ) -> None:
+        """The metadata groups, a bulk request each, are sent concurrently, and
+        installing only returns once all are done, so none outlives the EVC
+        locks. An error is raised once all are done."""
+        gate, started = asyncio.Event(), []
+        active_id, inactive_id = "3766c105686748", "3766c105686749"
+
+        async def add_evcs_metadata(evcs, *_):
+            if not evcs:
+                return {}
+            started.append(sorted(evcs))
+            await gate.wait()
+            if inactive_id in evcs:
+                raise exceptions.UnrecoverableError("boom")
+            return {}
+
+        api_mock = AsyncMock()
+        api_mock.add_evcs_metadata.side_effect = add_evcs_metadata
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(utils, "get_found_stored_flows", AsyncMock())
+        int_manager = INTManager(MagicMock())
+        int_manager._install_int_flows = AsyncMock()
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={
+                utils.get_cookie(active_id, settings.MEF_COOKIE_PREFIX): [{"flow": {}}]
+            }
+        )
+        inactive = self._pp_evc()
+        inactive["active"] = False
+        evcs = {active_id: self._pp_evc(), inactive_id: inactive}
+        metadata = {"telemetry": {"enabled": True, "status": "UP", "status_reason": []}}
+
+        task = asyncio.create_task(int_manager.install_int_flows(evcs, metadata))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert sorted(started) == [[active_id], [inactive_id]]
+        assert not task.done()
+        gate.set()
+        with pytest.raises(exceptions.UnrecoverableError):
+            await task

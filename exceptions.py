@@ -13,6 +13,19 @@ class UnrecoverableError(Exception):
         super().__init__(self.message)
 
 
+class FlowsSendError(UnrecoverableError):
+    """Exception raised when sending INT flows to flow_manager failed.
+
+    The EVCs with flows in it, evc_ids, are set DOWN with flows_install_failed
+    or flows_remove_failed, since some of their flows might have been stored.
+    """
+
+    def __init__(self, message: str, evc_ids=()) -> None:
+        """Constructor of FlowsSendError."""
+        super().__init__(message)
+        self.evc_ids = set(evc_ids)
+
+
 class EVCError(UnrecoverableError):
     """Exception raised for unrecoverable EVC errors
 

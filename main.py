@@ -24,6 +24,7 @@ from .exceptions import (
     EVCHasNoINT,
     EVCNotFound,
     FlowsNotFound,
+    FlowsSendError,
     ProxyPortConflict,
     ProxyPortError,
     ProxyPortNotFound,
@@ -524,7 +525,10 @@ class Main(KytosNApp):
         ):
             evc_id = content["id"]
             log.info(f"Handling mef_eline.deleted on EVC id: {evc_id}")
-            await self.int_manager.disable_int({evc_id: content}, force=True)
+            await utils.await_maybe_log_errors(
+                self.int_manager.disable_int({evc_id: content}, force=True),
+                f"{event.name} on EVC id: {evc_id}",
+            )
 
     @alisten_to("kytos/mef_eline.deployed")
     async def on_evc_deployed(self, event: KytosEvent) -> None:
@@ -553,6 +557,13 @@ class Main(KytosNApp):
                     proxy_port_enabled=proxy_port_enabled,
                     set_proxy_port_metadata=True,
                 )
+        except FlowsSendError as exc:
+            log.error(
+                f"Failed when handling mef_eline.deployed: {exc}. INT is DOWN with "
+                "flows_install_failed or flows_remove_failed, POST "
+                "/v1/evc/check_consistency with inconsistent_action fix or "
+                f"redeploy recovers EVC {evc_id}"
+            )
         except (EVCError, RetryError, UnrecoverableError) as exc:
             excs = str(exc)
             if isinstance(exc, RetryError):
@@ -606,7 +617,10 @@ class Main(KytosNApp):
             evc_id = content["id"]
             evcs = {evc_id: content}
             log.info(f"Handling mef_eline.undeployed on EVC id: {evc_id}")
-            await self.int_manager.remove_int_flows(evcs, metadata, force=True)
+            await utils.await_maybe_log_errors(
+                self.int_manager.remove_int_flows(evcs, metadata, force=True),
+                f"{event.name} on EVC id: {evc_id}",
+            )
 
     @alisten_to("kytos/mef_eline.(redeployed_link_down|redeployed_link_up)")
     async def on_evc_redeployed_link(self, event: KytosEvent) -> None:
@@ -623,9 +637,12 @@ class Main(KytosNApp):
             log.info(f"Handling {event.name}, EVC id: {evc_id}")
             try:
                 await self.int_manager.redeploy_int(evcs)
-            except EVCError as exc:
+            except (RetryError, UnrecoverableError) as exc:
+                excs = str(exc)
+                if isinstance(exc, RetryError):
+                    excs = str(exc.last_attempt.exception())
                 log.error(
-                    f"Failed to redeploy: {exc}. "
+                    f"Failed to redeploy: {excs}. "
                     f"Analyze the error and you'll need to redeploy EVC {evc_id} later"
                 )
 
@@ -655,7 +672,10 @@ class Main(KytosNApp):
             log.info(
                 f"Handling mef_eline.redeployed_link_down_no_path on EVC id: {evc_id}"
             )
-            await self.int_manager.remove_int_flows(evcs, metadata, force=True)
+            await utils.await_maybe_log_errors(
+                self.int_manager.remove_int_flows(evcs, metadata, force=True),
+                f"{event.name} on EVC id: {evc_id}",
+            )
 
     @alisten_to("kytos/mef_eline.(failover.*|static.*)")
     async def on_partial_flows(self, event: KytosEvent):
@@ -666,19 +686,26 @@ class Main(KytosNApp):
         the installed flows in 'flows' and the removed ones in
         'removed_flows'.
         """
-        await self.int_manager.handle_partial_flows(
-            copy.deepcopy(event.content), event_name=event.name
+        await utils.await_maybe_log_errors(
+            self.int_manager.handle_partial_flows(
+                copy.deepcopy(event.content), event_name=event.name
+            ),
+            event.name,
         )
 
     @alisten_to("kytos/topology.link_down")
     async def on_link_down(self, event):
         """Handle topology.link_down."""
-        await self.int_manager.handle_pp_link_down(event.content["link"])
+        await utils.await_maybe_log_errors(
+            self.int_manager.handle_pp_link_down(event.content["link"]), event.name
+        )
 
     @alisten_to("kytos/topology.link_up")
     async def on_link_up(self, event):
         """Handle topology.link_up."""
-        await self.int_manager.handle_pp_link_up(event.content["link"])
+        await utils.await_maybe_log_errors(
+            self.int_manager.handle_pp_link_up(event.content["link"]), event.name
+        )
 
     @alisten_to("kytos/mef_eline.uni_active_updated")
     async def on_uni_active_updated(self, event: KytosEvent) -> None:
@@ -751,7 +778,12 @@ class Main(KytosNApp):
                 f"flow: {flow.as_dict()} "
             )
             evcs = evc
-            await self.int_manager.remove_int_flows(evcs, metadata, force=True)
+            await utils.await_maybe_log_errors(
+                self.int_manager.remove_int_flows(
+                    evcs, metadata, force=True, failed_enabled=False
+                ),
+                f"{event.name} on EVC id: {evc_id}",
+            )
 
     @alisten_to("kytos/topology.interfaces.metadata.removed")
     async def on_intf_metadata_removed(self, event: KytosEvent) -> None:
