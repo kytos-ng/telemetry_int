@@ -2,6 +2,8 @@
 
 # pylint: disable=too-many-lines
 
+import asyncio
+
 import pytest
 
 from unittest.mock import AsyncMock, MagicMock
@@ -225,7 +227,9 @@ class TestINTManager:
         api_mock = AsyncMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
-        int_manager.get_proxy_port_or_raise = MagicMock()
+        int_manager.get_proxy_port_or_raise = MagicMock(
+            return_value=MagicMock(status=EntityStatus.UP)
+        )
         evc = {
             "active": False,
             "metadata": {"telemetry_request": {}},
@@ -246,7 +250,9 @@ class TestINTManager:
         api_mock = AsyncMock()
         monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         int_manager = INTManager(MagicMock())
-        int_manager.get_proxy_port_or_raise = MagicMock()
+        int_manager.get_proxy_port_or_raise = MagicMock(
+            return_value=MagicMock(status=EntityStatus.UP)
+        )
 
         def resumed() -> dict:
             return {
@@ -277,7 +283,9 @@ class TestINTManager:
         """INT source flows are installed again only on an ingress resume,
         as an ingress removal took them out; a swap leaves them in place."""
         int_manager = INTManager(MagicMock())
-        int_manager.get_proxy_port_or_raise = MagicMock()
+        int_manager.get_proxy_port_or_raise = MagicMock(
+            return_value=MagicMock(status=EntityStatus.UP)
+        )
         int_manager._install_int_flows = AsyncMock()
         int_manager._update_int_status = AsyncMock()
         source, table_x = (
@@ -338,6 +346,250 @@ class TestINTManager:
         )
         assert fell_back == {"1"}
         assert int_manager.remove_int_flows.call_count == 1
+
+    @staticmethod
+    def _pp_int_manager(monkeypatch, pp_status, pp_metadata=True) -> tuple:
+        """An INTManager whose UNIs resolve to proxy ports with ``pp_status``,
+        or have no proxy port metadata at all, and its api mock."""
+        api_mock = AsyncMock()
+        api_mock.get_stored_flows.return_value = {}
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        int_manager = INTManager(MagicMock())
+        if pp_metadata:
+            pp = MagicMock(status=pp_status)
+            int_manager.get_proxy_port_or_raise = MagicMock(return_value=pp)
+        else:
+            int_manager.get_proxy_port_or_raise = MagicMock(
+                side_effect=exceptions.ProxyPortMetadataNotFound("1", "no pp")
+            )
+        int_manager._install_int_flows = AsyncMock()
+        int_manager._remove_int_flows = AsyncMock()
+        int_manager._remove_int_flows_by_cookies = AsyncMock()
+        int_manager.install_int_flows = AsyncMock()
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={1: [{"flow": {"instructions": []}}]}
+        )
+        int_manager.flow_builder.build_failover_old_flows = MagicMock(
+            return_value={1: [{"flow": {}}]}
+        )
+        return int_manager, api_mock
+
+    @staticmethod
+    def _pp_evc(status="UP", status_reason=None, proxy_port_enabled=None) -> dict:
+        """An active INT EVC event content carrying installed and removed
+        flows."""
+        metadata = {
+            "telemetry": {
+                "enabled": True,
+                "status": status,
+                "status_reason": status_reason or [],
+            }
+        }
+        if proxy_port_enabled is not None:
+            metadata["proxy_port_enabled"] = proxy_port_enabled
+        return {
+            "active": True,
+            "metadata": metadata,
+            "uni_a": {"interface_id": "00:00:00:00:00:00:00:01:1"},
+            "uni_z": {"interface_id": "00:00:00:00:00:00:00:03:1"},
+            "service_level": 0,
+            "creation_time": "2024-01-01T00:00:00",
+            "flows": {"00:00:00:00:00:00:00:01": [{"cookie": 1, "match": {}}]},
+            "removed_flows": {"00:00:00:00:00:00:00:02": [{"cookie": 1, "match": {}}]},
+        }
+
+    @pytest.mark.parametrize(
+        "event_name",
+        [
+            "kytos/mef_eline.static.ingress_swapped",
+            "kytos/mef_eline.static.ingress_installed",
+            "kytos/mef_eline.static.ingress_removed",
+            "kytos/mef_eline.static.standby_installed",
+            "kytos/mef_eline.failover_link_down",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "content",
+        [("DOWN", ["proxy_port_down"]), ("UP", None), ("DOWN", ["uni_down"])],
+    )
+    async def test_handle_partial_flows_proxy_port_down_falls_back(
+        self, monkeypatch, event_name, content
+    ) -> None:
+        """An EVC whose proxy port is down falls back to mef_eline whatever
+        its content status says, which can predate a proxy port link down or
+        have been overwritten: the event installs no INT flows, every INT
+        flow is removed and it's set DOWN proxy_port_down. The removals in
+        the event are still applied, and no EVC is fetched."""
+        int_manager, api_mock = self._pp_int_manager(monkeypatch, EntityStatus.DOWN)
+
+        await int_manager.handle_partial_flows(
+            {"1": self._pp_evc(*content)}, event_name
+        )
+
+        int_manager._install_int_flows.assert_not_called()
+        int_manager.install_int_flows.assert_not_called()
+        assert int_manager._remove_int_flows.call_count == 1
+        api_mock.get_evcs.assert_not_called()
+        assert api_mock.get_stored_flows.call_args[0][0] == [
+            utils.get_cookie("1", settings.INT_COOKIE_PREFIX)
+        ]
+        assert int_manager._remove_int_flows_by_cookies.call_count == 1
+        assert api_mock.add_evcs_metadata.call_count == 1
+        evcs, metadata = api_mock.add_evcs_metadata.call_args[0][:2]
+        assert list(evcs) == ["1"]
+        assert metadata["telemetry"]["enabled"] is True
+        assert metadata["telemetry"]["status"] == "DOWN"
+        assert metadata["telemetry"]["status_reason"] == ["proxy_port_down"]
+
+    async def test_handle_partial_flows_proxy_port_down_no_fallback(
+        self, monkeypatch
+    ) -> None:
+        """Without FALLBACK_TO_MEF_LOOP_DOWN INT stays on a proxy port that's
+        down, so its flows are handled as usual."""
+        monkeypatch.setattr(settings, "FALLBACK_TO_MEF_LOOP_DOWN", False)
+        int_manager, api_mock = self._pp_int_manager(monkeypatch, EntityStatus.DOWN)
+
+        await int_manager.handle_partial_flows(
+            {"1": self._pp_evc()}, "kytos/mef_eline.static.ingress_swapped"
+        )
+
+        assert int_manager._install_int_flows.call_count == 1
+        assert int_manager._remove_int_flows.call_count == 1
+        int_manager._remove_int_flows_by_cookies.assert_not_called()
+        api_mock.add_evcs_metadata.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "status_reason", [["proxy_port_down"], ["proxy_port_error"]]
+    )
+    async def test_handle_partial_flows_proxy_port_up_while_inactive(
+        self, monkeypatch, status_reason
+    ) -> None:
+        """A proxy port that came back UP while the EVC wasn't forwarding is
+        skipped by handle_pp_link_up (not active), so resuming the ingress
+        (static.ingress_installed) is what must reinstall every INT flow and
+        set it UP, the event only carries the ingress flows."""
+        int_manager, api_mock = self._pp_int_manager(monkeypatch, EntityStatus.UP)
+
+        await int_manager.handle_partial_flows(
+            {"1": self._pp_evc("DOWN", status_reason)},
+            "kytos/mef_eline.static.ingress_installed",
+        )
+
+        int_manager._install_int_flows.assert_not_called()
+        assert int_manager._remove_int_flows.call_count == 1
+        assert int_manager.install_int_flows.call_count == 1
+        evcs, metadata = int_manager.install_int_flows.call_args[0][:2]
+        assert list(evcs) == ["1"]
+        assert metadata["telemetry"]["status"] == "UP"
+        assert metadata["telemetry"]["status_reason"] == []
+        api_mock.add_evcs_metadata.assert_not_called()
+        api_mock.get_evcs.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "event_name",
+        [
+            "kytos/mef_eline.static.ingress_swapped",
+            "kytos/mef_eline.failover_link_down",
+        ],
+    )
+    async def test_handle_partial_flows_proxy_port_up_other_event(
+        self, monkeypatch, event_name
+    ) -> None:
+        """With its proxy ports UP again an active EVC is reinstalled by
+        handle_pp_link_up, so other events are handled as usual."""
+        int_manager, _ = self._pp_int_manager(monkeypatch, EntityStatus.UP)
+
+        await int_manager.handle_partial_flows(
+            {"1": self._pp_evc("DOWN", ["proxy_port_down"])}, event_name
+        )
+
+        assert int_manager._install_int_flows.call_count == 1
+        int_manager.install_int_flows.assert_not_called()
+
+    @pytest.mark.parametrize("fallback", [True, False])
+    async def test_install_int_flows_proxy_port_down(
+        self, monkeypatch, fallback
+    ) -> None:
+        """An EVC whose proxy port is down is set DOWN proxy_port_down, and
+        with FALLBACK_TO_MEF_LOOP_DOWN it falls back to mef_eline, active or
+        not: its INT flows aren't installed. An EVC with proxy_port_enabled
+        false doesn't use the proxy port, so it's installed and UP."""
+        monkeypatch.setattr(settings, "FALLBACK_TO_MEF_LOOP_DOWN", fallback)
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        monkeypatch.setattr(utils, "get_found_stored_flows", AsyncMock())
+        int_manager = INTManager(MagicMock())
+        int_manager._install_int_flows = AsyncMock()
+        pp_down = MagicMock(status=EntityStatus.DOWN)
+        evcs = {}
+        for evc_id, proxy_port_enabled in (
+            ("a1", None),
+            ("a2", False),
+            ("a3", None),
+            ("a4", None),
+        ):
+            evc = self._pp_evc(proxy_port_enabled=proxy_port_enabled)
+            evc["active"] = evc_id != "a4"
+            evc["uni_a"], evc["uni_z"] = utils.get_evc_unis(evc)
+            if evc_id != "a3":
+                evc["uni_a"]["proxy_port"] = evc["uni_z"]["proxy_port"] = pp_down
+            evcs[evc_id] = evc
+        cookies = {
+            evc_id: utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX)
+            for evc_id in evcs
+        }
+        int_manager.flow_builder.build_int_flows = MagicMock(
+            return_value={cookie: [{"flow": {}}] for cookie in cookies.values()}
+        )
+        metadata = {"telemetry": {"enabled": True, "status": "UP", "status_reason": []}}
+
+        await int_manager.install_int_flows(evcs, metadata)
+
+        installed = int_manager._install_int_flows.call_args[0][0]
+        by_status = {
+            (
+                call[0][1]["telemetry"]["status"],
+                tuple(call[0][1]["telemetry"]["status_reason"]),
+            ): sorted(call[0][0])
+            for call in api_mock.add_evcs_metadata.call_args_list
+            if call[0][0]
+        }
+        if fallback:
+            assert set(installed) == {cookies["a2"], cookies["a3"]}
+            assert by_status == {
+                ("DOWN", ("proxy_port_down",)): ["a1", "a4"],
+                ("UP", ()): ["a2", "a3"],
+            }
+        else:
+            assert set(installed) == set(cookies.values())
+            assert by_status == {
+                ("DOWN", ("proxy_port_down",)): ["a1"],
+                ("DOWN", ("no_flows",)): ["a4"],
+                ("UP", ()): ["a2", "a3"],
+            }
+
+    @pytest.mark.parametrize(
+        "pp_metadata,proxy_port_enabled",
+        [(False, None), (True, False)],
+    )
+    async def test_handle_partial_flows_without_proxy_port_installs_int(
+        self, monkeypatch, pp_metadata, proxy_port_enabled
+    ) -> None:
+        """Proxy ports are optional: an EVC not using one, either no proxy
+        port metadata on its UNIs or proxy_port_enabled false, gets its INT
+        flows on a partial flows event whatever a loop's status."""
+        int_manager, api_mock = self._pp_int_manager(
+            monkeypatch, EntityStatus.DOWN, pp_metadata=pp_metadata
+        )
+
+        await int_manager.handle_partial_flows(
+            {"1": self._pp_evc(proxy_port_enabled=proxy_port_enabled)},
+            "kytos/mef_eline.static.ingress_swapped",
+        )
+
+        assert int_manager._install_int_flows.call_count == 1
+        int_manager._remove_int_flows_by_cookies.assert_not_called()
+        api_mock.add_evcs_metadata.assert_not_called()
 
     async def test_handle_pp_link_down(self, monkeypatch):
         """Test test_handle_pp_link_down."""
@@ -413,6 +665,49 @@ class TestINTManager:
         assert telemetry_dict["enabled"]
         assert telemetry_dict["status"] == "UP"
         assert not telemetry_dict["status_reason"]
+
+    @staticmethod
+    def _pp_link_up_int_manager(monkeypatch) -> tuple:
+        """An INTManager with one DOWN INT EVC on an UP proxy port, and the
+        link that came back UP."""
+        int_manager = INTManager(MagicMock())
+        api_mock, link_mock, pp_mock = AsyncMock(), MagicMock(), MagicMock()
+        link_mock.endpoint_a.id = "3"
+        link_mock.status = EntityStatus.UP
+        link_mock.status_reason = []
+        pp_mock.status = EntityStatus.UP
+        evc_id = "3766c105686748"
+        pp_mock.evc_ids = {evc_id}
+        int_manager.srcs_pp["3"] = pp_mock
+        int_manager.srcs_pp["5"] = pp_mock
+        int_manager.unis_src["1"] = "3"
+        int_manager.unis_src["2"] = "5"
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        api_mock.get_evcs.return_value = {
+            evc_id: {
+                "active": True,
+                "archived": False,
+                "uni_a": {"interface_id": "1"},
+                "uni_z": {"interface_id": "2"},
+            }
+        }
+        int_manager.install_int_flows = AsyncMock()
+        int_manager._validate_map_enable_evcs = MagicMock(side_effect=lambda e, **_: e)
+        return int_manager, link_mock, evc_id
+
+    async def test_handle_pp_link_up_waits_evc_lock(self, monkeypatch):
+        """Reinstalling INT on a proxy port link up waits for the EVC lock,
+        else it can interleave with handle_partial_flows (a static swap) and
+        put back INT flows built from the EVC's previous flows."""
+        int_manager, link_mock, evc_id = self._pp_link_up_int_manager(monkeypatch)
+
+        async with int_manager._evcs_lock[evc_id]:
+            task = asyncio.create_task(int_manager.handle_pp_link_up(link_mock))
+            for _ in range(5):
+                await asyncio.sleep(0)
+            int_manager.install_int_flows.assert_not_called()
+        await task
+        assert int_manager.install_int_flows.call_count == 1
 
     async def test_handle_pp_metadata_removed(self, monkeypatch):
         """Test handle_pp_metadata_removed."""
