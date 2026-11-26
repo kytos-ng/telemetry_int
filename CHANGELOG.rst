@@ -17,19 +17,22 @@ Fixed
 - Fixed ``POST /v1/evc/disable`` with ``force: true`` returning 500 for an EVC id that doesn't exist
 - Validated ``evc_ids`` format, 14 lowercase hex characters, on ``POST /v1/evc/enable``, ``POST /v1/evc/disable``, ``PATCH /v1/evc/redeploy``, ``POST /v1/evc/expected_flows`` and ``POST /v1/evc/check_consistency``
 - Fixed proxy port metadata removal (for instance, a forced ``DELETE /v1/uni/{interface_id}/proxy_port``) to also disable INT on EVCs whose telemetry status was ``DOWN``, such as when the proxy port was down, which used to leave INT flows behind
-- Fixed INT flows being installed on an EVC whose proxy port is down, on enable, on redeploy and on ``kytos/mef_eline.(failover.*|static.*)`` events, with ``FALLBACK_TO_MEF_LOOP_DOWN`` it now falls back to mef_eline as on a proxy port link down; on ``static.ingress_installed`` with its proxy ports UP again INT is now fully reinstalled. An EVC with ``proxy_port_enabled: false`` is no longer set ``DOWN`` ``proxy_port_down`` on enable
+- Fixed INT flows being installed on an EVC whose proxy port is down, on enable and on ``kytos/mef_eline.(failover.*|static.*)`` events, with ``FALLBACK_TO_MEF_LOOP_DOWN`` it now falls back to mef_eline as on a proxy port link down; on ``static.ingress_installed`` with its proxy ports UP again INT is now fully reinstalled. An EVC with ``proxy_port_enabled: false`` is no longer set ``DOWN`` ``proxy_port_down`` on enable
 - Fixed proxy port link up reinstalling INT without holding the EVC locks
-- Fixed INT flows left behind when an EVC operation followed another before flow_manager stored its flows. INT flows are now sent with ``POST|DELETE v2/flows_by_switch`` holding the EVC locks, and the EVC metadata is only set once they're sent. If sending fails, the EVCs are set ``DOWN`` with ``flows_install_failed`` or ``flows_remove_failed``, endpoints return 500 and event handlers log it
+- Fixed INT flows left behind when an EVC operation followed another before flow_manager stored its flows. INT flows are now sent with ``POST|DELETE v2/flows_by_switch`` holding the EVC locks, with the EVC metadata set right before they're sent. If sending fails, the EVCs are set ``DOWN`` with ``flows_install_failed`` or ``flows_remove_failed``, endpoints return 500 and event handlers log it
+- Fixed ``POST /v1/evc/check_consistency`` acting on EVCs whose INT got disabled while it waited for their locks, and re-enabling INT disabled right before its redeploys, the EVCs are now read again and redeployed or disabled holding their locks
 
 Changed
 =======
 - Replaced the three ``kytos/mef_eline.failover_*`` listeners with a single ``kytos/mef_eline.(failover.*|static.*)`` listener
 - EVC locks are now always acquired in EVC id order, so concurrent operations over overlapping EVCs can no longer acquire them in different orders, while EVCs are still processed by service level
+- ``POST /v1/evc/check_consistency`` only checks EVCs with INT enabled, ``evc_ids`` with INT disabled are skipped
 
 Added
 =====
 - ``POST /v1/evc/check_consistency`` always returns EVCs with ``flows_install_failed`` or ``flows_remove_failed``, and recovers them with ``inconsistent_action`` ``fix`` or ``redeploy``. Results now include ``status_reason``
 - Added support for the new mef_eline ``static.*`` EVC convergence events, so INT flows are mirrored as static paths converge
+- Added ``FLOWS_SEND_TIMEOUT`` setting, the timeout in seconds of each INT flows request to flow_manager, 300 by default and at least 1
 
 [2025.2.0] - 2026-02-02
 ***********************

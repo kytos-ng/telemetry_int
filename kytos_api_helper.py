@@ -132,7 +132,10 @@ async def send_flows(
     method = "POST" if cmd == "install" else "DELETE"
     async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
         response = await client.request(
-            method, "/flows_by_switch/?force=true", json=content, timeout=60
+            method,
+            "/flows_by_switch/?force=true",
+            json=content,
+            timeout=max(settings.FLOWS_SEND_TIMEOUT, 1),
         )
         if response.is_server_error:
             raise httpx.RequestError(response.text)

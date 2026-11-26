@@ -2,6 +2,7 @@
 """Test Main methods."""
 
 # pylint: disable=too-many-lines
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -785,25 +786,16 @@ class TestMain:
         assert main_log.error.call_count + utils_log.error.call_count == 1
 
     async def test_on_flow_mod_error_errors_logged(self, monkeypatch) -> None:
-        """A failure to remove the INT flows on an OFPT_ERROR is logged."""
-        api_mock, flow, utils_log = AsyncMock(), MagicMock(), MagicMock()
+        """A failure to disable INT on an OFPT_ERROR is logged."""
+        flow, utils_log = MagicMock(), MagicMock()
         flow.cookie = 0xA800000000000001
-        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
         monkeypatch.setattr("napps.kytos.telemetry_int.utils.log", utils_log)
-        evc_id = utils.get_id_from_cookie(flow.cookie)
-        api_mock.get_evc.return_value = {
-            evc_id: {"metadata": {"telemetry": {"enabled": True}}, "id": evc_id}
-        }
-        self.napp.int_manager.remove_int_flows = AsyncMock(
+        self.napp.int_manager.disable_int_ofpt_error = AsyncMock(
             side_effect=UnrecoverableError("boom")
         )
         event = KytosEvent(content={"flow": flow, "error_command": "add"})
         await self.napp.on_flow_mod_error(event)
-        self.napp.int_manager.remove_int_flows.assert_awaited_once()
-        assert self.napp.int_manager.remove_int_flows.call_args[1] == {
-            "force": True,
-            "failed_enabled": False,
-        }
+        self.napp.int_manager.disable_int_ofpt_error.assert_awaited_once()
         assert utils_log.error.call_count == 1
 
     async def test_on_table_enabled_error(self, monkeypatch) -> None:
@@ -828,29 +820,57 @@ class TestMain:
 
     async def test_on_flow_mod_error(self, monkeypatch) -> None:
         """Test on_flow_mod_error."""
-        api_mock_main, api_mock_int, flow = AsyncMock(), AsyncMock(), MagicMock()
+        api_mock, flow = AsyncMock(), MagicMock()
         flow.cookie = 0xA800000000000001
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.main.api",
-            api_mock_main,
-        )
-        monkeypatch.setattr(
-            "napps.kytos.telemetry_int.managers.int.api",
-            api_mock_int,
-        )
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
         evc_id = utils.get_id_from_cookie(flow.cookie)
-        api_mock_main.get_evc.return_value = {
+        api_mock.get_evc.return_value = {
             evc_id: {"metadata": {"telemetry": {"enabled": True}}, "id": evc_id}
         }
-        api_mock_int.get_stored_flows.return_value = {evc_id: [MagicMock()]}
+        api_mock.get_stored_flows.return_value = {evc_id: [MagicMock()]}
         self.napp.int_manager._remove_int_flows_by_cookies = AsyncMock()
 
         event = KytosEvent(content={"flow": flow, "error_command": "add"})
         await self.napp.on_flow_mod_error(event)
 
-        assert api_mock_main.get_evc.call_count == 1
-        assert api_mock_int.get_stored_flows.call_count == 1
-        assert api_mock_int.add_evcs_metadata.call_count == 1
+        assert api_mock.get_evc.call_count == 1
+        assert api_mock.get_stored_flows.call_count == 1
+        assert api_mock.add_evcs_metadata.call_count == 1
+        telemetry = api_mock.add_evcs_metadata.call_args[0][1]["telemetry"]
+        assert not telemetry["enabled"]
+        assert telemetry["status_reason"] == ["ofpt_error"]
+        assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
+
+    async def test_on_flow_mod_error_during_enable(self, monkeypatch) -> None:
+        """An OFPT_ERROR on an INT flow of an EVC whose INT is being enabled
+        reads the EVC once the enable released its lock, so it sees INT
+        enabled and disables it."""
+        api_mock, flow = AsyncMock(), MagicMock()
+        flow.cookie = 0xA800000000000001
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+        monkeypatch.setattr("napps.kytos.telemetry_int.managers.int.api", api_mock)
+        evc_id = utils.get_id_from_cookie(flow.cookie)
+        telemetry = {"enabled": False}
+        api_mock.get_evc.side_effect = lambda *_, **__: {
+            evc_id: {"metadata": {"telemetry": dict(telemetry)}, "id": evc_id}
+        }
+        api_mock.get_stored_flows.return_value = {evc_id: [MagicMock()]}
+        self.napp.int_manager._remove_int_flows_by_cookies = AsyncMock()
+
+        lock = self.napp.int_manager._evcs_lock[evc_id]
+        await lock.acquire()
+        event = KytosEvent(content={"flow": flow, "error_command": "add"})
+        task = asyncio.create_task(self.napp.on_flow_mod_error(event))
+        for _ in range(5):
+            await asyncio.sleep(0)
+        telemetry["enabled"] = True
+        lock.release()
+        await task
+
+        assert api_mock.add_evcs_metadata.call_count == 1
+        written = api_mock.add_evcs_metadata.call_args[0][1]["telemetry"]
+        assert written["status_reason"] == ["ofpt_error"]
         assert self.napp.int_manager._remove_int_flows_by_cookies.call_count == 1
 
     async def test_on_mef_eline_evcs_loaded(self):
@@ -1076,7 +1096,9 @@ class TestMain:
         monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
 
         evc_id = "3766c105686749"
-        api_mock.get_evcs.return_value = {evc_id: {}}
+        api_mock.get_evc.return_value = {
+            evc_id: {"id": evc_id, "metadata": {"telemetry": {"enabled": True}}}
+        }
 
         self.napp.int_manager.check_consistency = AsyncMock(
             side_effect=ProxyPortShared(evc_id, "boom")
@@ -1087,6 +1109,84 @@ class TestMain:
 
         assert response.status_code == 409
         assert "boom" in response.json()["description"]
+
+    async def test_check_consistency_all_int_evcs(self, monkeypatch) -> None:
+        """Test check consistency with no evc_ids checks only INT enabled EVCs."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        int_id, no_int_id = "3766c105686749", "16a76ae61b2f46"
+        int_evc = {"id": int_id, "metadata": {"telemetry": {"enabled": True}}}
+        no_int_evc = {"id": no_int_id, "metadata": {}}
+        api_mock.get_evcs.return_value = {int_id: int_evc, no_int_id: no_int_evc}
+        self.napp.int_manager.check_consistency = AsyncMock(return_value={})
+
+        endpoint = f"{self.base_endpoint}/evc/check_consistency"
+        response = await self.api_client.post(endpoint, json={"evc_ids": []})
+
+        assert response.status_code == 200
+        self.napp.int_manager.check_consistency.assert_awaited_once_with(
+            {int_id: int_evc}, "inconsistent", None
+        )
+
+    async def test_check_consistency_evc_ids_int_disabled_skipped(
+        self, monkeypatch
+    ) -> None:
+        """Test check consistency skips the evc_ids with INT disabled, and keeps
+        the not found ones, so they're still reported as not found."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        int_id, no_int_id, not_found_id = (
+            "3766c105686749",
+            "16a76ae61b2f46",
+            "16a76ae61b2f47",
+        )
+        int_evc = {"id": int_id, "metadata": {"telemetry": {"enabled": True}}}
+        no_int_evc = {"id": no_int_id, "metadata": {"telemetry": {"enabled": False}}}
+        api_mock.get_evcs.return_value = {int_id: int_evc, no_int_id: no_int_evc}
+        self.napp.int_manager.check_consistency = AsyncMock(return_value={})
+
+        endpoint = f"{self.base_endpoint}/evc/check_consistency"
+        response = await self.api_client.post(
+            endpoint, json={"evc_ids": [int_id, no_int_id, not_found_id]}
+        )
+
+        assert response.status_code == 200
+        self.napp.int_manager.check_consistency.assert_awaited_once_with(
+            {int_id: int_evc, not_found_id: {}}, "inconsistent", None
+        )
+
+    async def test_check_consistency_evc_id_int_disabled(self, monkeypatch) -> None:
+        """Test check consistency with an evc_id with INT disabled."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        evc_id = "3766c105686749"
+        api_mock.get_evc.return_value = {evc_id: {"id": evc_id, "metadata": {}}}
+        self.napp.int_manager.check_consistency = AsyncMock()
+
+        endpoint = f"{self.base_endpoint}/evc/check_consistency"
+        response = await self.api_client.post(endpoint, json={"evc_ids": [evc_id]})
+
+        assert response.status_code == 200
+        assert response.json() == {}
+        self.napp.int_manager.check_consistency.assert_not_awaited()
+
+    async def test_check_consistency_no_int_evcs(self, monkeypatch) -> None:
+        """Test check consistency with no evc_ids and no INT enabled EVCs."""
+        api_mock = AsyncMock()
+        monkeypatch.setattr("napps.kytos.telemetry_int.main.api", api_mock)
+
+        api_mock.get_evcs.return_value = {}
+        self.napp.int_manager.check_consistency = AsyncMock()
+
+        endpoint = f"{self.base_endpoint}/evc/check_consistency"
+        response = await self.api_client.post(endpoint, json={"evc_ids": []})
+
+        assert response.status_code == 200
+        assert response.json() == {}
+        self.napp.int_manager.check_consistency.assert_not_awaited()
 
     async def test_evc_expected_flows_retry_error_get_evcs(self, monkeypatch) -> None:
         """Test expected flows with RetryError from get_evcs."""

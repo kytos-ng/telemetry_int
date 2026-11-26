@@ -156,6 +156,23 @@ async def test_send_flows(monkeypatch, cmd, method):
     assert kwargs["json"] == {"dpid_a": {"flows": [flow]}}
 
 
+@pytest.mark.parametrize("timeout,expected", [(300, 300), (0, 1), (-5, 1)])
+async def test_send_flows_timeout(monkeypatch, timeout, expected):
+    """test send_flows uses FLOWS_SEND_TIMEOUT, at least 1s."""
+    aclient_mock, awith_mock = AsyncMock(), MagicMock()
+    aclient_mock.request.return_value = Response(202, json={}, request=MagicMock())
+    awith_mock.return_value.__aenter__.return_value = aclient_mock
+    monkeypatch.setattr("httpx.AsyncClient", awith_mock)
+    monkeypatch.setattr(
+        "napps.kytos.telemetry_int.kytos_api_helper.settings.FLOWS_SEND_TIMEOUT",
+        timeout,
+    )
+
+    await send_flows({"dpid_a": [{"cookie": 0xA83766C105686749}]}, "install")
+
+    assert aclient_mock.request.call_args.kwargs["timeout"] == expected
+
+
 async def test_send_flows_empty(monkeypatch):
     """test send_flows doesn't send a request without flows."""
     awith_mock = MagicMock()

@@ -1,14 +1,34 @@
 """Test consistency."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from kytos.lib.helpers import get_controller_mock
 
 from napps.kytos.telemetry_int.managers.int import INTManager
 
 
+def _int_evcs(evc_id: str) -> dict[str, dict]:
+    """An INT enabled EVC, by its id."""
+    return {
+        evc_id: {
+            "id": evc_id,
+            "active": True,
+            "metadata": {"telemetry": {"enabled": True}},
+        }
+    }
+
+
 class TestINTConsistency:
     """TestINTConsistency."""
+
+    @pytest.fixture(autouse=True)
+    def get_evcs(self, monkeypatch):
+        """The INT enabled EVCs read holding the EVC locks, evc1."""
+        monkeypatch.setattr(
+            "napps.kytos.telemetry_int.managers.int.api.get_evcs",
+            AsyncMock(return_value=_int_evcs("evc1")),
+        )
 
     @patch("napps.kytos.telemetry_int.managers.int.utils.get_cookie")
     @patch("napps.kytos.telemetry_int.managers.int.api.get_stored_flows")
@@ -30,7 +50,7 @@ class TestINTConsistency:
         manager._validate_map_enable_evcs = lambda x, force: x
 
         evc_id = "evc1"
-        evcs = {evc_id: {"id": evc_id}}
+        evcs = _int_evcs(evc_id)
         cookie = 123456
         mock_get_cookie.return_value = cookie
 
@@ -74,7 +94,7 @@ class TestINTConsistency:
         manager._validate_map_enable_evcs = lambda x, force: x
 
         evc_id = "evc1"
-        evcs = {evc_id: {"id": evc_id}}
+        evcs = _int_evcs(evc_id)
         cookie = 123
         mock_get_cookie.return_value = cookie
 
@@ -100,7 +120,7 @@ class TestINTConsistency:
     @patch("napps.kytos.telemetry_int.managers.int.utils.get_cookie")
     @patch("napps.kytos.telemetry_int.managers.int.api.get_stored_flows")
     @patch("napps.kytos.telemetry_int.managers.int.INTManager._list_expected_flows")
-    @patch("napps.kytos.telemetry_int.managers.int.INTManager.redeploy_int")
+    @patch("napps.kytos.telemetry_int.managers.int.INTManager._redeploy_evcs_int_flows")
     async def test_check_consistency_inconsistent_redeploy(
         self, mock_redeploy, mock_list_expected, mock_get_stored, mock_get_cookie
     ):
@@ -110,7 +130,7 @@ class TestINTConsistency:
         manager._validate_map_enable_evcs = lambda x, force: x
 
         evc_id = "evc1"
-        evcs = {evc_id: {"id": evc_id}}
+        evcs = _int_evcs(evc_id)
         cookie = 123
         mock_get_cookie.return_value = cookie
 
@@ -129,7 +149,7 @@ class TestINTConsistency:
     @patch("napps.kytos.telemetry_int.managers.int.utils.get_cookie")
     @patch("napps.kytos.telemetry_int.managers.int.api.get_stored_flows")
     @patch("napps.kytos.telemetry_int.managers.int.INTManager._list_expected_flows")
-    @patch("napps.kytos.telemetry_int.managers.int.INTManager.disable_int")
+    @patch("napps.kytos.telemetry_int.managers.int.INTManager._disable_evcs_int")
     async def test_check_consistency_inconsistent_disable(
         self, mock_disable, mock_list_expected, mock_get_stored, mock_get_cookie
     ):
@@ -139,7 +159,7 @@ class TestINTConsistency:
         manager._validate_map_enable_evcs = lambda x, force: x
 
         evc_id = "evc1"
-        evcs = {evc_id: {"id": evc_id}}
+        evcs = _int_evcs(evc_id)
         cookie = 123
         mock_get_cookie.return_value = cookie
 

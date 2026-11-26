@@ -15,3 +15,7 @@ TABLE_GROUP_ALLOWED = {"evpl", "epl"}
 # Fallback to mef_eline by removing INT flows if an external loop goes down. If
 # the loop goes UP again and the EVC is active, it'll install INT flows
 FALLBACK_TO_MEF_LOOP_DOWN = True
+
+# Timeout in seconds of each INT flows request to flow_manager, at least 1. The
+# EVC locks are held while it's sent, attempted up to 5 times on errors
+FLOWS_SEND_TIMEOUT = 300

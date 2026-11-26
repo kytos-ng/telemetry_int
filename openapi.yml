@@ -285,7 +285,7 @@ paths:
             enum: [fix, redeploy, disable]
           description: Action to perform on inconsistent EVCs
       requestBody:
-        description: List of EVC IDs to check. If empty, checks all INT EVCs.
+        description: List of EVC IDs to check, EVCs without INT enabled are skipped. If empty, checks all INT EVCs.
         content:
           application/json:
             schema:

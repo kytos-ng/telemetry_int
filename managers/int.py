@@ -4,7 +4,7 @@ import asyncio
 import copy
 from collections import defaultdict
 from datetime import datetime
-from typing import Awaitable, Literal, Optional
+from typing import Awaitable, Coroutine, Literal, Optional
 from contextlib import AsyncExitStack
 
 from pyof.v0x04.controller2switch.table_mod import Table
@@ -385,7 +385,17 @@ class INTManager:
         """
         self._validate_disable_evcs(evcs, force)
         log.info(f"Disabling INT on EVC ids: {list(evcs.keys())}, force: {force}")
+        async with AsyncExitStack() as stack:
+            _ = [
+                await stack.enter_async_context(self._evcs_lock[evc_id])
+                for evc_id in sorted(evcs)
+            ]
+            await self._disable_evcs_int(evcs, force, reason)
 
+    async def _disable_evcs_int(
+        self, evcs: dict[str, dict], force=False, reason="disabled"
+    ) -> None:
+        """Disable INT on EVCs, holding their locks."""
         metadata = {
             "telemetry": {
                 "enabled": False,
@@ -395,13 +405,36 @@ class INTManager:
             }
         }
         try:
-            await self.remove_int_flows(evcs, metadata, force=force)
+            await self._remove_evcs_int_flows(evcs, metadata, force)
         except FlowsSendError as exc:
             self._discard_pps_evc_ids(
                 {k: v for k, v in evcs.items() if k not in exc.evc_ids}
             )
             raise
         self._discard_pps_evc_ids(evcs)
+
+    async def disable_int_ofpt_error(self, evc_id: str, error: str) -> None:
+        """Disable INT on an EVC whose INT flow got an OFPT_ERROR, removing its
+        INT flows, if it has INT enabled once its lock is held, so an operation
+        sending its INT flows has set its metadata."""
+        async with self._evcs_lock[evc_id]:
+            evcs = await api.get_evc(evc_id, exclude_archived=False)
+            if not evcs or not utils.has_int_enabled(evcs[evc_id]):
+                return
+            log.error(f"Disabling EVC({evc_id}) due to OFPT_ERROR, {error}")
+            metadata = {
+                "telemetry": {
+                    "enabled": False,
+                    "status": "DOWN",
+                    "status_reason": ["ofpt_error"],
+                    "status_updated_at": datetime.utcnow().strftime(
+                        "%Y-%m-%dT%H:%M:%S"
+                    ),
+                }
+            }
+            await self._remove_evcs_int_flows(
+                evcs, metadata, force=True, failed_enabled=False
+            )
 
     async def remove_int_flows(
         self, evcs: dict[str, dict], metadata: dict, force=False, failed_enabled=True
@@ -427,7 +460,7 @@ class INTManager:
         stored_flows = await api.get_stored_flows(
             [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
         )
-        await self._send_flows_set_metadata(
+        await self._set_metadata_send_flows(
             self._remove_int_flows_by_cookies(stored_flows),
             "flows_remove_failed",
             [(evcs, metadata)],
@@ -472,23 +505,6 @@ class INTManager:
                 for evc_id in sorted(evcs)
             ]
             evcs = utils.sorted_evcs_by_svc_lvl(evcs)
-            stored_flows = await api.get_stored_flows(
-                [
-                    utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX)
-                    for evc_id in evcs
-                ]
-            )
-            try:
-                await self._send_flows_or_set_failed(
-                    self._remove_int_flows_by_cookies(stored_flows),
-                    evcs,
-                    "flows_remove_failed",
-                )
-            except FlowsSendError as exc:
-                self._add_pps_evc_ids(
-                    {k: v for k, v in evcs.items() if k in exc.evc_ids}
-                )
-                raise
             metadata = {
                 "telemetry": {
                     "enabled": True,
@@ -502,7 +518,7 @@ class INTManager:
             if set_proxy_port_metadata:
                 metadata["proxy_port_enabled"] = proxy_port_enabled
             try:
-                await self.install_int_flows(evcs, metadata)
+                await self._reinstall_int_flows(evcs, metadata)
             except FlowsSendError:
                 self._add_pps_evc_ids(evcs)
                 raise
@@ -527,14 +543,6 @@ class INTManager:
     async def _redeploy_evcs_int_flows(self, evcs: dict[str, dict]) -> None:
         """Remove and install all INT flows of EVCs, setting their metadata,
         holding their locks."""
-        stored_flows = await api.get_stored_flows(
-            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
-        )
-        await self._send_flows_or_set_failed(
-            self._remove_int_flows_by_cookies(stored_flows),
-            evcs,
-            "flows_remove_failed",
-        )
         metadata = {
             "telemetry": {
                 "enabled": True,
@@ -543,12 +551,74 @@ class INTManager:
                 "status_updated_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
             }
         }
-        await self.install_int_flows(evcs, metadata, force=True)
+        await self._reinstall_int_flows(evcs, metadata, force=True)
+
+    async def _reinstall_int_flows(
+        self, evcs: dict[str, dict], metadata: dict, force=False
+    ) -> None:
+        """Remove and install all INT flows of EVCs, holding their locks. Their
+        metadata is set before removing, so it tells the intended INT state
+        while the flows are sent.
+
+        If building the INT flows to install fails, e.g. FlowsNotFound, the INT
+        flows are still removed, without setting the metadata. If removing
+        fails, nothing is installed, so the EVCs with INT flows to install that
+        weren't in the failed send are set DOWN flows_install_failed."""
+        stored_flows = await api.get_stored_flows(
+            [utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs]
+        )
+        try:
+            install_flows, evcs_metadata = await self._build_install_int_flows(
+                evcs, metadata
+            )
+        except (UnrecoverableError, RetryError):
+            await self._send_flows_or_set_failed(
+                self._remove_int_flows_by_cookies(stored_flows),
+                evcs,
+                "flows_remove_failed",
+            )
+            raise
+        try:
+            await self._set_metadata_send_flows(
+                self._remove_int_flows_by_cookies(stored_flows),
+                "flows_remove_failed",
+                evcs_metadata,
+                force,
+            )
+        except FlowsSendError as exc:
+            to_install_ids = {
+                evc_id
+                for evc_id in evcs
+                if utils.get_cookie(evc_id, settings.MEF_COOKIE_PREFIX) in install_flows
+            }
+            await self._set_flows_failed(
+                evcs, to_install_ids - exc.evc_ids, "flows_install_failed"
+            )
+            raise
+        await self._send_flows_or_set_failed(
+            self._install_int_flows(install_flows), evcs, "flows_install_failed"
+        )
 
     async def install_int_flows(
         self, evcs: dict[str, dict], metadata: dict, force=False
     ) -> None:
         """Install INT flows and set metadata on EVCs."""
+        install_flows, evcs_metadata = await self._build_install_int_flows(
+            evcs, metadata
+        )
+        await self._set_metadata_send_flows(
+            self._install_int_flows(install_flows),
+            "flows_install_failed",
+            evcs_metadata,
+            force,
+        )
+
+    async def _build_install_int_flows(
+        self, evcs: dict[str, dict], metadata: dict
+    ) -> tuple[dict[int, list[dict]], list[tuple[dict[str, dict], dict]]]:
+        """Build the INT flows to install on EVCs, returning them and the groups
+        of EVCs with the metadata installing them sets. The EVCs falling back to
+        mef_eline get no INT flows."""
         stored_flows = self.flow_builder.build_int_flows(
             evcs,
             await utils.get_found_stored_flows(
@@ -570,13 +640,7 @@ class INTManager:
             for cookie, flows in stored_flows.items()
             if cookie not in fallen_back_cookies
         }
-
-        await self._send_flows_set_metadata(
-            self._install_int_flows(stored_flows),
-            "flows_install_failed",
-            evcs_metadata,
-            force,
-        )
+        return stored_flows, evcs_metadata
 
     def _evcs_metadata_groups(
         self, evcs: dict[str, dict], metadata: dict
@@ -627,42 +691,33 @@ class INTManager:
         evcs_metadata, _ = self._evcs_metadata_groups(evcs, metadata)
         await self._add_evcs_metadata_groups(evcs_metadata)
 
-    async def _send_flows_set_metadata(
+    async def _set_metadata_send_flows(
         self,
-        send: Awaitable,
+        send: Coroutine,
         failed_reason: str,
         evcs_metadata: list[tuple[dict[str, dict], dict]],
         force=False,
         failed_enabled=True,
     ) -> None:
-        """Await send, then set each group of EVCs metadata, so it only tells
-        what the flows got to, holding their locks.
+        """Set each group of EVCs metadata, then await send, holding their
+        locks, so the metadata tells the intended INT state while the flows
+        are sent. If setting the metadata fails, nothing is sent.
 
-        If send fails, the EVCs with flows in it are set DOWN with failed_reason
-        instead, as some of their flows might have been stored, the other EVCs
-        still get their metadata, and the send error is raised.
+        If send fails, the EVCs with flows in it are set DOWN with failed_reason,
+        as some of their flows might have been stored, the other EVCs keep
+        their metadata, and the send error is raised.
         """
         try:
-            await send
-        except FlowsSendError as exc:
-            failed = await self._set_flows_failed(
-                {k: v for evcs, _ in evcs_metadata for k, v in evcs.items()},
-                exc.evc_ids,
-                failed_reason,
-                failed_enabled,
-            )
-            await utils.await_maybe_log_errors(
-                self._add_evcs_metadata_groups(
-                    [
-                        ({k: v for k, v in evcs.items() if k not in failed}, metadata)
-                        for evcs, metadata in evcs_metadata
-                    ],
-                    force,
-                ),
-                f"setting metadata after {failed_reason}",
-            )
+            await self._add_evcs_metadata_groups(evcs_metadata, force)
+        except BaseException:
+            send.close()
             raise
-        await self._add_evcs_metadata_groups(evcs_metadata, force)
+        await self._send_flows_or_set_failed(
+            send,
+            {k: v for evcs, _ in evcs_metadata for k, v in evcs.items()},
+            failed_reason,
+            failed_enabled,
+        )
 
     @staticmethod
     async def _add_evcs_metadata_groups(
@@ -686,13 +741,16 @@ class INTManager:
         send: Awaitable,
         evcs: dict[str, dict],
         failed_reason: str,
+        failed_enabled=True,
     ) -> None:
         """Await send, if it fails, the EVCs with flows in it are set DOWN with
         failed_reason, and the send error is raised."""
         try:
             await send
         except FlowsSendError as exc:
-            await self._set_flows_failed(evcs, exc.evc_ids, failed_reason)
+            await self._set_flows_failed(
+                evcs, exc.evc_ids, failed_reason, failed_enabled
+            )
             raise
 
     async def _set_flows_failed(
@@ -1573,6 +1631,21 @@ class INTManager:
             }
         return int_flows
 
+    @staticmethod
+    def _refresh_int_evcs(
+        evcs: dict[str, dict], int_evcs: dict[str, dict]
+    ) -> dict[str, dict]:
+        """Keep only the EVCs in int_evcs, the INT enabled EVCs read holding
+        their locks, refreshing their INT metadata and active, so the EVCs whose
+        INT got disabled, or that got deleted, since they were read are dropped."""
+        refreshed = {}
+        for evc_id, evc in evcs.items():
+            if int_evc := int_evcs.get(evc_id):
+                evc["active"] = int_evc["active"]
+                evc["metadata"]["telemetry"] = int_evc["metadata"]["telemetry"]
+                refreshed[evc_id] = evc
+        return refreshed
+
     async def check_consistency(
         self,
         evcs: dict[str, dict],
@@ -1592,9 +1665,14 @@ class INTManager:
             cookies = [
                 utils.get_cookie(evc_id, settings.INT_COOKIE_PREFIX) for evc_id in evcs
             ]
-            expected_flows_by_evc, stored_flows_by_cookie = await asyncio.gather(
-                self._list_expected_flows(evcs), api.get_stored_flows(cookies)
+            expected_flows_by_evc, stored_flows_by_cookie, int_evcs = (
+                await asyncio.gather(
+                    self._list_expected_flows(evcs),
+                    api.get_stored_flows(cookies),
+                    api.get_evcs(**{"metadata.telemetry.enabled": "true"}),
+                )
             )
+            evcs = self._refresh_int_evcs(evcs, int_evcs)
 
             to_fix_missing, to_fix_alien = defaultdict(list), defaultdict(list)
             to_fix_missing_len, to_fix_alien_len = 0, 0
@@ -1704,12 +1782,20 @@ class INTManager:
                     evcs,
                     "flows_install_failed",
                 )
-
-        if to_redeploy:
-            log.info(f"Consistency check INT: will redeploy {len(to_redeploy)} EVCs")
-            await self.redeploy_int(to_redeploy)
-        if to_disable:
-            log.info(f"Consistency check INT: will disable {len(to_disable)} EVCs")
-            await self.disable_int(to_disable, force=True, reason="consistency_check")
+            if to_redeploy:
+                log.info(
+                    f"Consistency check INT: will redeploy {len(to_redeploy)} EVCs"
+                )
+                self._validate_has_int(to_redeploy)
+                await self._redeploy_evcs_int_flows(
+                    utils.sorted_evcs_by_svc_lvl(to_redeploy)
+                )
+            if to_disable:
+                log.info(f"Consistency check INT: will disable {len(to_disable)} EVCs")
+                await self._disable_evcs_int(
+                    utils.sorted_evcs_by_svc_lvl(to_disable),
+                    force=True,
+                    reason="consistency_check",
+                )
 
         return results

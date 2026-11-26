@@ -322,10 +322,9 @@ class Main(KytosNApp):
 
         if evc_ids:
             evcs = {evc_id: evcs.get(evc_id, {}) for evc_id in evc_ids}
-        else:
-            evcs = {k: v for k, v in evcs.items() if utils.has_int_enabled(v)}
-            if not evcs:
-                return JSONResponse({})
+        evcs = {k: v for k, v in evcs.items() if not v or utils.has_int_enabled(v)}
+        if not evcs:
+            return JSONResponse({})
 
         try:
             results = await self.int_manager.check_consistency(
@@ -752,35 +751,12 @@ class Main(KytosNApp):
 
         async with self._ofpt_error_lock:
             evc_id = utils.get_id_from_cookie(flow.cookie)
-            evc = await api.get_evc(evc_id, exclude_archived=False)
-            if (
-                not evc
-                or "telemetry" not in evc[evc_id]["metadata"]
-                or "enabled" not in evc[evc_id]["metadata"]["telemetry"]
-                or not evc[evc_id]["metadata"]["telemetry"]["enabled"]
-            ):
-                return
-
-            metadata = {
-                "telemetry": {
-                    "enabled": False,
-                    "status": "DOWN",
-                    "status_reason": ["ofpt_error"],
-                    "status_updated_at": datetime.utcnow().strftime(
-                        "%Y-%m-%dT%H:%M:%S"
-                    ),
-                }
-            }
-            log.error(
-                f"Disabling EVC({evc_id}) due to OFPT_ERROR, "
-                f"error_type: {event.content.get('error_type')}, "
-                f"error_code: {event.content.get('error_code')}, "
-                f"flow: {flow.as_dict()} "
-            )
-            evcs = evc
             await utils.await_maybe_log_errors(
-                self.int_manager.remove_int_flows(
-                    evcs, metadata, force=True, failed_enabled=False
+                self.int_manager.disable_int_ofpt_error(
+                    evc_id,
+                    f"error_type: {event.content.get('error_type')}, "
+                    f"error_code: {event.content.get('error_code')}, "
+                    f"flow: {flow.as_dict()}",
                 ),
                 f"{event.name} on EVC id: {evc_id}",
             )
