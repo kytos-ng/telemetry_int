@@ -116,34 +116,46 @@ async def get_stored_flows(
         return _map_stored_flows_by_cookies(response.json())
 
 
+async def send_flows(
+    switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]
+) -> None:
+    """Install or delete flows on flow_manager, forced, with one request per
+    switch sent in order, stopping on the first that fails."""
+    switch_flows = {dpid: flows for dpid, flows in switch_flows.items() if flows}
+    if not switch_flows:
+        return
+    async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
+        for dpid, flows in switch_flows.items():
+            await _send_switch_flows(client, dpid, flows, cmd)
+
+
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_combine(wait_fixed(3), wait_random(min=2, max=7)),
     before_sleep=before_sleep,
     retry=retry_if_exception_type(httpx.RequestError),
 )
-async def send_flows(
-    switch_flows: dict[str, list[dict]], cmd: Literal["install", "delete"]
+async def _send_switch_flows(
+    client: httpx.AsyncClient,
+    dpid: str,
+    flows: list[dict],
+    cmd: Literal["install", "delete"],
 ) -> None:
-    """Install or delete flows by switch on flow_manager, forced."""
-    content = {dpid: {"flows": flows} for dpid, flows in switch_flows.items() if flows}
-    if not content:
-        return
+    """Install or delete one switch's flows on flow_manager, forced."""
     method = "POST" if cmd == "install" else "DELETE"
-    async with httpx.AsyncClient(base_url=settings.flow_manager_api) as client:
-        response = await client.request(
-            method,
-            "/flows_by_switch/?force=true",
-            json=content,
-            timeout=max(settings.FLOWS_SEND_TIMEOUT, 1),
+    response = await client.request(
+        method,
+        "/flows_by_switch/?force=true",
+        json={dpid: {"flows": flows}},
+        timeout=max(settings.FLOWS_SEND_TIMEOUT, 1),
+    )
+    if response.is_server_error:
+        raise httpx.RequestError(response.text)
+    if not response.is_success:
+        raise UnrecoverableError(
+            f"Failed to send_flows {cmd} on dpid {dpid} "
+            f"status code {response.status_code}, response text: {response.text}"
         )
-        if response.is_server_error:
-            raise httpx.RequestError(response.text)
-        if not response.is_success:
-            raise UnrecoverableError(
-                f"Failed to send_flows {cmd} on dpids {list(content)} "
-                f"status code {response.status_code}, response text: {response.text}"
-            )
 
 
 def _map_stored_flows_by_cookies(stored_flows: dict) -> dict[int, list[dict]]:

@@ -16,6 +16,7 @@ TABLE_GROUP_ALLOWED = {"evpl", "epl"}
 # the loop goes UP again and the EVC is active, it'll install INT flows
 FALLBACK_TO_MEF_LOOP_DOWN = True
 
-# Timeout in seconds of each INT flows request to flow_manager, at least 1. The
-# EVC locks are held while it's sent, attempted up to 5 times on errors
+# Timeout in seconds of each INT flows request to flow_manager, one per switch,
+# at least 1. The EVC locks are held while they're sent, each attempted up to 5
+# times on errors
 FLOWS_SEND_TIMEOUT = 300
